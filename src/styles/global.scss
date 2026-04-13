@@ -15,12 +15,15 @@ html, body {
   background-color: var(--bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
 }
 
 #app {
   height: 100%;
+  overflow: hidden;
 }
 
+/* 全局滚动条样式 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -33,18 +36,26 @@ html, body {
 ::-webkit-scrollbar-thumb {
   background: var(--border-color);
   border-radius: 4px;
+  transition: background-color var(--transition-fast);
 
   &:hover {
     background: #4a4e69;
   }
+
+  &:active {
+    background: #5a5e79;
+  }
 }
 
+/* 全局按钮样式 */
 button {
   cursor: pointer;
   border: none;
   outline: none;
   font-family: inherit;
   font-size: inherit;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
 
   &:disabled {
     cursor: not-allowed;
@@ -52,12 +63,68 @@ button {
   }
 }
 
+/* 全局输入框样式 */
 input {
   font-family: inherit;
   outline: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
 }
 
+/* 全局链接样式 */
 a {
   text-decoration: none;
   color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 全局选择器样式 */
+::selection {
+  background-color: rgba(59, 130, 246, 0.3);
+  color: var(--text-primary);
+}
+
+/* 全局动画 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* 全局过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--transition-fast);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all var(--transition-normal);
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
