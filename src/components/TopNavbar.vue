@@ -37,11 +37,11 @@ const navigate = (path: string) => router.push(path)
   top: 0;
   left: 0;
   right: 0;
-  height: 80px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 60px;
+  padding: 0 20px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   z-index: 1000;
@@ -51,14 +51,14 @@ const navigate = (path: string) => router.push(path)
 .navbar-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   .logo {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     transition: transform var(--transition-fast);
   }
   .brand-text {
-    font-size: 24px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.5px;
@@ -70,20 +70,20 @@ const navigate = (path: string) => router.push(path)
 
 .navbar-nav {
   display: flex;
-  gap: 28px;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .nav-item {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 14px;
+  gap: 6px;
+  padding: 6px 12px;
   background: transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   position: relative;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   &:hover {
     color: var(--text-primary);
@@ -92,17 +92,6 @@ const navigate = (path: string) => router.push(path)
   &.active {
     color: var(--brand-primary);
     background-color: rgba(59, 130, 246, 0.08);
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -10px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 20px;
-      height: 3px;
-      background-color: var(--brand-primary);
-      border-radius: 2px;
-    }
   }
   &:active {
     transform: scale(0.95);
@@ -110,8 +99,8 @@ const navigate = (path: string) => router.push(path)
 }
 
 .nav-icon {
-  width: 24px;
-  height: 24px;
+  width: 18px;
+  height: 18px;
   color: inherit;
   transition: transform var(--transition-fast);
 }
