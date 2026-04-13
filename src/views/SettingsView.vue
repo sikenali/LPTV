@@ -425,7 +425,7 @@ const shortcuts = [
 /* 右侧设置内容区 */
 .settings-content {
   flex: 1;
-  padding: 24px 32px;
+  padding: 20px 24px;
   overflow-y: auto;
   background-color: var(--bg-primary);
 
@@ -443,8 +443,8 @@ const shortcuts = [
 }
 
 /* 模块标题 */
-.module-header { margin-bottom: 16px; }
-.module-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 0 0 2px; line-height: 1.3; }
+.module-header { margin-bottom: 14px; }
+.module-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0 0 2px; line-height: 1.3; }
 .module-desc { font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5; opacity: 0.7; }
 
 /* 添加源区域 */
