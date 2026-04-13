@@ -1,25 +1,49 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import FavoriteCard from '@/components/FavoriteCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { useRouter } from 'vue-router'
 import type { Channel } from '@/types/channel'
 import { RiHeartLine } from '@remixicon/vue'
+import { useFavoriteStore } from '@/stores/favorite'
+import { getAllFavoriteChannelIds } from '@/db/queries/favorites'
+import { getChannelById } from '@/db/queries/channels'
+import { dbInitialized } from '@/db/database'
 
 const router = useRouter()
+const favoriteStore = useFavoriteStore()
 
-// Demo data for favorites (will be replaced with store data later)
-const favorites = ref<Channel[]>([
-  { id: 'ch1', name: 'CCTV-1 综合', url: 'http://example.com/cctv1.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch2', name: 'CCTV-2 财经', url: 'http://example.com/cctv2.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch4', name: '湖南卫视', url: 'http://example.com/hunan.m3u8', groupId: 'g2', groupName: '卫视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch5', name: '东方卫视', url: 'http://example.com/dongfang.m3u8', groupId: 'g2', groupName: '卫视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch6', name: '北京卫视', url: 'http://example.com/beijing.m3u8', groupId: 'g3', groupName: '地方频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch3', name: 'CCTV-5 体育', url: 'http://example.com/cctv5.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
-])
+// 从数据库加载的收藏数据
+const favorites = ref<Channel[]>([])
+const loading = ref(true)
+
+// 加载收藏数据
+async function loadFavorites() {
+  try {
+    await dbInitialized
+    const favoriteIds = getAllFavoriteChannelIds()
+    const channels: Channel[] = []
+
+    for (const channelId of favoriteIds) {
+      const channel = getChannelById(channelId)
+      if (channel) {
+        channels.push(channel)
+      }
+    }
+
+    favorites.value = channels
+    favoriteStore.favoriteIds = favoriteIds // Sync store state
+  } catch (error) {
+    console.error('加载收藏失败:', error)
+    favorites.value = []
+  } finally {
+    loading.value = false
+  }
+}
 
 const handleRemove = (channelId: string) => {
   favorites.value = favorites.value.filter(ch => ch.id !== channelId)
+  favoriteStore.toggleFavorite({ id: channelId } as Channel) // Update store/DB
 }
 
 const handlePlay = (channel: Channel) => {
@@ -29,6 +53,10 @@ const handlePlay = (channel: Channel) => {
 const handleAddFavorite = () => {
   router.push('/')
 }
+
+onMounted(() => {
+  loadFavorites()
+})
 </script>
 
 <template>
@@ -69,9 +97,9 @@ const handleAddFavorite = () => {
 <style scoped lang="scss">
 .favorite-view {
   padding: 40px 60px;
-  height: calc(100vh - 80px);
+  height: calc(100vh - 56px);
   overflow-y: auto;
-  margin-top: 80px;
+  margin-top: 56px;
 
   &::-webkit-scrollbar {
     width: 8px;
@@ -112,28 +140,33 @@ const handleAddFavorite = () => {
 .favorites-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 
 .add-favorite-card {
+  width: 280px;
+  height: 242px;
   background-color: var(--bg-card);
   border-radius: 12px;
-  padding: 32px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 274px;
   cursor: pointer;
   border: 2px dashed var(--border-color);
   transition: all var(--transition-fast);
+
   &:hover {
     border-color: var(--brand-primary);
     background-color: rgba(59, 130, 246, 0.05);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
-  &:active { transform: translateY(0) scale(0.98); }
+
+  &:active {
+    transform: translateY(0) scale(0.98);
+  }
+
   .add-icon {
     width: 40px;
     height: 40px;
@@ -142,20 +175,24 @@ const handleAddFavorite = () => {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    font-size: 24px;
     color: var(--text-secondary);
-    margin-bottom: 14px;
+    margin-bottom: 8px;
     transition: all var(--transition-fast);
     border: 1px solid var(--border-color);
   }
+
   .add-text {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
+    font-family: 'SourceHanSans-Medium', sans-serif;
     color: var(--text-primary);
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
+
   .add-desc {
     font-size: 12px;
+    font-family: 'SourceHanSans-Medium', sans-serif;
     color: var(--text-secondary);
     text-align: center;
     opacity: 0.7;

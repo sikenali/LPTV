@@ -15,18 +15,28 @@ export function removeFavorite(channelId: string): void {
 }
 
 export function getAllFavoriteChannelIds(): string[] {
-  const db = getDatabase()
-  const result = db.exec('SELECT channel_id FROM favorites ORDER BY added_at DESC')
+  try {
+    const db = getDatabase()
+    const result = db.exec('SELECT channel_id FROM favorites ORDER BY added_at DESC')
 
-  if (result.length === 0 || result[0].values.length === 0) {
+    if (result.length === 0 || result[0].values.length === 0) {
+      return []
+    }
+
+    return result[0].values.map(row => row[0] as string)
+  } catch {
+    // Database not initialized, return empty array
     return []
   }
-
-  return result[0].values.map(row => row[0] as string)
 }
 
 export function isFavorite(channelId: string): boolean {
-  const db = getDatabase()
-  const result = db.exec('SELECT 1 FROM favorites WHERE channel_id = ?', [channelId])
-  return result.length > 0 && result[0].values.length > 0
+  try {
+    const db = getDatabase()
+    const result = db.exec('SELECT 1 FROM favorites WHERE channel_id = ?', [channelId])
+    return result.length > 0 && result[0].values.length > 0
+  } catch {
+    // Database not initialized, return false
+    return false
+  }
 }
