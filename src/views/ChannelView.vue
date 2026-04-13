@@ -9,6 +9,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import { useChannelStore } from '@/stores/channel'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useSourceStore } from '@/stores/source'
+import { usePlayerStore } from '@/stores/player'
 import type { Channel, ChannelGroup as ChannelGroupType } from '@/types/channel'
 import { getAllSources } from '@/db/queries/sources'
 import { getChannelsGroupedByGroup } from '@/db/queries/channels'
@@ -20,6 +21,7 @@ import {
 const channelStore = useChannelStore()
 const favoriteStore = useFavoriteStore()
 const sourceStore = useSourceStore()
+const playerStore = usePlayerStore()
 const route = useRoute()
 const searchQuery = ref('')
 
@@ -29,8 +31,10 @@ const currentChannel = ref<Channel | null>(null)
 const activeSourceId = ref<string | null>(null)
 const currentSourceStatus = ref<'active' | 'error' | 'parsing'>('active')
 
-// 根据源状态判断是否有信号
-const hasSignal = computed(() => currentSourceStatus.value === 'active')
+// 根据源状态和播放器错误状态判断是否有信号
+const hasSignal = computed(() => {
+  return currentSourceStatus.value === 'active' && !playerStore.error
+})
 
 // 加载源和频道数据
 async function loadData() {
@@ -116,8 +120,9 @@ const handleToggleGroup = (groupId: string) => channelStore.toggleGroup(groupId)
 
 const handleSelectChannel = (channel: Channel) => {
   currentChannel.value = channel
-  // 切换频道时重置错误状态，假设新频道可能可用
+  // 切换频道时重置错误状态
   currentSourceStatus.value = 'active'
+  playerStore.setError(null)
   channelStore.selectChannel(channel)
 }
 
@@ -127,13 +132,18 @@ const handleToggleFavorite = (channel: Channel) => {
 
 const handlePlayerError = () => {
   console.warn('播放器发生致命错误，切换到无信号状态')
-  currentSourceStatus.value = 'error'
+  playerStore.setError('频道暂时不可用，请稍后重试')
 }
 
-const currentTime = ref('19:35')
-const totalTime = ref('20:00')
 const volume = ref(72)
-const progress = ref(35)
+
+// 计算估计恢复时间（当前时间 + 30 分钟）
+const estimatedRecoveryTime = computed(() => {
+  const now = new Date()
+  const recovery = new Date(now.getTime() + 30 * 60 * 1000)
+  const formatTime = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `预计 ${formatTime(now)} - ${formatTime(recovery)} 恢复`
+})
 
 // 播放器控制函数
 const togglePlay = () => {
@@ -208,9 +218,6 @@ const toggleFullscreen = () => {
         :channel-desc="`${currentChannel.groupName} · 正在播放`"
         :logo-text="currentChannel.name.split('-')[0]?.trim() || 'TV'"
         :is-favorite="favoriteStore.isFavorite(currentChannel.id)"
-        :current-time="currentTime"
-        :total-time="totalTime"
-        :progress="progress"
         :volume="volume"
         @toggle-favorite="currentChannel && handleToggleFavorite(currentChannel)"
         @toggle-play="togglePlay"
@@ -225,14 +232,11 @@ const toggleFullscreen = () => {
 
       <!-- 无信号时显示无信号界面 -->
       <PlayerView
-        v-if="currentChannel && !hasSignal"
+        v-else-if="currentChannel && !hasSignal"
         :channel-name="currentChannel.name"
         :channel-desc="`${currentChannel.groupName} · 无信号`"
         :logo-text="currentChannel.name.split('-')[0]?.trim() || 'TV'"
         :is-favorite="favoriteStore.isFavorite(currentChannel.id)"
-        :current-time="currentTime"
-        :total-time="totalTime"
-        :progress="progress"
         :volume="volume"
         @toggle-favorite="currentChannel && handleToggleFavorite(currentChannel)"
         @toggle-play="togglePlay"
@@ -244,7 +248,7 @@ const toggleFullscreen = () => {
           <NoSignalView
             message="当前频道无信号"
             check-message="请检查信号源连接或切换至其他频道"
-            estimated-time="预计信号恢复时间：08:00 - 09:30"
+            :estimated-time="estimatedRecoveryTime"
           />
         </template>
       </PlayerView>

@@ -11,7 +11,7 @@ import {
   RiCheckLine
 } from '@remixicon/vue'
 import { switchTheme, switchAccentColor, switchFontSize, getThemeSettings } from '@/services/theme'
-import { importSourceFromFile } from '@/services/source-loader'
+import { importSourceFromFile, addSourceFromUrl } from '@/services/source-loader'
 
 const sourceStore = useSourceStore()
 
@@ -69,39 +69,34 @@ const handleEditSource = (source: Source) => {
 }
 
 const handleImport = async (data: { name: string; url: string; type: 'url' | 'file' }) => {
-  if (data.type === 'file') {
-    // Local file import (blob/url content)
-    // Assuming 'url' here is the content string passed from modal or similar?
-    // Actually ImportSourceModal usually emits { name, url(file content or remote url), type }
-    // If it's a file, we need the content.
-    // Note: The current ImportSourceModal emits 'url' as the file path or object?
-    // Let's assume the modal handles file reading and passes content?
-    // Actually, the modal currently just emits 'type: file' and 'url' is the file path/name?
-    // We need to read the file.
-    // *Correction*: ImportSourceModal.vue currently emits `url` as the file path string?
-    // Let's check ImportSourceModal. It emits `data: { name, url, type }`.
-    // If file, `url` is likely the `File` object or path.
-    // We need to handle File reading here or ensure Modal does it.
-    // For now, let's assume standard flow: URL type calls the network loader.
-    console.log('File import handling requires File object reading, skipping for brevity or implementing basic version')
-  } else {
-    // URL Import: Download -> Cache -> Parse
-    try {
-      console.log(`Adding URL Source: ${data.name} -> ${data.url}`)
+  try {
+    if (data.type === 'file') {
+      // 文件导入：url 字段实际上是文件内容
+      console.log(`导入本地文件: ${data.name}`)
+      const success = await importSourceFromFile(data.name, data.url)
+
+      if (success) {
+        console.log('文件导入成功:', data.name)
+        await loadSources()
+      } else {
+        alert('文件导入失败，请检查文件格式')
+      }
+    } else {
+      // URL 导入：下载 -> 缓存 -> 解析
+      console.log(`添加 URL 源: ${data.name} -> ${data.url}`)
       const newSource = await addSourceFromUrl(data.name, data.url)
-      
+
       if (newSource) {
-        console.log('Source added successfully:', newSource)
-        // Refresh list from DB
+        console.log('源添加成功:', newSource)
         await loadSources()
         activeSourceId.value = newSource.id
       } else {
         alert('添加源失败，请检查网络或链接')
       }
-    } catch (error) {
-      console.error('Import error:', error)
-      alert('添加源失败')
     }
+  } catch (error) {
+    console.error('导入错误:', error)
+    alert('导入失败: ' + (error instanceof Error ? error.message : '未知错误'))
   }
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import {
   RiPlayFill,
   RiPauseFill,
@@ -12,6 +12,7 @@ import {
   RiHeartFill,
   RiHeartLine
 } from '@remixicon/vue'
+import { usePlayerStore } from '@/stores/player'
 
 interface ProgramItem {
   time: string
@@ -24,9 +25,6 @@ interface Props {
   channelDesc: string
   logoText?: string
   isFavorite?: boolean
-  currentTime?: string
-  totalTime?: string
-  progress?: number
   volume?: number
   isMuted?: boolean
   programs?: ProgramItem[]
@@ -35,18 +33,9 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   logoText: 'CCTV1',
   isFavorite: false,
-  currentTime: '19:35',
-  totalTime: '20:00',
-  progress: 35,
   volume: 72,
   isMuted: false,
-  programs: () => [
-    { time: '19:00', name: '新闻联播', isPlaying: true },
-    { time: '19:30', name: '天气预报' },
-    { time: '20:00', name: '特约剧场: 我们的日子(23)' },
-    { time: '20:56', name: '特约剧场: 我们的日子(24)' },
-    { time: '22:00', name: '晚间新闻' }
-  ]
+  programs: () => []
 })
 
 const emit = defineEmits<{
@@ -61,7 +50,25 @@ const emit = defineEmits<{
   playStateChange: [isPlaying: boolean]
 }>()
 
-const isPlaying = ref(true)
+const playerStore = usePlayerStore()
+
+// 从 store 读取实际播放状态
+const isPlaying = computed(() => playerStore.isPlaying)
+const currentTime = computed(() => formatTime(playerStore.currentTime))
+const totalTime = computed(() => formatTime(playerStore.totalTime))
+const progress = computed(() => {
+  if (playerStore.totalTime === 0) return 0
+  return (playerStore.currentTime / playerStore.totalTime) * 100
+})
+const currentVolume = computed(() => props.volume)
+const currentMuted = computed(() => playerStore.muted)
+
+function formatTime(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '00:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
 
 const currentDate = computed(() => {
   const now = new Date()
@@ -85,9 +92,8 @@ const handleVolumeClick = (event: MouseEvent) => {
 }
 
 const togglePlayState = () => {
-  isPlaying.value = !isPlaying.value
   emit('togglePlay')
-  emit('playStateChange', isPlaying.value)
+  emit('playStateChange', !playerStore.isPlaying)
 }
 </script>
 
@@ -160,12 +166,12 @@ const togglePlayState = () => {
         <div class="controls-right">
           <div class="volume-control">
             <button class="volume-icon-btn" @click="emit('toggleMute')">
-              <RiVolumeMuteLine v-if="isMuted" class="volume-icon" />
+              <RiVolumeMuteLine v-if="currentMuted" class="volume-icon" />
               <RiVolumeUpLine v-else class="volume-icon" />
             </button>
             <span class="volume-spacer"></span>
             <div class="volume-bar" @click="handleVolumeClick">
-              <div class="volume-filled" :style="{ width: (isMuted ? 0 : volume) + '%' }"></div>
+              <div class="volume-filled" :style="{ width: (currentMuted ? 0 : currentVolume) + '%' }"></div>
             </div>
           </div>
           <span class="right-spacer"></span>

@@ -1,17 +1,10 @@
 interface FetchOptions { retries?: number; timeout?: number; baseDelay?: number }
 
 /**
- * 判断是否为开发环境
- */
-function isDevEnvironment(): boolean {
-  return import.meta.env.DEV
-}
-
-/**
  * 将外部 URL 转换为代理路径（仅开发环境）
  */
-function toProxyUrl(url: string): string {
-  if (!isDevEnvironment()) return url
+export function toProxyUrl(url: string): string {
+  if (!import.meta.env.DEV) return url
   // 保持相对路径不变
   if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) return url
   return `/api/proxy?url=${encodeURIComponent(url)}`
@@ -26,7 +19,7 @@ export function isExternalUrl(url: string): boolean {
 
 export async function fetchWithRetry(url: string, options: FetchOptions = {}): Promise<string> {
   const { retries = 3, timeout = 30000, baseDelay = 1000 } = options
-  const targetUrl = toProxyUrl(url)  // 开发环境下转为代理 URL
+  const targetUrl = toProxyUrl(url)
   let lastError: Error | null = null
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
