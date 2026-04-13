@@ -1,61 +1,14 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
 
-export const usePlayerStore = defineStore('player', () => {
-  const isPlaying = ref(false)
-  const currentUrl = ref<string | null>(null)
-  const error = ref<string | null>(null)
-  const volume = ref(1)
-  const muted = ref(false)
-  const loading = ref(false)
-
-  function play(url: string) {
-    isPlaying.value = true
-    currentUrl.value = url
-    error.value = null
-  }
-
-  function pause() {
-    isPlaying.value = false
-  }
-
-  function setError(message: string) {
-    error.value = message
-    isPlaying.value = false
-  }
-
-  function clearError() {
-    error.value = null
-  }
-
-  function setVolume(vol: number) {
-    volume.value = Math.max(0, Math.min(1, vol))
-  }
-
-  function toggleMute() {
-    muted.value = !muted.value
-  }
-
-  function reset() {
-    isPlaying.value = false
-    currentUrl.value = null
-    error.value = null
-    loading.value = false
-  }
-
-  return {
-    isPlaying,
-    currentUrl,
-    error,
-    volume,
-    muted,
-    loading,
-    play,
-    pause,
-    setError,
-    clearError,
-    setVolume,
-    toggleMute,
-    reset
+export const usePlayerStore = defineStore('player', {
+  state: () => ({ isPlaying: false, currentUrl: null as string | null, error: null as string | null, volume: 1, muted: false, loading: false }),
+  actions: {
+    play(url: string) { this.currentUrl = url; this.isPlaying = true; this.error = null },
+    pause() { this.isPlaying = false },
+    setVolume(vol: number) { this.volume = Math.max(0, Math.min(1, vol)) },
+    toggleMute() { this.muted = !this.muted },
+    setError(msg: string | null) { this.error = msg },
+    setLoading(loading: boolean) { this.loading = loading },
+    reset() { this.isPlaying = false; this.currentUrl = null; this.error = null; this.loading = false }
   }
 })
