@@ -33,30 +33,91 @@ const navigate = (path: string) => router.push(path)
 
 <style scoped lang="scss">
 .top-navbar {
-  position: fixed; top: 0; left: 0; right: 0; height: 80px;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 80px; background-color: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color); z-index: 1000;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 60px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
-.navbar-brand { display: flex; align-items: center; gap: var(--spacing-md);
-  .logo { width: 40px; height: 40px; }
-  .brand-text { font-size: 24px; font-weight: bold; color: var(--text-primary); }
-}
-.navbar-nav { display: flex; gap: 32px; }
-.nav-item {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 8px 16px; background: transparent;
-  color: var(--text-secondary); transition: color var(--transition-fast); position: relative;
-  border-radius: 8px; cursor: pointer;
-  &:hover { color: var(--text-primary); }
-  &.active { color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.1);
-    &::after { content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); width: 24px; height: 3px; background-color: var(--brand-primary); border-radius: 2px; }
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  .logo {
+    width: 40px;
+    height: 40px;
+    transition: transform var(--transition-fast);
+  }
+  .brand-text {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+  }
+  &:hover .logo {
+    transform: scale(1.05);
   }
 }
+
+.navbar-nav {
+  display: flex;
+  gap: 28px;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  position: relative;
+  border-radius: 8px;
+  cursor: pointer;
+  &:hover {
+    color: var(--text-primary);
+    background-color: rgba(255, 255, 255, 0.03);
+  }
+  &.active {
+    color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.08);
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 20px;
+      height: 3px;
+      background-color: var(--brand-primary);
+      border-radius: 2px;
+    }
+  }
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
 .nav-icon {
   width: 24px;
   height: 24px;
   color: inherit;
+  transition: transform var(--transition-fast);
 }
-.nav-label { font-size: 13px; }
+
+.nav-label {
+  font-size: 13px;
+  font-weight: 500;
+}
 </style>

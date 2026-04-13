@@ -37,7 +37,8 @@ withDefaults(defineProps<Props>(), { icon: () => RiTvLine })
   height: 72px;
   color: var(--text-disabled);
   margin-bottom: 20px;
-  opacity: 0.4;
+  opacity: 0.35;
+  transition: all var(--transition-fast);
 }
 
 .empty-title {
@@ -45,11 +46,13 @@ withDefaults(defineProps<Props>(), { icon: () => RiTvLine })
   font-weight: 600;
   color: var(--text-secondary);
   margin-bottom: 8px;
+  line-height: 1.4;
 }
 
 .empty-description {
   font-size: 14px;
   color: var(--text-secondary);
   opacity: 0.7;
+  line-height: 1.5;
 }
 </style>

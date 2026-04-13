@@ -40,12 +40,13 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   overflow: hidden;
   cursor: pointer;
   transition: all var(--transition-fast);
-  border: 1px solid transparent;
+  border: 1px solid var(--border-color);
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
-    border-color: var(--border-color);
+    border-color: #3d3d50;
   }
+  &:active { transform: translateY(-2px) scale(0.98); }
 }
 
 .channel-preview {
@@ -65,6 +66,15 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
     bottom: 0;
     background: radial-gradient(circle at 30% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 60%);
   }
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.3));
+  }
 }
 
 .preview-placeholder {
@@ -78,8 +88,14 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
 .preview-icon {
   width: 44px;
   height: 44px;
-  opacity: 0.5;
+  opacity: 0.4;
   color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.favorite-card:hover .preview-icon {
+  opacity: 0.6;
+  transform: scale(1.05);
 }
 
 .card-content {
@@ -113,6 +129,7 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   width: 18px;
   height: 18px;
   color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .channel-name {
@@ -132,10 +149,14 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   transition: all var(--transition-fast);
   border-radius: 6px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   &:hover {
     transform: scale(1.15);
     background-color: rgba(239, 68, 68, 0.1);
   }
+  &:active { transform: scale(0.95); }
 }
 
 .heart-icon {
@@ -148,6 +169,7 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   padding: 10px 16px;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .meta-item {
@@ -157,5 +179,6 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   padding: 3px 8px;
   border-radius: 4px;
   font-weight: 500;
+  opacity: 0.8;
 }
 </style>

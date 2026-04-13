@@ -59,22 +59,37 @@ const handleAddFavorite = () => { router.push('/') }
 
 <style scoped lang="scss">
 .favorite-view {
-  padding: 40px 80px;
+  padding: 40px 60px;
   height: calc(100vh - 80px);
   overflow-y: auto;
   margin-top: 80px;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+    &:hover { background: #4a4e69; }
+  }
 }
 
 .page-header {
-  margin-bottom: 36px;
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .page-title {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0 0 8px;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.3px;
+  line-height: 1.3;
 }
 
 .page-subtitle {
@@ -82,6 +97,7 @@ const handleAddFavorite = () => { router.push('/') }
   color: var(--text-secondary);
   margin: 0;
   line-height: 1.5;
+  opacity: 0.8;
 }
 
 .favorites-grid {
@@ -106,10 +122,12 @@ const handleAddFavorite = () => { router.push('/') }
     border-color: var(--brand-primary);
     background-color: rgba(59, 130, 246, 0.05);
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
+  &:active { transform: translateY(0) scale(0.98); }
   .add-icon {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     background-color: var(--bg-secondary);
     display: flex;
@@ -117,18 +135,22 @@ const handleAddFavorite = () => { router.push('/') }
     justify-content: center;
     font-size: 20px;
     color: var(--text-secondary);
-    margin-bottom: 12px;
+    margin-bottom: 14px;
+    transition: all var(--transition-fast);
+    border: 1px solid var(--border-color);
   }
   .add-text {
     font-size: 15px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
   .add-desc {
     font-size: 12px;
     color: var(--text-secondary);
     text-align: center;
+    opacity: 0.7;
+    line-height: 1.4;
   }
 }
 </style>

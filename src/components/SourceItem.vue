@@ -61,14 +61,17 @@ const statusMap: Record<string, { label: string; class: string }> = {
     background-color: rgba(59, 130, 246, 0.08);
     border-color: rgba(59, 130, 246, 0.2);
   }
-  &:hover { background-color: var(--bg-card); }
+  &:hover {
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+  }
 }
 
 .col-status { width: 70px; text-align: center; flex-shrink: 0; }
 .col-name { width: 180px; font-weight: 500; flex-shrink: 0; }
 .col-url { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .col-channels { width: 80px; text-align: center; flex-shrink: 0; }
-.col-update { width: 160px; text-align: center; color: var(--text-secondary); flex-shrink: 0; font-size: 12px; }
+.col-update { width: 160px; text-align: center; color: var(--text-secondary); flex-shrink: 0; font-size: 12px; opacity: 0.8; }
 .col-actions { width: 200px; text-align: center; display: flex; gap: 6px; justify-content: center; flex-shrink: 0; }
 
 .status-badge {
@@ -99,6 +102,7 @@ const statusMap: Record<string, { label: string; class: string }> = {
   background: transparent;
   transition: all var(--transition-fast);
   white-space: nowrap;
+  &:active { transform: scale(0.95); }
   &.btn-switch { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); } }
   &.btn-edit { color: var(--text-secondary); &:hover { color: var(--text-primary); background-color: var(--bg-card); } }
   &.btn-delete { color: var(--error); &:hover { background-color: rgba(239, 68, 68, 0.1); } }

@@ -40,6 +40,9 @@ const emit = defineEmits<{
   &:hover {
     background-color: var(--bg-card);
   }
+  &:active {
+    transform: scale(0.98);
+  }
   &.active {
     background-color: rgba(59, 130, 246, 0.12);
     &::before {
@@ -70,6 +73,7 @@ const emit = defineEmits<{
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color var(--transition-fast);
 }
 
 .channel-spacer { flex: 1; }
@@ -89,6 +93,7 @@ const emit = defineEmits<{
     transform: scale(1.2);
     background-color: rgba(239, 68, 68, 0.1);
   }
+  &:active { transform: scale(0.95); }
 }
 
 .favorite-icon {

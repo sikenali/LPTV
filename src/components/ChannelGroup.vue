@@ -50,7 +50,7 @@ const emit = defineEmits<{
   overflow: hidden;
   transition: background-color var(--transition-fast);
   &:hover {
-    background-color: rgba(255, 255, 255, 0.02);
+    background-color: rgba(255, 255, 255, 0.015);
   }
 }
 
@@ -60,6 +60,9 @@ const emit = defineEmits<{
   transition: all var(--transition-fast);
   &:hover {
     background-color: var(--bg-card);
+  }
+  &:active {
+    transform: scale(0.98);
   }
 }
 
@@ -75,6 +78,7 @@ const emit = defineEmits<{
   color: var(--text-secondary);
   transition: transform var(--transition-normal);
   flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .group-name {
@@ -88,6 +92,7 @@ const emit = defineEmits<{
   color: var(--text-secondary);
   font-weight: 500;
   margin-left: auto;
+  opacity: 0.7;
 }
 
 .group-content {
