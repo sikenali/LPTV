@@ -50,8 +50,8 @@ const handleDelete = (sourceId: string) => { sources.value = sources.value.filte
 </template>
 
 <style scoped lang="scss">
-.settings-view { display: flex; height: 100%; }
-.settings-sidebar { width: 200px; background-color: var(--bg-secondary); padding: var(--spacing-md) 0; }
+.settings-view { display: flex; height: calc(100vh - 80px); margin-top: 80px; }
+.settings-sidebar { width: 200px; background-color: var(--bg-secondary); padding: var(--spacing-md) 0; border-right: 1px solid var(--border-color); }
 .menu-item { width: 100%; padding: var(--spacing-md) var(--spacing-lg); text-align: left; background: transparent; color: var(--text-secondary); transition: all var(--transition-fast); position: relative; &:hover { background-color: var(--bg-card); } &.active { background-color: var(--bg-card); color: var(--brand-primary); border-left: 3px solid var(--brand-primary); } }
 .settings-main { flex: 1; padding: var(--spacing-xl); overflow-y: auto; }
 .btn-add { padding: var(--spacing-md) var(--spacing-lg); background-color: var(--brand-primary); color: white; border-radius: var(--radius-sm); margin-bottom: var(--spacing-lg); &:hover { background-color: var(--brand-hover); } }

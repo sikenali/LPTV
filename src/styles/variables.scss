@@ -1,27 +1,46 @@
 :root {
-  --bg-primary: #141414;
-  --bg-secondary: #1f1f1f;
-  --bg-card: #2a2a2a;
-  --border-color: #333333;
+  // 背景色
+  --bg-primary: #0f0f14;
+  --bg-secondary: #1a1a24;
+  --bg-card: #22222e;
+
+  // 边框
+  --border-color: #2d2d3d;
+
+  // 文字
   --text-primary: #ffffff;
-  --text-secondary: #999999;
-  --text-disabled: #666666;
+  --text-secondary: #8b8fa3;
+  --text-disabled: #5a5e72;
+
+  // 品牌色
   --brand-primary: #3b82f6;
   --brand-hover: #60a5fa;
+
+  // 状态色
   --favorite: #ef4444;
   --success: #22c55e;
   --error: #ef4444;
   --warning: #eab308;
-  --font-size-title: 20px;
+
+  // 字号
+  --font-size-title: 24px;
   --font-size-subtitle: 16px;
   --font-size-body: 14px;
-  --font-size-caption: 12px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --font-size-caption: 13px;
+
+  // 圆角
+  --radius-sm: 8px;
+  --radius-md: 12px;
+
+  // 阴影
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  // 过渡
   --transition-fast: 200ms ease;
   --transition-normal: 300ms ease;
+
+  // 间距
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-md: 12px;

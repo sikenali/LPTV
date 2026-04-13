@@ -22,7 +22,6 @@ import TopNavbar from '@/components/TopNavbar.vue'
 }
 
 .app-main {
-  padding-top: 60px;
   height: 100vh;
   overflow: hidden;
 }
