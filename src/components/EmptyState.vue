@@ -23,19 +23,33 @@ withDefaults(defineProps<Props>(), { icon: () => RiTvLine })
 
 <style scoped lang="scss">
 .empty-state {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: calc(var(--spacing-xl) * 4); text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 40px;
+  text-align: center;
+  min-height: 400px;
 }
+
 .empty-icon-component {
-  width: 64px; height: 64px;
-  color: var(--text-disabled); margin-bottom: var(--spacing-lg);
+  width: 72px;
+  height: 72px;
+  color: var(--text-disabled);
+  margin-bottom: 20px;
+  opacity: 0.4;
 }
+
 .empty-title {
-  font-size: var(--font-size-subtitle);
-  color: var(--text-disabled); margin-bottom: var(--spacing-sm);
-}
-.empty-description {
-  font-size: var(--font-size-body);
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.empty-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 </style>

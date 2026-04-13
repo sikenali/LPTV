@@ -40,30 +40,45 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   overflow: hidden;
   cursor: pointer;
   transition: all var(--transition-fast);
+  border: 1px solid transparent;
   &:hover {
     transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    border-color: var(--border-color);
   }
 }
 
 .channel-preview {
-  height: 160px;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  height: 150px;
+  background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 30% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 60%);
+  }
 }
 
 .preview-placeholder {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 1;
 }
 
 .preview-icon {
-  width: 48px;
-  height: 48px;
-  opacity: 0.6;
+  width: 44px;
+  height: 44px;
+  opacity: 0.5;
   color: var(--text-secondary);
 }
 
@@ -71,63 +86,76 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .channel-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .channel-logo-small {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background-color: var(--bg-secondary);
+  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
 }
 
 .logo-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--text-secondary);
 }
 
 .channel-name {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .favorite-btn {
   background: transparent;
   border: none;
-  padding: 4px;
+  padding: 6px;
   cursor: pointer;
-  transition: transform var(--transition-fast);
+  transition: all var(--transition-fast);
+  border-radius: 6px;
+  flex-shrink: 0;
   &:hover {
-    transform: scale(1.3);
+    transform: scale(1.15);
+    background-color: rgba(239, 68, 68, 0.1);
   }
 }
 
 .heart-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--favorite);
 }
 
 .channel-meta {
-  padding: 0 20px 16px;
+  padding: 10px 16px;
+  display: flex;
+  gap: 8px;
 }
 
 .meta-item {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
   background-color: var(--bg-secondary);
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 4px;
+  font-weight: 500;
 }
 </style>

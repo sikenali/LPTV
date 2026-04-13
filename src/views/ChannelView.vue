@@ -169,80 +169,82 @@ const volume = ref(80)
 }
 
 .search-box {
-  display: flex; align-items: center; padding: 16px 24px; gap: 12px;
-  background-color: var(--bg-card); margin: 16px; border-radius: 12px;
-  .search-icon { width: 18px; height: 18px; color: var(--text-secondary); }
+  display: flex; align-items: center; padding: 12px 16px; gap: 10px;
+  background-color: var(--bg-card); margin: 16px; border-radius: 10px;
+  border: 1px solid var(--border-color);
+  .search-icon { width: 16px; height: 16px; color: var(--text-secondary); flex-shrink: 0; }
   .search-input {
     flex: 1; background: transparent; border: none; outline: none;
-    color: var(--text-primary); font-size: 14px;
-    &::placeholder { color: var(--text-secondary); }
+    color: var(--text-primary); font-size: 14px; line-height: 1.5;
+    &::placeholder { color: var(--text-secondary); opacity: 0.7; }
   }
 }
 
 .channel-groups {
-  flex: 1; overflow-y: auto; padding: 0 16px 16px;
+  flex: 1; overflow-y: auto; padding: 0;
 }
 
 /* 右侧主区域 */
 .channel-main {
   flex: 1; display: flex; flex-direction: column; background-color: var(--bg-primary);
-  padding: 24px 40px; gap: 16px; overflow-y: auto;
+  padding: 20px 32px; gap: 16px; overflow-y: auto;
 }
 
 /* 播放信息栏 */
 .player-info-bar {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 24px; background-color: var(--bg-card); border-radius: 12px;
+  padding: 12px 20px; background-color: var(--bg-card); border-radius: 10px;
+  min-height: 64px;
 }
 
-.channel-info { display: flex; align-items: center; gap: 16px; }
+.channel-info { display: flex; align-items: center; gap: 12px; }
 
 .channel-logo-placeholder {
-  width: 48px; height: 48px; border-radius: 10px;
+  width: 40px; height: 40px; border-radius: 8px;
   background-color: var(--bg-secondary); display: flex; align-items: center;
-  justify-content: center;
+  justify-content: center; flex-shrink: 0;
 }
 
 .logo-icon {
-  width: 24px; height: 24px; color: var(--text-secondary);
+  width: 20px; height: 20px; color: var(--text-secondary);
 }
 
-.channel-details { display: flex; flex-direction: column; gap: 4px; }
-.channel-name-large { font-size: 20px; font-weight: 600; color: var(--text-primary); }
-.channel-desc { font-size: 13px; color: var(--text-secondary); }
+.channel-details { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.channel-name-large { font-size: 16px; font-weight: 600; color: var(--text-primary); line-height: 1.4; }
+.channel-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
 
-.info-actions { display: flex; gap: 16px; }
+.info-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .action-btn {
-  width: 48px; height: 48px; border-radius: 10px; background-color: var(--bg-secondary);
+  width: 36px; height: 36px; border-radius: 8px; background-color: var(--bg-secondary);
   border: none; color: var(--text-primary); cursor: pointer;
   transition: background-color var(--transition-fast);
   display: flex; align-items: center; justify-content: center;
   &:hover { background-color: var(--brand-primary); }
 }
-.action-icon { width: 20px; height: 20px; }
+.action-icon { width: 18px; height: 18px; }
 
 /* 视频播放窗口 */
 .video-player-wrapper {
-  flex: 1; min-height: 400px; background-color: #000; border-radius: 16px;
+  width: 100%; aspect-ratio: 16 / 9; background-color: #0a0a0a; border-radius: 12px;
   display: flex; align-items: center; justify-content: center; position: relative;
-  overflow: hidden;
+  overflow: hidden; flex-shrink: 0;
 }
 
 .player-placeholder {
-  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
   color: var(--text-secondary);
-  .play-icon { width: 64px; height: 64px; opacity: 0.5; }
-  .placeholder-text { font-size: 16px; }
+  .play-icon { width: 48px; height: 48px; opacity: 0.4; }
+  .placeholder-text { font-size: 14px; letter-spacing: 0.3px; }
 }
 
 /* 播放控制栏 */
 .playback-controls {
-  background-color: var(--bg-card); border-radius: 12px; padding: 16px 24px;
+  background-color: var(--bg-card); border-radius: 10px; padding: 12px 20px;
 }
 
 .progress-bar {
-  position: relative; height: 8px; background-color: var(--bg-secondary);
-  border-radius: 4px; margin-bottom: 16px; cursor: pointer;
+  position: relative; height: 4px; background-color: var(--bg-secondary);
+  border-radius: 2px; margin-bottom: 12px; cursor: pointer;
 }
 
 .progress-filled {
@@ -252,53 +254,57 @@ const volume = ref(80)
 
 .progress-thumb {
   position: absolute; top: 50%; transform: translate(-50%, -50%);
-  width: 16px; height: 16px; border-radius: 50%;
+  width: 12px; height: 12px; border-radius: 50%;
   background-color: var(--brand-primary); cursor: grab;
+  opacity: 0; transition: opacity 0.2s;
 }
 
+.progress-bar:hover .progress-thumb { opacity: 1; }
+
 .control-buttons { display: flex; align-items: center; justify-content: space-between; }
-.controls-left, .controls-right { display: flex; align-items: center; gap: 16px; }
+.controls-left, .controls-right { display: flex; align-items: center; gap: 12px; }
 
 .ctrl-btn {
   display: flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border-radius: 8px; background-color: var(--bg-secondary);
-  border: none; color: var(--text-primary); font-size: 14px; cursor: pointer;
+  padding: 6px 12px; border-radius: 6px; background-color: transparent;
+  border: none; color: var(--text-primary); font-size: 13px; cursor: pointer;
   transition: background-color var(--transition-fast);
-  &:hover { background-color: var(--brand-primary); }
+  &:hover { background-color: var(--bg-secondary); }
 }
-.ctrl-icon { width: 18px; height: 18px; }
+.ctrl-icon { width: 16px; height: 16px; }
 
-.time-display { font-size: 13px; color: var(--text-secondary); margin-left: 8px; }
+.time-display { font-size: 12px; color: var(--text-secondary); margin-left: 4px; font-variant-numeric: tabular-nums; }
 
 .volume-control { display: flex; align-items: center; gap: 8px; }
-.volume-icon { width: 18px; height: 18px; color: var(--text-primary); }
+.volume-icon { width: 16px; height: 16px; color: var(--text-primary); }
 .volume-bar {
-  width: 96px; height: 6px; background-color: var(--bg-secondary);
-  border-radius: 3px; position: relative; cursor: pointer;
+  width: 80px; height: 4px; background-color: var(--bg-secondary);
+  border-radius: 2px; position: relative; cursor: pointer;
 }
 .volume-filled {
   position: absolute; left: 0; top: 0; height: 100%;
-  background-color: var(--brand-primary); border-radius: 3px;
+  background-color: var(--brand-primary); border-radius: 2px;
 }
 
 /* 节目预告栏 */
 .program-guide {
-  background-color: var(--bg-card); border-radius: 12px; padding: 20px 24px;
+  background-color: var(--bg-card); border-radius: 10px; padding: 16px 20px;
 }
 
-.guide-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.guide-title { font-size: 16px; font-weight: 600; color: var(--text-primary); }
-.guide-date { font-size: 13px; color: var(--text-secondary); }
+.guide-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); }
+.guide-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.guide-date { font-size: 12px; color: var(--text-secondary); }
 
-.program-list { display: flex; flex-direction: column; gap: 8px; }
+.program-list { display: flex; flex-direction: column; gap: 4px; }
 
 .program-item {
-  display: flex; align-items: center; padding: 12px 16px;
-  border-radius: 8px; gap: 16px;
-  &.active { background-color: rgba(59, 130, 246, 0.1); }
+  display: flex; align-items: center; padding: 10px 12px;
+  border-radius: 6px; gap: 12px; transition: background-color 0.15s;
+  &:hover:not(.active) { background-color: var(--bg-secondary); }
+  &.active { background-color: rgba(59, 130, 246, 0.08); }
 }
 
-.program-time { font-size: 14px; color: var(--text-secondary); min-width: 60px; }
+.program-time { font-size: 13px; color: var(--text-secondary); min-width: 56px; font-variant-numeric: tabular-nums; }
 .program-name { flex: 1; font-size: 14px; color: var(--text-primary); }
-.program-status { font-size: 12px; color: var(--brand-primary); }
+.program-status { font-size: 11px; color: var(--brand-primary); font-weight: 500; }
 </style>

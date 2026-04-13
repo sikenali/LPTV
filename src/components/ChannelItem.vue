@@ -30,37 +30,70 @@ const emit = defineEmits<{
 
 <style scoped lang="scss">
 .channel-item {
-  display: flex; align-items: center; padding: 12px 16px;
-  border-radius: 8px; cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 8px;
+  cursor: pointer;
   transition: all var(--transition-fast);
-  &:hover { background-color: var(--bg-card); }
+  position: relative;
+  &:hover {
+    background-color: var(--bg-card);
+  }
   &.active {
-    background-color: rgba(59, 130, 246, 0.15);
-    border-left: 3px solid var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.12);
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 60%;
+      background-color: var(--brand-primary);
+      border-radius: 0 2px 2px 0;
+    }
   }
 }
 
 .channel-info-row {
-  display: flex; align-items: center; width: 100%; gap: 8px;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
 }
 
 .channel-name {
-  font-size: 14px; color: var(--text-primary);
+  font-size: 14px;
+  color: var(--text-primary);
   flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .channel-spacer { flex: 1; }
 
 .favorite-btn {
-  background: transparent; border: none; padding: 4px;
+  background: transparent;
+  border: none;
+  padding: 4px;
   cursor: pointer;
-  transition: transform var(--transition-fast);
-  &:hover { transform: scale(1.3); }
+  transition: all var(--transition-fast);
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  &:hover {
+    transform: scale(1.2);
+    background-color: rgba(239, 68, 68, 0.1);
+  }
 }
 
 .favorite-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--favorite);
 }
 </style>

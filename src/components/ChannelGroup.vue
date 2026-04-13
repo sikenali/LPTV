@@ -45,20 +45,28 @@ const emit = defineEmits<{
 
 <style scoped lang="scss">
 .channel-group {
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 8px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: background-color var(--transition-fast);
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+  }
 }
 
 .group-header {
   cursor: pointer;
-  padding: 8px 0;
-  transition: opacity var(--transition-fast);
-  &:hover { opacity: 0.8; }
+  padding: 10px 14px;
+  transition: all var(--transition-fast);
+  &:hover {
+    background-color: var(--bg-card);
+  }
 }
 
 .group-title-row {
-  display: flex; align-items: center; gap: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .group-arrow {
@@ -66,18 +74,26 @@ const emit = defineEmits<{
   height: 16px;
   color: var(--text-secondary);
   transition: transform var(--transition-normal);
+  flex-shrink: 0;
 }
 
 .group-name {
-  font-size: 16px; font-weight: 600; color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .group-count {
-  font-size: 13px; color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-left: auto;
 }
 
 .group-content {
-  margin-top: 8px;
-  display: flex; flex-direction: column; gap: 4px;
+  padding: 4px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 </style>

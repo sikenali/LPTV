@@ -62,12 +62,123 @@ const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedF
 </template>
 
 <style scoped lang="scss">
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-.modal { background-color: var(--bg-card); border-radius: var(--radius-md); width: 500px; max-width: 90vw; box-shadow: var(--shadow-modal); }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-lg); border-bottom: 1px solid var(--border-color); .modal-title { font-size: var(--font-size-subtitle); font-weight: 600; } .modal-close { background: transparent; font-size: 24px; color: var(--text-secondary); &:hover { color: var(--text-primary); } } }
-.modal-tabs { display: flex; border-bottom: 1px solid var(--border-color); .tab { flex: 1; padding: var(--spacing-md); background: transparent; color: var(--text-secondary); transition: color var(--transition-fast); &.active { color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary); } } }
-.modal-body { padding: var(--spacing-lg); }
-.form-group { margin-bottom: var(--spacing-md); label { display: block; font-size: var(--font-size-caption); color: var(--text-secondary); margin-bottom: var(--spacing-xs); } input { width: 100%; padding: var(--spacing-md); background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); &:focus { border-color: var(--brand-primary); } } }
-.file-drop { border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: var(--spacing-xl); text-align: center; position: relative; .file-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; } .file-icon { width: 48px; height: 48px; margin-bottom: var(--spacing-md); color: var(--text-secondary); } .file-text { font-size: var(--font-size-body); color: var(--text-secondary); margin-bottom: var(--spacing-sm); } .file-hint { font-size: var(--font-size-caption); color: var(--text-disabled); } .selected-file { margin-top: var(--spacing-md); font-size: var(--font-size-caption); color: var(--success); } }
-.modal-footer { display: flex; justify-content: flex-end; gap: var(--spacing-md); padding: var(--spacing-lg); border-top: 1px solid var(--border-color); .btn { padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-sm); &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); } } &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); } } } }
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  background-color: var(--bg-card);
+  border-radius: 16px;
+  width: 520px;
+  max-width: 90vw;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  .modal-title { font-size: 17px; font-weight: 600; }
+  .modal-close {
+    background: transparent;
+    font-size: 22px;
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all var(--transition-fast);
+    &:hover { color: var(--text-primary); background-color: var(--bg-secondary); }
+  }
+}
+
+.modal-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 24px;
+  .tab {
+    flex: 1;
+    padding: 14px 16px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    border-bottom: 2px solid transparent;
+    &.active { color: var(--brand-primary); border-bottom-color: var(--brand-primary); }
+    &:hover:not(.active) { color: var(--text-primary); }
+  }
+}
+
+.modal-body { padding: 24px; }
+
+.form-group {
+  margin-bottom: 16px;
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  input {
+    width: 100%;
+    padding: 12px 14px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    transition: all var(--transition-fast);
+    &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); outline: none; }
+    &::placeholder { color: var(--text-disabled); }
+  }
+}
+
+.file-drop {
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  position: relative;
+  transition: all var(--transition-fast);
+  &:hover { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.04); }
+  .file-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .file-icon { width: 40px; height: 40px; margin-bottom: 12px; color: var(--text-secondary); opacity: 0.6; }
+  .file-text { font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
+  .file-hint { font-size: 12px; color: var(--text-disabled); }
+  .selected-file { margin-top: 12px; font-size: 13px; color: var(--success); font-weight: 500; }
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-color);
+  .btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+    &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); } }
+    &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); background-color: var(--bg-card); } }
+  }
+}
 </style>

@@ -407,7 +407,7 @@ const shortcuts = [
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 12px 16px;
   border-radius: 10px;
   background: transparent;
   color: var(--text-secondary);
@@ -415,97 +415,102 @@ const shortcuts = [
   cursor: pointer;
   &:hover { background-color: var(--bg-card); color: var(--text-primary); }
   &.active {
-    background-color: rgba(59, 130, 246, 0.15);
+    background-color: rgba(59, 130, 246, 0.12);
     color: var(--brand-primary);
   }
   .menu-icon { width: 18px; height: 18px; color: inherit; }
-  .menu-label { font-size: 15px; font-weight: 500; }
+  .menu-label { font-size: 14px; font-weight: 500; }
 }
 
 /* 右侧设置内容区 */
 .settings-content {
   flex: 1;
-  padding: 32px 48px;
+  padding: 40px 64px;
   overflow-y: auto;
   background-color: var(--bg-primary);
 }
 
 /* 模块标题 */
-.module-header { margin-bottom: 32px; }
-.module-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin: 0 0 8px; }
-.module-desc { font-size: 14px; color: var(--text-secondary); margin: 0; }
+.module-header { margin-bottom: 28px; }
+.module-title { font-size: 26px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px; line-height: 1.2; }
+.module-desc { font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.5; }
 
 /* 添加源区域 */
 .add-source-section {
   background-color: var(--bg-card);
   border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 32px;
+  padding: 28px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border-color);
 }
 
-.section-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }
-.section-desc { font-size: 13px; color: var(--text-secondary); margin: 0 0 24px; }
+.section-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
+.section-desc { font-size: 13px; color: var(--text-secondary); margin: 0 0 20px; }
 
 /* 添加方式选择 */
-.add-method-tabs { display: flex; gap: 16px; margin-bottom: 24px; }
+.add-method-tabs { display: flex; gap: 12px; margin-bottom: 20px; }
 .method-tab {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px;
+  gap: 4px;
+  padding: 18px 16px;
   border-radius: 10px;
   background-color: var(--bg-secondary);
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
-  &.active { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.1); color: var(--brand-primary); }
-  &:hover { border-color: var(--brand-primary); }
-  .method-icon { width: 22px; height: 22px; margin-bottom: 8px; color: inherit; }
-  .method-label { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-  .method-desc { font-size: 12px; opacity: 0.7; }
+  &.active { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.08); color: var(--brand-primary); }
+  &:hover:not(.active) { border-color: var(--border-color); color: var(--text-primary); }
+  .method-icon { width: 20px; height: 20px; color: inherit; }
+  .method-label { font-size: 13px; font-weight: 600; }
+  .method-desc { font-size: 12px; opacity: 0.6; }
 }
 
 /* URL 表单 */
-.url-form { display: flex; flex-direction: column; gap: 16px; }
-.form-group { display: flex; flex-direction: column; gap: 8px; }
-.form-label { font-size: 13px; color: var(--text-secondary); }
+.url-form { display: flex; flex-direction: column; gap: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
 .form-input {
-  padding: 14px 16px;
+  padding: 12px 14px;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-primary);
   font-size: 14px;
-  transition: border-color var(--transition-fast);
-  &:focus { border-color: var(--brand-primary); }
+  transition: all var(--transition-fast);
+  &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); outline: none; }
   &::placeholder { color: var(--text-disabled); }
+  &:hover:not(:focus) { border-color: #3d3d50; }
 }
 
 .btn-add-source {
-  padding: 14px 24px;
+  padding: 12px 24px;
   background-color: var(--brand-primary);
   color: white;
   border-radius: 8px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  transition: background-color var(--transition-fast);
+  transition: all var(--transition-fast);
   cursor: pointer;
-  &:hover { background-color: var(--brand-hover); }
+  align-self: flex-start;
+  &:hover { background-color: var(--brand-hover); transform: translateY(-1px); }
+  &:active { transform: translateY(0); }
 }
 
 /* 文件上传区域 */
 .file-upload-area {
   border: 2px dashed var(--border-color);
   border-radius: 10px;
-  padding: 40px;
+  padding: 36px;
   text-align: center;
   cursor: pointer;
-  transition: border-color var(--transition-fast);
-  &:hover { border-color: var(--brand-primary); }
-  .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-  .upload-icon { width: 48px; height: 48px; opacity: 0.5; color: var(--text-secondary); }
+  transition: all var(--transition-fast);
+  &:hover { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.04); }
+  .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .upload-icon { width: 40px; height: 40px; opacity: 0.5; color: var(--text-secondary); }
   .upload-text { font-size: 14px; color: var(--text-secondary); }
 }
 
@@ -514,17 +519,20 @@ const shortcuts = [
   background-color: var(--bg-card);
   border-radius: 12px;
   padding: 24px;
+  border: 1px solid var(--border-color);
 }
 
-.source-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.source-list-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0; }
-.source-count { font-size: 13px; color: var(--text-secondary); }
+.source-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.source-list-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.source-count { font-size: 13px; color: var(--text-secondary); background: var(--bg-secondary); padding: 4px 10px; border-radius: 12px; }
 
-.source-table { display: flex; flex-direction: column; gap: 8px; }
+.source-table { display: flex; flex-direction: column; gap: 6px; }
 .table-header {
-  display: flex; align-items: center; padding: 12px 16px;
+  display: flex; align-items: center; padding: 10px 16px;
   background-color: var(--bg-secondary); border-radius: 8px;
-  font-size: 13px; color: var(--text-secondary); font-weight: 600;
+  font-size: 12px; color: var(--text-secondary); font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .col-status { width: 60px; text-align: center; }
@@ -539,26 +547,36 @@ const shortcuts = [
 .schedule-card {
   background-color: var(--bg-card);
   border-radius: 12px;
-  padding: 24px;
-  max-width: 600px;
+  padding: 28px;
+  max-width: 640px;
+  border: 1px solid var(--border-color);
 }
 .card-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 20px; }
 .form-select {
-  padding: 12px 16px;
+  padding: 12px 14px;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-primary);
   font-size: 14px;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b8fa3' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 14px) center;
+  padding-right: 36px;
+  &:hover:not(:focus) { border-color: #3d3d50; }
+  &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); outline: none; }
 }
-.schedule-info { display: flex; flex-direction: column; gap: 12px; margin: 20px 0; padding: 16px 0; border-top: 1px solid var(--border-color); }
-.info-item { display: flex; justify-content: space-between; }
+.schedule-info { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; padding: 16px 0; border-top: 1px solid var(--border-color); }
+.info-item { display: flex; justify-content: space-between; align-items: center; }
 .info-label { font-size: 13px; color: var(--text-secondary); }
-.info-value { font-size: 13px; color: var(--text-primary); }
-.schedule-actions { display: flex; gap: 12px; margin-top: 20px; }
-.btn { padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast);
-  &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); } }
-  &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); } }
+.info-value { font-size: 13px; color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
+.schedule-actions { display: flex; gap: 10px; margin-top: 20px; }
+.btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast);
+  &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); transform: translateY(-1px); } &:active { transform: translateY(0); } }
+  &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); background-color: #2d2d3d; } }
 }
 
 /* 播放设置 */
@@ -572,20 +590,21 @@ const shortcuts = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 0;
+  padding: 18px 0;
   border-bottom: 1px solid var(--border-color);
-  &:last-child { border-bottom: none; }
+  &:last-child { border-bottom: none; padding-bottom: 0; }
+  &:first-child { padding-top: 0; }
 }
 
 .setting-info { display: flex; flex-direction: column; gap: 4px; }
-.setting-label { font-size: 15px; font-weight: 500; color: var(--text-primary); }
+.setting-label { font-size: 14px; font-weight: 500; color: var(--text-primary); }
 .setting-desc { font-size: 13px; color: var(--text-secondary); }
 
 .toggle-switch {
   position: relative;
   display: inline-block;
   width: 48px;
-  height: 24px;
+  height: 26px;
   input { opacity: 0; width: 0; height: 0; }
   .toggle-slider {
     position: absolute;
@@ -593,34 +612,37 @@ const shortcuts = [
     top: 0; left: 0; right: 0; bottom: 0;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    transition: var(--transition-fast);
-    border-radius: 24px;
+    transition: all var(--transition-fast);
+    border-radius: 26px;
     &:before {
       position: absolute;
       content: "";
-      height: 18px; width: 18px;
+      height: 20px; width: 20px;
       left: 2px; bottom: 2px;
-      background-color: white;
-      transition: var(--transition-fast);
+      background-color: #fff;
+      transition: all var(--transition-fast);
       border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
   }
   input:checked + .toggle-slider { background-color: var(--brand-primary); border-color: var(--brand-primary); }
-  input:checked + .toggle-slider:before { transform: translateX(24px); }
+  input:checked + .toggle-slider:before { transform: translateX(22px); }
 }
 
-.shortcuts-list { display: flex; flex-direction: column; gap: 12px; }
+.shortcuts-list { display: flex; flex-direction: column; gap: 8px; }
 .shortcut-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background-color: var(--bg-secondary);
   border-radius: 8px;
+  transition: background-color var(--transition-fast);
+  &:hover { background-color: #2d2d3d; }
 }
 
 .shortcut-action { font-size: 14px; color: var(--text-primary); }
-.shortcut-keys { display: flex; gap: 8px; }
+.shortcut-keys { display: flex; gap: 6px; }
 
 .key-badge {
   display: inline-block;
@@ -628,10 +650,10 @@ const shortcuts = [
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  font-family: monospace;
-  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
+  font-size: 12px;
   color: var(--text-secondary);
-  min-width: 40px;
+  min-width: 36px;
   text-align: center;
 }
 
@@ -640,20 +662,21 @@ const shortcuts = [
   background-color: var(--bg-card);
   border-radius: 12px;
   padding: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-color);
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 16px;
+  margin: 0 0 14px;
 }
 
 .option-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
 }
 
 .option-card {
@@ -661,49 +684,52 @@ const shortcuts = [
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 20px;
+  gap: 6px;
+  padding: 18px 12px;
   border-radius: 10px;
   background-color: var(--bg-secondary);
-  border: 2px solid transparent;
+  border: 1.5px solid transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
-  &:hover { border-color: var(--brand-primary); }
+  &:hover { border-color: var(--border-color); }
   &.active {
     border-color: var(--brand-primary);
-    background-color: rgba(59, 130, 246, 0.1);
+    background-color: rgba(59, 130, 246, 0.08);
     color: var(--brand-primary);
   }
-  .option-icon { width: 24px; height: 24px; color: inherit; }
-  .option-label { font-size: 14px; font-weight: 500; }
+  .option-icon { width: 22px; height: 22px; color: inherit; }
+  .option-label { font-size: 13px; font-weight: 500; }
+  .option-desc { font-size: 11px; color: var(--text-secondary); text-align: center; line-height: 1.3; }
 }
 
 .color-picker-grid {
   display: flex;
-  gap: 16px;
+  gap: 14px;
 }
 
 .color-swatch {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 2px solid transparent;
   transition: all var(--transition-fast);
   cursor: pointer;
   position: relative;
-  &:hover { transform: scale(1.1); }
+  outline: none;
+  &:hover { transform: scale(1.12); }
   &.active {
     border-color: var(--text-primary);
-    transform: scale(1.1);
+    transform: scale(1.12);
     &::after {
       content: '✓';
       position: absolute;
       top: 50%; left: 50%;
       transform: translate(-50%, -50%);
       color: white;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: bold;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
   }
 }
@@ -713,12 +739,13 @@ const shortcuts = [
   background-color: var(--bg-card);
   border-radius: 12px;
   padding: 24px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-color);
 }
 
 .preview-container {
   display: flex;
-  height: 200px;
+  height: 180px;
   background-color: var(--bg-primary);
   border-radius: 10px;
   overflow: hidden;
@@ -726,12 +753,12 @@ const shortcuts = [
 }
 
 .preview-sidebar {
-  width: 60px;
+  width: 56px;
   background-color: var(--bg-secondary);
-  padding: 10px 5px;
+  padding: 10px 6px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   border-right: 1px solid var(--border-color);
 }
 
@@ -746,15 +773,15 @@ const shortcuts = [
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 10px;
+  padding: 12px;
   gap: 8px;
 }
 
 .preview-header {
-  height: 16px;
+  height: 12px;
   background-color: var(--bg-secondary);
   border-radius: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .preview-player {
@@ -764,17 +791,17 @@ const shortcuts = [
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .preview-play-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   color: rgba(255, 255, 255, 0.5);
 }
 
 .preview-progress {
-  height: 6px;
+  height: 5px;
   background-color: var(--bg-secondary);
   border-radius: 3px;
   overflow: hidden;
@@ -790,7 +817,7 @@ const shortcuts = [
 /* 占位模块 */
 .placeholder-module { display: flex; align-items: center; justify-content: center; height: 400px; }
 .placeholder-content { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.placeholder-icon { width: 64px; height: 64px; opacity: 0.5; color: var(--text-secondary); }
-.placeholder-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.placeholder-icon { width: 56px; height: 56px; opacity: 0.4; color: var(--text-secondary); }
+.placeholder-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0; }
 .placeholder-desc { font-size: 14px; color: var(--text-secondary); margin: 0; }
 </style>

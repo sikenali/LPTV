@@ -59,14 +59,14 @@ const handleAddFavorite = () => { router.push('/') }
 
 <style scoped lang="scss">
 .favorite-view {
-  padding: 32px 80px;
+  padding: 40px 80px;
   height: calc(100vh - 80px);
   overflow-y: auto;
   margin-top: 80px;
 }
 
 .page-header {
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
 
 .page-title {
@@ -74,18 +74,20 @@ const handleAddFavorite = () => { router.push('/') }
   font-weight: 700;
   color: var(--text-primary);
   margin: 0 0 8px;
+  letter-spacing: -0.5px;
 }
 
 .page-subtitle {
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0;
+  line-height: 1.5;
 }
 
 .favorites-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
+  gap: 20px;
 }
 
 .add-favorite-card {
@@ -103,20 +105,28 @@ const handleAddFavorite = () => { router.push('/') }
   &:hover {
     border-color: var(--brand-primary);
     background-color: rgba(59, 130, 246, 0.05);
+    transform: translateY(-2px);
   }
   .add-icon {
-    font-size: 40px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--bg-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
     color: var(--text-secondary);
-    margin-bottom: 8px;
+    margin-bottom: 12px;
   }
   .add-text {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 4px;
   }
   .add-desc {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
     text-align: center;
   }
