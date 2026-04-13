@@ -6,8 +6,7 @@ import {
   RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
   RiFolderLine, RiUploadCloud2Line,
   RiFilmLine, RiTv2Line, RiComputerLine, RiFlashlightLine,
-  RiHammerLine,
-  RiSunLine, RiMoonLine, RiRestartLine
+  RiHammerLine
 } from '@remixicon/vue'
 
 const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
@@ -56,24 +55,25 @@ const menuItems = [
 ]
 
 // UI Settings State
-const theme = ref<'light' | 'dark' | 'auto'>('dark')
+const theme = ref<'light' | 'dark' | 'blue' | 'black'>('dark')
 const fontSize = ref<'small' | 'medium' | 'large'>('medium')
 const accentColor = ref<'blue' | 'purple' | 'orange' | 'green'>('blue')
-const density = ref<'compact' | 'standard' | 'loose'>('standard')
 
 // Player Settings State
 const playerCore = ref<'hls' | 'native'>('hls')
 const decodeMode = ref<'soft' | 'hard'>('soft')
 const autoplay = ref(true)
-const rememberPosition = ref(true)
+const hardwareAccel = ref(true)
+const pipMode = ref(false)
+const rememberVolume = ref(true)
 
-const shortcuts = [
-  { key: 'Space', action: '播放/暂停' },
-  { key: 'F', action: '全屏切换' },
-  { key: 'M', action: '静音切换' },
-  { key: '↑', action: '音量增加' },
-  { key: '↓', action: '音量减少' }
-]
+// Schedule Settings State
+const globalScheduleEnabled = ref(true)
+const updateFrequency = ref<'1h' | '6h' | '12h' | '24h' | '7d'>('6h')
+const updateTime = ref('03:00')
+const retryCount = ref('3')
+const updateNotification = ref(true)
+const autoUpdate = ref(false)
 </script>
 
 <template>
@@ -172,30 +172,188 @@ const shortcuts = [
           <h2 class="module-title">定时管理</h2>
           <p class="module-desc">设置直播源自动更新周期</p>
         </div>
-        <div class="schedule-card">
-          <h3 class="card-title">全局更新设置</h3>
-          <div class="form-group">
-            <label class="form-label">更新周期</label>
-            <select class="form-select">
-              <option value="1">每 1 小时</option>
-              <option value="6">每 6 小时</option>
-              <option value="24">每天</option>
-              <option value="168">每周</option>
-            </select>
-          </div>
-          <div class="schedule-info">
-            <div class="info-item">
-              <span class="info-label">下次自动更新</span>
-              <span class="info-value">2026-04-13 16:00</span>
+
+        <!-- 全局定时设置卡片 -->
+        <div class="settings-section">
+          <div class="schedule-global-header">
+            <div class="schedule-title-group">
+              <h3 class="schedule-card-title">全局更新设置</h3>
+              <p class="schedule-card-desc">控制所有直播源的自动更新行为</p>
             </div>
-            <div class="info-item">
-              <span class="info-label">上次更新</span>
-              <span class="info-value">2026-04-13 10:00</span>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="globalScheduleEnabled" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="schedule-settings">
+            <div class="schedule-setting-row">
+              <div class="setting-info">
+                <span class="setting-label">更新频率</span>
+                <span class="setting-desc">设置自动更新的时间间隔</span>
+              </div>
+              <div class="frequency-selector">
+                <button class="freq-option" :class="{ active: updateFrequency === '1h' }" @click="updateFrequency = '1h'">
+                  <span>每小时</span>
+                </button>
+                <button class="freq-option" :class="{ active: updateFrequency === '6h' }" @click="updateFrequency = '6h'">
+                  <span>每 6 小时</span>
+                </button>
+                <button class="freq-option" :class="{ active: updateFrequency === '12h' }" @click="updateFrequency = '12h'">
+                  <span>每 12 小时</span>
+                </button>
+                <button class="freq-option" :class="{ active: updateFrequency === '24h' }" @click="updateFrequency = '24h'">
+                  <span>每天</span>
+                </button>
+                <button class="freq-option" :class="{ active: updateFrequency === '7d' }" @click="updateFrequency = '7d'">
+                  <span>每周</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="schedule-setting-row">
+              <div class="setting-info">
+                <span class="setting-label">更新时间</span>
+                <span class="setting-desc">设置每天自动更新的具体时间</span>
+              </div>
+              <input type="time" v-model="updateTime" class="time-input" />
+            </div>
+
+            <div class="schedule-setting-row">
+              <div class="setting-info">
+                <span class="setting-label">失败重试</span>
+                <span class="setting-desc">更新失败时的自动重试次数</span>
+              </div>
+              <select v-model="retryCount" class="retry-select">
+                <option value="1">1 次</option>
+                <option value="2">2 次</option>
+                <option value="3">3 次</option>
+                <option value="5">5 次</option>
+              </select>
+            </div>
+
+            <div class="schedule-divider"></div>
+
+            <div class="schedule-toggle-row">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="updateNotification" />
+                <span class="toggle-slider"></span>
+              </label>
+              <div class="toggle-info">
+                <span class="toggle-label">更新通知</span>
+                <span class="toggle-desc">更新完成后发送通知提醒</span>
+              </div>
+            </div>
+
+            <div class="schedule-toggle-row">
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="autoUpdate" />
+                <span class="toggle-slider"></span>
+              </label>
+              <div class="toggle-info">
+                <span class="toggle-label">自动更新</span>
+                <span class="toggle-desc">启用后台自动更新直播源数据</span>
+              </div>
             </div>
           </div>
-          <div class="schedule-actions">
-            <button class="btn btn-secondary">立即更新</button>
-            <button class="btn btn-primary">保存设置</button>
+        </div>
+
+        <!-- 单独源定时设置 -->
+        <div class="settings-section">
+          <div class="source-schedule-header">
+            <div class="schedule-title-group">
+              <h3 class="schedule-card-title">单独源设置</h3>
+              <p class="schedule-card-desc">为每个直播源配置独立的更新规则</p>
+            </div>
+            <button class="batch-btn">批量操作</button>
+          </div>
+
+          <div class="source-schedule-list">
+            <div class="source-schedule-item">
+              <label class="toggle-switch mini">
+                <input type="checkbox" checked />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="source-name">我的直播源</span>
+              <span class="source-freq">每小时</span>
+              <span class="source-time">03:00</span>
+              <span class="source-status success">
+                <span class="status-dot"></span>
+                正常
+              </span>
+              <span class="source-last-update">2026-04-13 10:00</span>
+              <button class="update-now-btn">立即更新</button>
+            </div>
+            <div class="source-schedule-item">
+              <label class="toggle-switch mini">
+                <input type="checkbox" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="source-name">备用直播源</span>
+              <span class="source-freq">每 6 小时</span>
+              <span class="source-time">--:--</span>
+              <span class="source-status error">
+                <span class="status-dot"></span>
+                异常
+              </span>
+              <span class="source-last-update">2026-04-12 08:00</span>
+              <button class="update-now-btn">立即更新</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 更新历史记录 -->
+        <div class="settings-section">
+          <div class="history-header">
+            <div class="schedule-title-group">
+              <h3 class="schedule-card-title">更新历史</h3>
+              <p class="schedule-card-desc">查看最近的更新记录和状态</p>
+            </div>
+            <button class="clear-history-btn">清空记录</button>
+          </div>
+
+          <div class="history-list">
+            <div class="history-table-header">
+              <span class="col-source">源名称</span>
+              <span class="col-time">更新时间</span>
+              <span class="col-duration">耗时</span>
+              <span class="col-channels">频道数</span>
+              <span class="col-detail">详情</span>
+              <span class="col-action">操作</span>
+            </div>
+            <div class="history-item success">
+              <span class="col-source">我的直播源</span>
+              <span class="col-time">2026-04-13 10:00</span>
+              <span class="col-duration">3.2s</span>
+              <span class="col-channels">
+                <span class="status-dot success"></span>
+                50
+              </span>
+              <span class="col-detail">成功更新 50 个频道</span>
+              <button class="view-log-btn">查看日志</button>
+            </div>
+            <div class="history-item success">
+              <span class="col-source">我的直播源</span>
+              <span class="col-time">2026-04-13 04:00</span>
+              <span class="col-duration">2.8s</span>
+              <span class="col-channels">
+                <span class="status-dot success"></span>
+                50
+              </span>
+              <span class="col-detail">成功更新 50 个频道</span>
+              <button class="view-log-btn">查看日志</button>
+            </div>
+            <div class="history-item error">
+              <span class="col-source">备用直播源</span>
+              <span class="col-time">2026-04-12 08:00</span>
+              <span class="col-duration">15.3s</span>
+              <span class="col-channels">
+                <span class="status-dot error"></span>
+                0
+              </span>
+              <span class="col-detail">连接超时，更新失败</span>
+              <button class="view-log-btn">查看日志</button>
+            </div>
           </div>
         </div>
       </div>
@@ -206,37 +364,57 @@ const shortcuts = [
           <p class="module-desc">自定义界面外观和交互体验</p>
         </div>
 
-        <!-- 主题模式 -->
+        <!-- 主题选择卡片 -->
         <div class="settings-section">
-          <h3 class="section-title">主题模式</h3>
-          <div class="option-grid">
-            <button class="option-card" :class="{ active: theme === 'light' }" @click="theme = 'light'">
-              <RiSunLine class="option-icon" />
-              <span class="option-label">浅色模式</span>
+          <h3 class="section-title">主题选择</h3>
+          <div class="theme-grid">
+            <button class="theme-card" :class="{ active: theme === 'dark' }" @click="theme = 'dark'">
+              <div class="theme-preview">
+                <div class="theme-preview-dark">
+                  <div class="preview-sidebar-mini"></div>
+                  <div class="preview-main-mini">
+                    <div class="preview-player-mini"></div>
+                  </div>
+                </div>
+              </div>
+              <span class="theme-label">深色模式</span>
+              <span class="theme-check" v-if="theme === 'dark'">✓</span>
             </button>
-            <button class="option-card" :class="{ active: theme === 'dark' }" @click="theme = 'dark'">
-              <RiMoonLine class="option-icon" />
-              <span class="option-label">深色模式</span>
+            <button class="theme-card" :class="{ active: theme === 'light' }" @click="theme = 'light'">
+              <div class="theme-preview">
+                <div class="theme-preview-light">
+                  <div class="preview-sidebar-mini light"></div>
+                  <div class="preview-main-mini light">
+                    <div class="preview-player-mini light"></div>
+                  </div>
+                </div>
+              </div>
+              <span class="theme-label">浅色模式</span>
+              <span class="theme-check" v-if="theme === 'light'">✓</span>
             </button>
-            <button class="option-card" :class="{ active: theme === 'auto' }" @click="theme = 'auto'">
-              <RiRestartLine class="option-icon" />
-              <span class="option-label">跟随系统</span>
+            <button class="theme-card" :class="{ active: theme === 'blue' }" @click="theme = 'blue'">
+              <div class="theme-preview">
+                <div class="theme-preview-blue">
+                  <div class="preview-sidebar-mini blue"></div>
+                  <div class="preview-main-mini blue">
+                    <div class="preview-player-mini blue"></div>
+                  </div>
+                </div>
+              </div>
+              <span class="theme-label">蓝色主题</span>
+              <span class="theme-check" v-if="theme === 'blue'">✓</span>
             </button>
-          </div>
-        </div>
-
-        <!-- 字体大小 -->
-        <div class="settings-section">
-          <h3 class="section-title">字体大小</h3>
-          <div class="option-grid">
-            <button class="option-card" :class="{ active: fontSize === 'small' }" @click="fontSize = 'small'">
-              <span class="option-label" style="font-size: 12px;">小</span>
-            </button>
-            <button class="option-card" :class="{ active: fontSize === 'medium' }" @click="fontSize = 'medium'">
-              <span class="option-label" style="font-size: 16px;">中</span>
-            </button>
-            <button class="option-card" :class="{ active: fontSize === 'large' }" @click="fontSize = 'large'">
-              <span class="option-label" style="font-size: 20px;">大</span>
+            <button class="theme-card" :class="{ active: theme === 'black' }" @click="theme = 'black'">
+              <div class="theme-preview">
+                <div class="theme-preview-black">
+                  <div class="preview-sidebar-mini black"></div>
+                  <div class="preview-main-mini black">
+                    <div class="preview-player-mini black"></div>
+                  </div>
+                </div>
+              </div>
+              <span class="theme-label">纯黑模式</span>
+              <span class="theme-check" v-if="theme === 'black'">✓</span>
             </button>
           </div>
         </div>
@@ -247,45 +425,24 @@ const shortcuts = [
           <div class="color-picker-grid">
             <button class="color-swatch" :class="{ active: accentColor === 'blue' }" style="background-color: #3b82f6;" @click="accentColor = 'blue'"></button>
             <button class="color-swatch" :class="{ active: accentColor === 'purple' }" style="background-color: #8b5cf6;" @click="accentColor = 'purple'"></button>
-            <button class="color-swatch" :class="{ active: accentColor === 'orange' }" style="background-color: #f97316;" @click="accentColor = 'orange'"></button>
             <button class="color-swatch" :class="{ active: accentColor === 'green' }" style="background-color: #22c55e;" @click="accentColor = 'green'"></button>
+            <button class="color-swatch" :class="{ active: accentColor === 'orange' }" style="background-color: #f97316;" @click="accentColor = 'orange'"></button>
           </div>
         </div>
 
-        <!-- 界面紧凑度 -->
+        <!-- 字体大小 -->
         <div class="settings-section">
-          <h3 class="section-title">界面紧凑度</h3>
-          <div class="option-grid">
-            <button class="option-card" :class="{ active: density === 'compact' }" @click="density = 'compact'">
-              <span class="option-label">紧凑</span>
+          <h3 class="section-title">字体大小</h3>
+          <div class="option-grid-3">
+            <button class="option-card-small" :class="{ active: fontSize === 'small' }" @click="fontSize = 'small'">
+              <span class="option-label">小</span>
             </button>
-            <button class="option-card" :class="{ active: density === 'standard' }" @click="density = 'standard'">
-              <span class="option-label">标准</span>
+            <button class="option-card-small" :class="{ active: fontSize === 'medium' }" @click="fontSize = 'medium'">
+              <span class="option-label">中</span>
             </button>
-            <button class="option-card" :class="{ active: density === 'loose' }" @click="density = 'loose'">
-              <span class="option-label">宽松</span>
+            <button class="option-card-small" :class="{ active: fontSize === 'large' }" @click="fontSize = 'large'">
+              <span class="option-label">大</span>
             </button>
-          </div>
-        </div>
-
-        <!-- 界面预览 -->
-        <div class="preview-section">
-          <h3 class="section-title">界面预览</h3>
-          <div class="preview-container">
-            <div class="preview-sidebar">
-              <div class="preview-sidebar-item active"></div>
-              <div class="preview-sidebar-item"></div>
-              <div class="preview-sidebar-item"></div>
-            </div>
-            <div class="preview-content">
-              <div class="preview-header"></div>
-              <div class="preview-player">
-                <RiPlayCircleLine class="preview-play-icon" />
-              </div>
-              <div class="preview-progress">
-                <div class="preview-progress-bar"></div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -293,13 +450,60 @@ const shortcuts = [
       <div v-else-if="activeTab === 'player'" class="player-management">
         <div class="module-header">
           <h2 class="module-title">播放设置</h2>
-          <p class="module-desc">配置播放器内核、解码方式及快捷键</p>
+          <p class="module-desc">配置播放器内核、解码方式及播放行为</p>
+        </div>
+
+        <!-- 基础播放设置卡片 -->
+        <div class="settings-section">
+          <h3 class="section-title">基础设置</h3>
+          <div class="toggle-list">
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <span class="toggle-label">硬件加速</span>
+                <span class="toggle-desc">使用 GPU 加速视频解码</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="hardwareAccel" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <span class="toggle-label">自动播放</span>
+                <span class="toggle-desc">打开频道时自动开始播放</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="autoplay" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <span class="toggle-label">画中画模式</span>
+                <span class="toggle-desc">切换频道时保持小窗口播放</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="pipMode" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="toggle-item">
+              <div class="toggle-info">
+                <span class="toggle-label">记住音量</span>
+                <span class="toggle-desc">下次打开时恢复上次音量</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" v-model="rememberVolume" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
 
         <!-- 播放器内核 -->
         <div class="settings-section">
           <h3 class="section-title">播放器内核</h3>
-          <div class="option-grid">
+          <div class="option-grid-2">
             <button class="option-card" :class="{ active: playerCore === 'hls' }" @click="playerCore = 'hls'">
               <RiFilmLine class="option-icon" />
               <span class="option-label">HLS.js</span>
@@ -316,7 +520,7 @@ const shortcuts = [
         <!-- 解码方式 -->
         <div class="settings-section">
           <h3 class="section-title">解码方式</h3>
-          <div class="option-grid">
+          <div class="option-grid-2">
             <button class="option-card" :class="{ active: decodeMode === 'soft' }" @click="decodeMode = 'soft'">
               <RiComputerLine class="option-icon" />
               <span class="option-label">软解</span>
@@ -327,44 +531,6 @@ const shortcuts = [
               <span class="option-label">硬解</span>
               <span class="option-desc">GPU 加速，性能更好</span>
             </button>
-          </div>
-        </div>
-
-        <!-- 播放行为 -->
-        <div class="settings-section">
-          <h3 class="section-title">播放行为</h3>
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label">自动播放</span>
-              <span class="setting-desc">打开频道时自动开始播放</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="autoplay" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label">记忆播放位置</span>
-              <span class="setting-desc">下次播放时从上次的位置继续</span>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="rememberPosition" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <!-- 快捷键设置 -->
-        <div class="settings-section">
-          <h3 class="section-title">快捷键设置</h3>
-          <div class="shortcuts-list">
-            <div v-for="(sc, index) in shortcuts" :key="index" class="shortcut-item">
-              <span class="shortcut-action">{{ sc.action }}</span>
-              <div class="shortcut-keys">
-                <kbd class="key-badge">{{ sc.key }}</kbd>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -781,49 +947,389 @@ const shortcuts = [
   &.active { background-color: var(--brand-primary); }
 }
 
-.preview-content {
-  flex: 1;
+/* 界面设置 - 主题卡片 */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.theme-card {
   display: flex;
   flex-direction: column;
-  padding: 12px;
-  gap: 8px;
-}
-
-.preview-header {
-  height: 12px;
-  background-color: var(--bg-secondary);
-  border-radius: 4px;
-  margin-bottom: 6px;
-}
-
-.preview-player {
-  flex: 1;
-  background-color: #000;
-  border-radius: 8px;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 6px;
-}
-
-.preview-play-icon {
-  width: 28px;
-  height: 28px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.preview-progress {
-  height: 5px;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
   background-color: var(--bg-secondary);
-  border-radius: 3px;
+  border: 2px solid transparent;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  position: relative;
+  &:hover { border-color: var(--border-color); }
+  &.active {
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.06);
+    color: var(--brand-primary);
+  }
+}
+
+.theme-preview {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 6px;
   overflow: hidden;
 }
 
-.preview-progress-bar {
-  width: 35%;
+.theme-preview-dark,
+.theme-preview-light,
+.theme-preview-blue,
+.theme-preview-black {
+  display: flex;
   height: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.preview-sidebar-mini {
+  width: 25%;
+  background-color: #1a1a24;
+  border-right: 1px solid #2d2d3d;
+  &.light { background-color: #f5f5f5; border-color: #e0e0e0; }
+  &.blue { background-color: #1a2a4a; border-color: #2a3a5a; }
+  &.black { background-color: #0a0a0a; border-color: #1a1a1a; }
+}
+
+.preview-main-mini {
+  flex: 1;
+  background-color: #0f0f14;
+  display: flex;
+  flex-direction: column;
+  &.light { background-color: #ffffff; }
+  &.blue { background-color: #0f1a2e; }
+  &.black { background-color: #000000; }
+}
+
+.preview-player-mini {
+  flex: 1;
+  background-color: #000;
+  margin: 4px;
+  border-radius: 2px;
+  &.light { background-color: #e0e0e0; }
+  &.blue { background-color: #1a2a4a; }
+  &.black { background-color: #0a0a0a; }
+}
+
+.theme-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.theme-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
   background-color: var(--brand-primary);
-  border-radius: 3px;
+  color: white;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.option-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.option-card-small {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1.5px solid transparent;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  &:hover { border-color: var(--border-color); }
+  &.active {
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.06);
+    color: var(--brand-primary);
+  }
+  .option-label { font-size: 13px; font-weight: 500; }
+}
+
+.option-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+/* 播放设置 - 开关列表 */
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color);
+  &:last-child { border-bottom: none; padding-bottom: 0; }
+  &:first-child { padding-top: 0; }
+}
+
+.toggle-info { display: flex; flex-direction: column; gap: 3px; }
+.toggle-label { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.toggle-desc { font-size: 12px; color: var(--text-secondary); opacity: 0.7; }
+
+/* 定时管理 */
+.schedule-global-header,
+.source-schedule-header,
+.history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.schedule-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.schedule-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.schedule-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin: 0;
+}
+
+.batch-btn,
+.clear-history-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  &:hover { color: var(--text-primary); border-color: #3d3d50; }
+}
+
+.clear-history-btn {
+  color: var(--error);
+  &:hover { background-color: rgba(239, 68, 68, 0.1); border-color: var(--error); }
+}
+
+.schedule-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.schedule-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.frequency-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.freq-option {
+  padding: 8px 16px;
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  border: 1.5px solid transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  &:hover { border-color: var(--border-color); }
+  &.active {
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.06);
+    color: var(--brand-primary);
+  }
+}
+
+.time-input {
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: all var(--transition-fast);
+  &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); outline: none; }
+}
+
+.retry-select {
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); outline: none; }
+}
+
+.schedule-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 8px 0;
+}
+
+.schedule-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 单独源定时设置 */
+.source-schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-schedule-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.source-name { flex: 1; font-weight: 500; color: var(--text-primary); }
+.source-freq { color: var(--text-secondary); min-width: 80px; text-align: center; }
+.source-time { color: var(--text-secondary); min-width: 60px; text-align: center; font-variant-numeric: tabular-nums; }
+
+.source-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  &.success { background-color: rgba(34, 197, 94, 0.12); color: var(--success); }
+  &.error { background-color: rgba(239, 68, 68, 0.12); color: var(--error); }
+}
+
+.source-last-update { color: var(--text-secondary); min-width: 140px; text-align: center; font-size: 12px; }
+
+.update-now-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--brand-primary);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  &:hover { background-color: var(--brand-hover); }
+  &:active { transform: scale(0.95); }
+}
+
+/* 更新历史记录 */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.history-table-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  background-color: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  transition: background-color var(--transition-fast);
+  &:hover { background-color: var(--bg-secondary); }
+  &.error { background-color: rgba(239, 68, 68, 0.04); }
+}
+
+.col-source { flex: 1; font-weight: 500; color: var(--text-primary); }
+.col-time { color: var(--text-secondary); min-width: 140px; text-align: center; font-size: 12px; }
+.col-duration { color: var(--text-secondary); min-width: 60px; text-align: center; }
+.col-channels {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 60px;
+  justify-content: center;
+}
+.col-detail { flex: 2; color: var(--text-secondary); font-size: 12px; }
+.col-action { min-width: 80px; text-align: center; }
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  &.success { color: var(--success); }
+  &.error { color: var(--error); }
+}
+
+.view-log-btn {
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  &:hover { color: var(--text-primary); border-color: #3d3d50; }
 }
 
 /* 占位模块 */

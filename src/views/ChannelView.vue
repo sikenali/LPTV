@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import ChannelGroup from '@/components/ChannelGroup.vue'
+import VideoPlayer from '@/components/VideoPlayer.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { useChannelStore } from '@/stores/channel'
 import { useFavoriteStore } from '@/stores/favorite'
 import type { Channel } from '@/types/channel'
@@ -14,6 +16,7 @@ const channelStore = useChannelStore()
 const favoriteStore = useFavoriteStore()
 const searchQuery = ref('')
 
+// 从 Store 加载频道数据
 const demoGroups = ref([
   { id: 'g1', name: '央视频道', channels: [
     { id: 'ch1', name: 'CCTV-1 综合', url: 'http://example.com/cctv1.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
@@ -36,15 +39,47 @@ const demoGroups = ref([
 ])
 
 const currentChannel = ref<Channel | null>(null)
-const isFavorite = ref(false)
+
+// 过滤后的频道（支持搜索）
+const filteredGroups = computed(() => {
+  if (!searchQuery.value) return demoGroups.value
+  const query = searchQuery.value.toLowerCase()
+  return demoGroups.value
+    .map(group => ({
+      ...group,
+      channels: group.channels.filter(ch => ch.name.toLowerCase().includes(query))
+    }))
+    .filter(group => group.channels.length > 0)
+})
+
+// 初始化收藏状态
+onMounted(() => {
+  demoGroups.value.forEach(group => {
+    group.channels.forEach(ch => {
+      ch.isFavorite = favoriteStore.isFavorite(ch.id)
+    })
+  })
+  // 恢复上次选择的频道
+  if (channelStore.currentChannel) {
+    currentChannel.value = channelStore.currentChannel
+  }
+})
+
 const isGroupExpanded = (groupId: string) => channelStore.expandedGroups.has(groupId)
 const handleToggleGroup = (groupId: string) => channelStore.toggleGroup(groupId)
-const handleSelectChannel = (channel: Channel) => { currentChannel.value = channel; channelStore.selectChannel(channel) }
+
+const handleSelectChannel = (channel: Channel) => {
+  currentChannel.value = channel
+  channelStore.selectChannel(channel)
+}
+
 const handleToggleFavorite = (channel: Channel) => {
   channel.isFavorite = !channel.isFavorite
-  isFavorite.value = channel.isFavorite
-  if (channel.isFavorite) favoriteStore.addFavoriteLocal(channel)
-  else favoriteStore.removeFavoriteLocal(channel.id)
+  if (channel.isFavorite) {
+    favoriteStore.addFavoriteLocal(channel)
+  } else {
+    favoriteStore.removeFavoriteLocal(channel.id)
+  }
 }
 
 const currentTime = ref('01:23:45')
@@ -63,9 +98,13 @@ const volume = ref(80)
       </div>
       <!-- 频道分组列表 -->
       <div class="channel-groups">
-        <ChannelGroup v-for="group in demoGroups" :key="group.id" :group-name="group.name" :channel-count="group.channels.length"
+        <ChannelGroup v-for="group in filteredGroups" :key="group.id" :group-name="group.name" :channel-count="group.channels.length"
           :channels="group.channels" :is-expanded="isGroupExpanded(group.id)" :current-channel-id="currentChannel?.id ?? null"
           @toggle="handleToggleGroup(group.id)" @select="handleSelectChannel" @toggle-favorite="handleToggleFavorite" />
+        <div v-if="filteredGroups.length === 0" class="no-results">
+          <RiSearchLine class="no-results-icon" />
+          <span>未找到匹配的频道</span>
+        </div>
       </div>
     </aside>
     <!-- 右侧播放主区域 -->
@@ -83,7 +122,7 @@ const volume = ref(80)
         </div>
         <div class="info-actions">
           <button class="action-btn" @click="currentChannel && handleToggleFavorite(currentChannel)">
-            <RiHeartFill v-if="isFavorite" class="action-icon" />
+            <RiHeartFill v-if="currentChannel?.isFavorite" class="action-icon" />
             <RiHeartLine v-else class="action-icon" />
           </button>
           <button class="action-btn">
@@ -92,12 +131,10 @@ const volume = ref(80)
         </div>
       </div>
       <!-- 视频播放窗口 -->
-      <div class="video-player-wrapper">
-        <div class="player-placeholder">
-          <RiPlayFill class="play-icon" />
-          <span class="placeholder-text">{{ currentChannel ? '正在加载...' : '选择频道开始播放' }}</span>
-        </div>
+      <div v-if="currentChannel" class="video-player-wrapper">
+        <VideoPlayer :url="currentChannel.url" />
       </div>
+      <EmptyState v-else :icon="RiTvLine" title="选择一个频道开始观看" description="从左侧频道列表中选择一个频道" />
       <!-- 播放控制栏 -->
       <div class="playback-controls">
         <div class="progress-bar">

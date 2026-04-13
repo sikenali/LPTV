@@ -8,6 +8,7 @@ import { RiHeartLine } from '@remixicon/vue'
 
 const router = useRouter()
 
+// Demo data for favorites (will be replaced with store data later)
 const favorites = ref<Channel[]>([
   { id: 'ch1', name: 'CCTV-1 综合', url: 'http://example.com/cctv1.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
   { id: 'ch2', name: 'CCTV-2 财经', url: 'http://example.com/cctv2.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
@@ -17,9 +18,17 @@ const favorites = ref<Channel[]>([
   { id: 'ch3', name: 'CCTV-5 体育', url: 'http://example.com/cctv5.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
 ])
 
-const handleRemove = (channelId: string) => { favorites.value = favorites.value.filter(ch => ch.id !== channelId) }
-const handlePlay = (channel: Channel) => { router.push({ path: '/', query: { channel: channel.id } }) }
-const handleAddFavorite = () => { router.push('/') }
+const handleRemove = (channelId: string) => {
+  favorites.value = favorites.value.filter(ch => ch.id !== channelId)
+}
+
+const handlePlay = (channel: Channel) => {
+  router.push({ path: '/', query: { channel: channel.id } })
+}
+
+const handleAddFavorite = () => {
+  router.push('/')
+}
 </script>
 
 <template>
