@@ -47,6 +47,12 @@ const menuItems = [
   { id: 'ui' as const, label: '界面设置', icon: '🎨' },
   { id: 'about' as const, label: '关于', icon: 'ℹ️' }
 ]
+
+// UI Settings State
+const theme = ref<'light' | 'dark' | 'auto'>('dark')
+const fontSize = ref<'small' | 'medium' | 'large'>('medium')
+const accentColor = ref<'blue' | 'purple' | 'orange' | 'green'>('blue')
+const density = ref<'compact' | 'standard' | 'loose'>('standard')
 </script>
 
 <template>
@@ -169,6 +175,96 @@ const menuItems = [
           <div class="schedule-actions">
             <button class="btn btn-secondary">立即更新</button>
             <button class="btn btn-primary">保存设置</button>
+          </div>
+        </div>
+      </div>
+      <!-- 界面设置模块 -->
+      <div v-else-if="activeTab === 'ui'" class="ui-management">
+        <div class="module-header">
+          <h2 class="module-title">界面设置</h2>
+          <p class="module-desc">自定义界面外观和交互体验</p>
+        </div>
+        
+        <!-- 主题模式 -->
+        <div class="settings-section">
+          <h3 class="section-title">主题模式</h3>
+          <div class="option-grid">
+            <button class="option-card" :class="{ active: theme === 'light' }" @click="theme = 'light'">
+              <span class="option-icon">☀️</span>
+              <span class="option-label">浅色模式</span>
+            </button>
+            <button class="option-card" :class="{ active: theme === 'dark' }" @click="theme = 'dark'">
+              <span class="option-icon">🌙</span>
+              <span class="option-label">深色模式</span>
+            </button>
+            <button class="option-card" :class="{ active: theme === 'auto' }" @click="theme = 'auto'">
+              <span class="option-icon">🔄</span>
+              <span class="option-label">跟随系统</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 字体大小 -->
+        <div class="settings-section">
+          <h3 class="section-title">字体大小</h3>
+          <div class="option-grid">
+            <button class="option-card" :class="{ active: fontSize === 'small' }" @click="fontSize = 'small'">
+              <span class="option-label" style="font-size: 12px;">小</span>
+            </button>
+            <button class="option-card" :class="{ active: fontSize === 'medium' }" @click="fontSize = 'medium'">
+              <span class="option-label" style="font-size: 16px;">中</span>
+            </button>
+            <button class="option-card" :class="{ active: fontSize === 'large' }" @click="fontSize = 'large'">
+              <span class="option-label" style="font-size: 20px;">大</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 强调色 -->
+        <div class="settings-section">
+          <h3 class="section-title">强调色</h3>
+          <div class="color-picker-grid">
+            <button class="color-swatch" :class="{ active: accentColor === 'blue' }" style="background-color: #3b82f6;" @click="accentColor = 'blue'"></button>
+            <button class="color-swatch" :class="{ active: accentColor === 'purple' }" style="background-color: #8b5cf6;" @click="accentColor = 'purple'"></button>
+            <button class="color-swatch" :class="{ active: accentColor === 'orange' }" style="background-color: #f97316;" @click="accentColor = 'orange'"></button>
+            <button class="color-swatch" :class="{ active: accentColor === 'green' }" style="background-color: #22c55e;" @click="accentColor = 'green'"></button>
+          </div>
+        </div>
+
+        <!-- 界面紧凑度 -->
+        <div class="settings-section">
+          <h3 class="section-title">界面紧凑度</h3>
+          <div class="option-grid">
+            <button class="option-card" :class="{ active: density === 'compact' }" @click="density = 'compact'">
+              <span class="option-label">紧凑</span>
+            </button>
+            <button class="option-card" :class="{ active: density === 'standard' }" @click="density = 'standard'">
+              <span class="option-label">标准</span>
+            </button>
+            <button class="option-card" :class="{ active: density === 'loose' }" @click="density = 'loose'">
+              <span class="option-label">宽松</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 界面预览 -->
+        <div class="preview-section">
+          <h3 class="section-title">界面预览</h3>
+          <div class="preview-container">
+            <div class="preview-sidebar">
+              <div class="preview-sidebar-item active"></div>
+              <div class="preview-sidebar-item"></div>
+              <div class="preview-sidebar-item"></div>
+            </div>
+            <div class="preview-content">
+              <div class="preview-header"></div>
+              <div class="preview-player">
+                <span class="preview-play-icon">▶</span>
+              </div>
+              <div class="preview-progress">
+                <div class="preview-progress-bar"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -363,6 +459,157 @@ const menuItems = [
 .btn { padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast);
   &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); } }
   &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); } }
+}
+
+/* 界面设置 */
+.settings-section {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+}
+
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+}
+
+.option-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 10px;
+  background-color: var(--bg-secondary);
+  border: 2px solid transparent;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  &:hover { border-color: var(--brand-primary); }
+  &.active {
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.1);
+    color: var(--brand-primary);
+  }
+  .option-icon { font-size: 24px; }
+  .option-label { font-size: 14px; font-weight: 500; }
+}
+
+.color-picker-grid {
+  display: flex;
+  gap: 16px;
+}
+
+.color-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  position: relative;
+  &:hover { transform: scale(1.1); }
+  &.active {
+    border-color: var(--text-primary);
+    transform: scale(1.1);
+    &::after {
+      content: '✓';
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+    }
+  }
+}
+
+/* 界面预览 */
+.preview-section {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.preview-container {
+  display: flex;
+  height: 200px;
+  background-color: var(--bg-primary);
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.preview-sidebar {
+  width: 60px;
+  background-color: var(--bg-secondary);
+  padding: 10px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-right: 1px solid var(--border-color);
+}
+
+.preview-sidebar-item {
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--border-color);
+  &.active { background-color: var(--brand-primary); }
+}
+
+.preview-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 8px;
+}
+
+.preview-header {
+  height: 16px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.preview-player {
+  flex: 1;
+  background-color: #000;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.preview-play-icon {
+  font-size: 32px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.preview-progress {
+  height: 6px;
+  background-color: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.preview-progress-bar {
+  width: 35%;
+  height: 100%;
+  background-color: var(--brand-primary);
+  border-radius: 3px;
 }
 
 /* 占位模块 */
