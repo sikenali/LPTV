@@ -425,7 +425,7 @@ const shortcuts = [
 /* 右侧设置内容区 */
 .settings-content {
   flex: 1;
-  padding: 40px 60px;
+  padding: 24px 32px;
   overflow-y: auto;
   background-color: var(--bg-primary);
 
@@ -443,106 +443,106 @@ const shortcuts = [
 }
 
 /* 模块标题 */
-.module-header { margin-bottom: 28px; }
-.module-title { font-size: 26px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px; line-height: 1.2; }
-.module-desc { font-size: 14px; color: var(--text-secondary); margin: 0; line-height: 1.5; }
+.module-header { margin-bottom: 16px; }
+.module-title { font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 0 0 2px; line-height: 1.3; }
+.module-desc { font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5; opacity: 0.7; }
 
 /* 添加源区域 */
 .add-source-section {
   background-color: var(--bg-card);
   border-radius: 12px;
-  padding: 28px;
-  margin-bottom: 24px;
+  padding: 20px;
+  margin-bottom: 16px;
   border: 1px solid var(--border-color);
 }
 
-.section-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
-.section-desc { font-size: 13px; color: var(--text-secondary); margin: 0 0 20px; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }
+.section-desc { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; opacity: 0.7; }
 
 /* 添加方式选择 */
-.add-method-tabs { display: flex; gap: 12px; margin-bottom: 20px; }
+.add-method-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
 .method-tab {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 18px 16px;
-  border-radius: 10px;
+  padding: 14px;
+  border-radius: 8px;
   background-color: var(--bg-secondary);
   border: 1.5px solid transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
-  &.active { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.08); color: var(--brand-primary); }
-  &:hover:not(.active) { border-color: var(--border-color); color: var(--text-primary); }
-  .method-icon { width: 20px; height: 20px; color: inherit; }
+  &.active { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.05); color: var(--brand-primary); }
+  &:hover:not(.active) { border-color: var(--border-color); color: var(--text-primary); background-color: var(--bg-card); }
+  .method-icon { width: 18px; height: 18px; color: inherit; }
   .method-label { font-size: 13px; font-weight: 600; }
-  .method-desc { font-size: 12px; opacity: 0.6; }
+  .method-desc { font-size: 11px; opacity: 0.6; }
 }
 
 /* URL 表单 */
-.url-form { display: flex; flex-direction: column; gap: 14px; }
-.form-group { display: flex; flex-direction: column; gap: 6px; }
-.form-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.url-form { display: flex; flex-direction: column; gap: 10px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-label { font-size: 12px; font-weight: 500; color: var(--text-primary); }
 .form-input {
-  padding: 12px 14px;
+  padding: 10px 12px;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
   transition: all var(--transition-fast);
-  &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); outline: none; }
+  &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); outline: none; }
   &::placeholder { color: var(--text-disabled); }
   &:hover:not(:focus) { border-color: #3d3d50; }
 }
 
 .btn-add-source {
-  padding: 12px 24px;
+  padding: 10px 20px;
   background-color: var(--brand-primary);
   color: white;
-  border-radius: 8px;
-  font-size: 14px;
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 600;
   transition: all var(--transition-fast);
   cursor: pointer;
   align-self: flex-start;
-  &:hover { background-color: var(--brand-hover); transform: translateY(-1px); }
-  &:active { transform: translateY(0); }
+  &:hover { background-color: var(--brand-hover); }
+  &:active { transform: scale(0.98); }
 }
 
 /* 文件上传区域 */
 .file-upload-area {
   border: 2px dashed var(--border-color);
-  border-radius: 10px;
-  padding: 36px;
+  border-radius: 8px;
+  padding: 28px;
   text-align: center;
   cursor: pointer;
   transition: all var(--transition-fast);
-  &:hover { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.04); }
-  .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  .upload-icon { width: 40px; height: 40px; opacity: 0.5; color: var(--text-secondary); }
-  .upload-text { font-size: 14px; color: var(--text-secondary); }
+  &:hover { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.02); }
+  .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .upload-icon { width: 36px; height: 36px; opacity: 0.5; color: var(--text-secondary); }
+  .upload-text { font-size: 13px; color: var(--text-secondary); }
 }
 
 /* 已添加源列表 */
 .source-list-section {
   background-color: var(--bg-card);
   border-radius: 12px;
-  padding: 24px;
+  padding: 16px;
   border: 1px solid var(--border-color);
 }
 
-.source-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.source-list-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0; }
-.source-count { font-size: 13px; color: var(--text-secondary); background: var(--bg-secondary); padding: 4px 10px; border-radius: 12px; }
+.source-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.source-list-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.source-count { font-size: 11px; color: var(--text-secondary); background: var(--bg-secondary); padding: 2px 8px; border-radius: 10px; }
 
-.source-table { display: flex; flex-direction: column; gap: 6px; }
+.source-table { display: flex; flex-direction: column; gap: 4px; }
 .table-header {
-  display: flex; align-items: center; padding: 10px 16px;
-  background-color: var(--bg-secondary); border-radius: 8px;
-  font-size: 12px; color: var(--text-secondary); font-weight: 600;
+  display: flex; align-items: center; padding: 8px 12px;
+  background-color: var(--bg-secondary); border-radius: 6px;
+  font-size: 11px; color: var(--text-secondary); font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
