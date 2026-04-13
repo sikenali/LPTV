@@ -1,5 +1,4 @@
 import type { Channel } from '@/types/channel'
-import { randomUUID } from 'crypto'
 
 interface ExtInfo {
   duration: number
@@ -55,26 +54,76 @@ function parseExtInfo(line: string): ExtInfo {
   const tvgLogoMatch = attributes.match(/tvg-logo="([^"]*)"/)
   const groupTitleMatch = attributes.match(/group-title="([^"]*)"/)
 
+  let groupTitle = groupTitleMatch?.[1]
+  
+  // 如果没有 group-title，根据频道名称自动分类
+  if (!groupTitle) {
+    groupTitle = categorizeChannel(name)
+  } else {
+    // 如果有的话，也进行规范化处理
+    groupTitle = normalizeGroupTitle(groupTitle)
+  }
+
   return {
     duration,
     tvgId: tvgIdMatch?.[1],
     tvgName: tvgNameMatch?.[1],
     tvgLogo: tvgLogoMatch?.[1],
-    groupTitle: groupTitleMatch?.[1] || '未分组',
+    groupTitle,
     name: name || 'Unknown'
   }
 }
 
+/**
+ * 根据频道名称自动分类
+ */
+function categorizeChannel(name: string): string {
+  if (!name) return '其他频道'
+  
+  // 央视频道（包含 CCTV、CGTN 等）
+  if (/^CCTV/i.test(name) || /^CGTN/i.test(name) || /^央视/i.test(name)) {
+    return '央视频道'
+  }
+  
+  // 卫视频道
+  if (/卫视/i.test(name)) {
+    return '卫视频道'
+  }
+  
+  // 其他频道
+  return '其他频道'
+}
+
+/**
+ * 规范化分组名称
+ */
+function normalizeGroupTitle(groupTitle: string): string {
+  if (!groupTitle) return '其他频道'
+  
+  // 央视频道相关
+  if (/CCTV|CGTN|央视|CHC/i.test(groupTitle)) {
+    return '央视频道'
+  }
+  
+  // 卫视频道
+  if (/卫视/i.test(groupTitle)) {
+    return '卫视频道'
+  }
+  
+  // 其他分组名称保留原样，但去除特殊字符
+  return groupTitle.trim() || '其他频道'
+}
+
 function createChannel(extInfo: ExtInfo, url: string, sourceId: string): Channel {
   const now = new Date()
-  const groupId = extInfo.groupTitle || '未分组'
+  const groupId = extInfo.groupTitle || '其他频道'
 
   return {
-    id: randomUUID(),
+    id: self.crypto.randomUUID(),
     name: extInfo.name,
     url,
     groupId,
-    groupName: extInfo.groupTitle || '未分组',
+    groupName: extInfo.groupTitle || '其他频道',
     logo: extInfo.tvgLogo,
     tvgId: extInfo.tvgId,
     tvgName: extInfo.tvgName,
@@ -88,13 +137,21 @@ function createChannel(extInfo: ExtInfo, url: string, sourceId: string): Channel
 function createChannelFromUrl(url: string, sourceId: string): Channel {
   const now = new Date()
   const name = url.split('/').pop() || url
+  
+  // 根据 URL 尝试分类
+  let groupName = '其他频道'
+  if (/cctv/i.test(name) || /CCTV/.test(name)) {
+    groupName = '央视频道'
+  } else if (/卫视/i.test(name)) {
+    groupName = '卫视频道'
+  }
 
   return {
-    id: randomUUID(),
+    id: self.crypto.randomUUID(),
     name,
     url,
-    groupId: '未分组',
-    groupName: '未分组',
+    groupId: groupName,
+    groupName,
     isFavorite: false,
     sourceId,
     createdAt: now,

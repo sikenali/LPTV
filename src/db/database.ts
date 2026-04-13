@@ -1,6 +1,13 @@
 import initSqlJs, { type Database } from 'sql.js'
 
 let db: Database | null = null
+let dbResolve: (() => void) | null = null
+let dbReject: ((err: Error) => void) | null = null
+
+export const dbInitialized = new Promise<void>((resolve, reject) => {
+  dbResolve = resolve
+  dbReject = reject
+})
 
 const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sources (
@@ -62,21 +69,27 @@ export function setWasmUrl(url: string): void {
 function getWasmLocation(): string {
   // If URL was set (from test environment), use it
   if (wasmUrl) return wasmUrl
-  // In browser, use CDN
-  return `https://sql.js.org/dist/sql-wasm.wasm`
+  // In browser, use local file from public directory
+  return `/sql-wasm.wasm`
 }
 
 export async function initDatabase(): Promise<Database> {
   if (db) return db
 
-  const SQL = await initSqlJs({
-    locateFile: () => getWasmLocation()
-  })
+  try {
+    const SQL = await initSqlJs({
+      locateFile: () => getWasmLocation()
+    })
 
-  db = new SQL.Database()
-  db.run(SCHEMA_SQL)
+    db = new SQL.Database()
+    db.run(SCHEMA_SQL)
+    if (dbResolve) dbResolve()
 
-  return db
+    return db
+  } catch (err) {
+    if (dbReject) dbReject(err as Error)
+    throw err
+  }
 }
 
 export function resetDatabase(): void {
