@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { RiFolderLine } from '@remixicon/vue'
+
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ close: []; import: [data: { name: string; url: string; type: 'url' | 'file' }] }>()
 const activeTab = ref<'url' | 'file'>('url')
@@ -42,7 +44,9 @@ const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedF
             <div class="file-drop">
               <input type="file" accept=".m3u,.m3u8" @change="handleFileSelect" class="file-input" />
               <div class="file-drop-content">
-                <div class="file-icon">📁</div><div class="file-text">拖拽文件到此处 或 点击选择</div><div class="file-hint">.m3u, .m3u8</div>
+                <RiFolderLine class="file-icon" />
+                <div class="file-text">拖拽文件到此处 或 点击选择</div>
+                <div class="file-hint">.m3u, .m3u8</div>
               </div>
               <div v-if="selectedFile" class="selected-file">已选择: {{ selectedFile.name }}</div>
             </div>
@@ -64,6 +68,6 @@ const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedF
 .modal-tabs { display: flex; border-bottom: 1px solid var(--border-color); .tab { flex: 1; padding: var(--spacing-md); background: transparent; color: var(--text-secondary); transition: color var(--transition-fast); &.active { color: var(--brand-primary); border-bottom: 2px solid var(--brand-primary); } } }
 .modal-body { padding: var(--spacing-lg); }
 .form-group { margin-bottom: var(--spacing-md); label { display: block; font-size: var(--font-size-caption); color: var(--text-secondary); margin-bottom: var(--spacing-xs); } input { width: 100%; padding: var(--spacing-md); background-color: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-primary); &:focus { border-color: var(--brand-primary); } } }
-.file-drop { border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: var(--spacing-xl); text-align: center; position: relative; .file-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; } .file-icon { font-size: 48px; margin-bottom: var(--spacing-md); } .file-text { font-size: var(--font-size-body); color: var(--text-secondary); margin-bottom: var(--spacing-sm); } .file-hint { font-size: var(--font-size-caption); color: var(--text-disabled); } .selected-file { margin-top: var(--spacing-md); font-size: var(--font-size-caption); color: var(--success); } }
+.file-drop { border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: var(--spacing-xl); text-align: center; position: relative; .file-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; } .file-icon { width: 48px; height: 48px; margin-bottom: var(--spacing-md); color: var(--text-secondary); } .file-text { font-size: var(--font-size-body); color: var(--text-secondary); margin-bottom: var(--spacing-sm); } .file-hint { font-size: var(--font-size-caption); color: var(--text-disabled); } .selected-file { margin-top: var(--spacing-md); font-size: var(--font-size-caption); color: var(--success); } }
 .modal-footer { display: flex; justify-content: flex-end; gap: var(--spacing-md); padding: var(--spacing-lg); border-top: 1px solid var(--border-color); .btn { padding: var(--spacing-md) var(--spacing-xl); border-radius: var(--radius-sm); &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); } } &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); } } } }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Channel } from '@/types/channel'
+import { RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/vue'
 import ChannelItem from './ChannelItem.vue'
 
 interface Props {
@@ -23,7 +24,8 @@ const emit = defineEmits<{
   <div class="channel-group">
     <div class="group-header" @click="emit('toggle')">
       <div class="group-title-row">
-        <span class="group-arrow">{{ isExpanded ? '▼' : '▶' }}</span>
+        <RiArrowDownSLine v-if="isExpanded" class="group-arrow" />
+        <RiArrowRightSLine v-else class="group-arrow" />
         <span class="group-name">{{ groupName }}</span>
         <span class="group-count">({{ channelCount }})</span>
       </div>
@@ -60,7 +62,9 @@ const emit = defineEmits<{
 }
 
 .group-arrow {
-  font-size: 11px; color: var(--text-secondary);
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
   transition: transform var(--transition-normal);
 }
 

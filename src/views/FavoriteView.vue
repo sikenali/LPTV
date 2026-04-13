@@ -4,16 +4,17 @@ import FavoriteCard from '@/components/FavoriteCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { useRouter } from 'vue-router'
 import type { Channel } from '@/types/channel'
+import { RiHeartLine } from '@remixicon/vue'
 
 const router = useRouter()
 
 const favorites = ref<Channel[]>([
-  { id: 'ch1', name: 'CCTV-1 综合', url: 'http://example.com/cctv1.m3u8', groupId: 'g1', groupName: '央视频道', logo: '📺', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch2', name: 'CCTV-2 财经', url: 'http://example.com/cctv2.m3u8', groupId: 'g1', groupName: '央视频道', logo: '💰', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch4', name: '湖南卫视', url: 'http://example.com/hunan.m3u8', groupId: 'g2', groupName: '卫视频道', logo: '🎭', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch5', name: '东方卫视', url: 'http://example.com/dongfang.m3u8', groupId: 'g2', groupName: '卫视频道', logo: '🌟', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch6', name: '北京卫视', url: 'http://example.com/beijing.m3u8', groupId: 'g3', groupName: '地方频道', logo: '🏛️', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-  { id: 'ch3', name: 'CCTV-5 体育', url: 'http://example.com/cctv5.m3u8', groupId: 'g1', groupName: '央视频道', logo: '⚽', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
+  { id: 'ch1', name: 'CCTV-1 综合', url: 'http://example.com/cctv1.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
+  { id: 'ch2', name: 'CCTV-2 财经', url: 'http://example.com/cctv2.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
+  { id: 'ch4', name: '湖南卫视', url: 'http://example.com/hunan.m3u8', groupId: 'g2', groupName: '卫视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
+  { id: 'ch5', name: '东方卫视', url: 'http://example.com/dongfang.m3u8', groupId: 'g2', groupName: '卫视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
+  { id: 'ch6', name: '北京卫视', url: 'http://example.com/beijing.m3u8', groupId: 'g3', groupName: '地方频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
+  { id: 'ch3', name: 'CCTV-5 体育', url: 'http://example.com/cctv5.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
 ])
 
 const handleRemove = (channelId: string) => { favorites.value = favorites.value.filter(ch => ch.id !== channelId) }
@@ -49,7 +50,7 @@ const handleAddFavorite = () => { router.push('/') }
     <!-- 空状态 -->
     <EmptyState
       v-else
-      icon="❤️"
+      :icon="RiHeartLine"
       title="还没有收藏任何频道"
       description="前往频道页添加你的收藏吧"
     />

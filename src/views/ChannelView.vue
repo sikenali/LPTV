@@ -4,6 +4,11 @@ import ChannelGroup from '@/components/ChannelGroup.vue'
 import { useChannelStore } from '@/stores/channel'
 import { useFavoriteStore } from '@/stores/favorite'
 import type { Channel } from '@/types/channel'
+import {
+  RiSearchLine, RiTvLine, RiHeartFill, RiHeartLine,
+  RiVolumeUpLine, RiPlayFill, RiSkipBackMiniLine, RiSkipForwardMiniLine,
+  RiFullscreenLine, RiCalendarEventLine, RiHdLine
+} from '@remixicon/vue'
 
 const channelStore = useChannelStore()
 const favoriteStore = useFavoriteStore()
@@ -53,7 +58,7 @@ const volume = ref(80)
     <aside class="channel-sidebar">
       <!-- 搜索框 -->
       <div class="search-box">
-        <span class="search-icon">🔍</span>
+        <RiSearchLine class="search-icon" />
         <input v-model="searchQuery" type="text" placeholder="搜索频道..." class="search-input" />
       </div>
       <!-- 频道分组列表 -->
@@ -68,7 +73,9 @@ const volume = ref(80)
       <!-- 播放信息栏 -->
       <div class="player-info-bar">
         <div class="channel-info">
-          <div class="channel-logo-placeholder">📺</div>
+          <div class="channel-logo-placeholder">
+            <RiTvLine class="logo-icon" />
+          </div>
           <div class="channel-details">
             <span class="channel-name-large">{{ currentChannel?.name ?? '未选择频道' }}</span>
             <span class="channel-desc">{{ currentChannel?.groupName ?? '请先选择频道' }}</span>
@@ -76,15 +83,18 @@ const volume = ref(80)
         </div>
         <div class="info-actions">
           <button class="action-btn" @click="currentChannel && handleToggleFavorite(currentChannel)">
-            {{ isFavorite ? '❤️' : '🤍' }}
+            <RiHeartFill v-if="isFavorite" class="action-icon" />
+            <RiHeartLine v-else class="action-icon" />
           </button>
-          <button class="action-btn">⛶</button>
+          <button class="action-btn">
+            <RiFullscreenLine class="action-icon" />
+          </button>
         </div>
       </div>
       <!-- 视频播放窗口 -->
       <div class="video-player-wrapper">
         <div class="player-placeholder">
-          <div class="play-icon">▶</div>
+          <RiPlayFill class="play-icon" />
           <span class="placeholder-text">{{ currentChannel ? '正在加载...' : '选择频道开始播放' }}</span>
         </div>
       </div>
@@ -96,20 +106,26 @@ const volume = ref(80)
         </div>
         <div class="control-buttons">
           <div class="controls-left">
-            <button class="ctrl-btn">▶</button>
-            <button class="ctrl-btn">⏮</button>
-            <button class="ctrl-btn">⏭</button>
+            <button class="ctrl-btn"><RiPlayFill class="ctrl-icon" /></button>
+            <button class="ctrl-btn"><RiSkipBackMiniLine class="ctrl-icon" /></button>
+            <button class="ctrl-btn"><RiSkipForwardMiniLine class="ctrl-icon" /></button>
             <span class="time-display">{{ currentTime }} / {{ totalTime }}</span>
           </div>
           <div class="controls-right">
             <div class="volume-control">
-              <span>🔊</span>
+              <RiVolumeUpLine class="volume-icon" />
               <div class="volume-bar">
                 <div class="volume-filled" :style="{ width: volume + '%' }"></div>
               </div>
             </div>
-            <button class="ctrl-btn">节目单</button>
-            <button class="ctrl-btn">画质</button>
+            <button class="ctrl-btn">
+              <RiCalendarEventLine class="ctrl-icon" />
+              <span>节目单</span>
+            </button>
+            <button class="ctrl-btn">
+              <RiHdLine class="ctrl-icon" />
+              <span>画质</span>
+            </button>
           </div>
         </div>
       </div>
@@ -155,7 +171,7 @@ const volume = ref(80)
 .search-box {
   display: flex; align-items: center; padding: 16px 24px; gap: 12px;
   background-color: var(--bg-card); margin: 16px; border-radius: 12px;
-  .search-icon { font-size: 18px; color: var(--text-secondary); }
+  .search-icon { width: 18px; height: 18px; color: var(--text-secondary); }
   .search-input {
     flex: 1; background: transparent; border: none; outline: none;
     color: var(--text-primary); font-size: 14px;
@@ -184,7 +200,11 @@ const volume = ref(80)
 .channel-logo-placeholder {
   width: 48px; height: 48px; border-radius: 10px;
   background-color: var(--bg-secondary); display: flex; align-items: center;
-  justify-content: center; font-size: 24px;
+  justify-content: center;
+}
+
+.logo-icon {
+  width: 24px; height: 24px; color: var(--text-secondary);
 }
 
 .channel-details { display: flex; flex-direction: column; gap: 4px; }
@@ -194,10 +214,12 @@ const volume = ref(80)
 .info-actions { display: flex; gap: 16px; }
 .action-btn {
   width: 48px; height: 48px; border-radius: 10px; background-color: var(--bg-secondary);
-  border: none; color: var(--text-primary); font-size: 20px; cursor: pointer;
+  border: none; color: var(--text-primary); cursor: pointer;
   transition: background-color var(--transition-fast);
+  display: flex; align-items: center; justify-content: center;
   &:hover { background-color: var(--brand-primary); }
 }
+.action-icon { width: 20px; height: 20px; }
 
 /* 视频播放窗口 */
 .video-player-wrapper {
@@ -209,7 +231,7 @@ const volume = ref(80)
 .player-placeholder {
   display: flex; flex-direction: column; align-items: center; gap: 16px;
   color: var(--text-secondary);
-  .play-icon { font-size: 64px; opacity: 0.5; }
+  .play-icon { width: 64px; height: 64px; opacity: 0.5; }
   .placeholder-text { font-size: 16px; }
 }
 
@@ -238,15 +260,18 @@ const volume = ref(80)
 .controls-left, .controls-right { display: flex; align-items: center; gap: 16px; }
 
 .ctrl-btn {
+  display: flex; align-items: center; gap: 6px;
   padding: 8px 16px; border-radius: 8px; background-color: var(--bg-secondary);
-  border: none; color: var(--text-primary); font-size: 18px; cursor: pointer;
+  border: none; color: var(--text-primary); font-size: 14px; cursor: pointer;
   transition: background-color var(--transition-fast);
   &:hover { background-color: var(--brand-primary); }
 }
+.ctrl-icon { width: 18px; height: 18px; }
 
 .time-display { font-size: 13px; color: var(--text-secondary); margin-left: 8px; }
 
 .volume-control { display: flex; align-items: center; gap: 8px; }
+.volume-icon { width: 18px; height: 18px; color: var(--text-primary); }
 .volume-bar {
   width: 96px; height: 6px; background-color: var(--bg-secondary);
   border-radius: 3px; position: relative; cursor: pointer;

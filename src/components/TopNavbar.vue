@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { RiTvLine, RiHeartLine, RiSettings3Line } from '@remixicon/vue'
+
 const route = useRoute()
 const router = useRouter()
+
 const navItems = computed(() => [
-  { name: 'channel', label: '频道', icon: '📺', path: '/' },
-  { name: 'favorites', label: '收藏', icon: '❤️', path: '/favorites' },
-  { name: 'settings', label: '设置', icon: '⚙️', path: '/settings' }
+  { name: 'channel', label: '频道', icon: RiTvLine, path: '/' },
+  { name: 'favorites', label: '收藏', icon: RiHeartLine, path: '/favorites' },
+  { name: 'settings', label: '设置', icon: RiSettings3Line, path: '/settings' }
 ])
+
 const isActive = (name: string) => route.name === name
 const navigate = (path: string) => router.push(path)
 </script>
@@ -20,7 +24,7 @@ const navigate = (path: string) => router.push(path)
     </div>
     <div class="navbar-nav">
       <button v-for="item in navItems" :key="item.name" class="nav-item" :class="{ active: isActive(item.name) }" @click="navigate(item.path)">
-        <span class="nav-icon">{{ item.icon }}</span>
+        <component :is="item.icon" class="nav-icon" />
         <span class="nav-label">{{ item.label }}</span>
       </button>
     </div>
@@ -48,7 +52,11 @@ const navigate = (path: string) => router.push(path)
   &.active { color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.1);
     &::after { content: ''; position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); width: 24px; height: 3px; background-color: var(--brand-primary); border-radius: 2px; }
   }
-  .nav-icon { font-size: 24px; }
-  .nav-label { font-size: 13px; }
 }
+.nav-icon {
+  width: 24px;
+  height: 24px;
+  color: inherit;
+}
+.nav-label { font-size: 13px; }
 </style>

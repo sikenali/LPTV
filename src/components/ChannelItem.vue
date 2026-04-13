@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Channel } from '@/types/channel'
+import { RiHeartFill, RiHeartLine } from '@remixicon/vue'
 
 interface Props {
   channel: Channel
@@ -20,7 +21,8 @@ const emit = defineEmits<{
       <span class="channel-name">{{ channel.name }}</span>
       <span class="channel-spacer"></span>
       <button class="favorite-btn" @click.stop="emit('toggleFavorite', channel)">
-        {{ channel.isFavorite ? '❤️' : '🤍' }}
+        <RiHeartFill v-if="channel.isFavorite" class="favorite-icon" />
+        <RiHeartLine v-else class="favorite-icon" />
       </button>
     </div>
   </div>
@@ -51,8 +53,14 @@ const emit = defineEmits<{
 
 .favorite-btn {
   background: transparent; border: none; padding: 4px;
-  font-size: 16px; cursor: pointer;
+  cursor: pointer;
   transition: transform var(--transition-fast);
   &:hover { transform: scale(1.3); }
+}
+
+.favorite-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--favorite);
 }
 </style>

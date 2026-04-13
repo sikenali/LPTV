@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { Channel } from '@/types/channel'
+import { RiPlayCircleLine, RiHeartFill } from '@remixicon/vue'
+
 defineProps<{ channel: Channel }>()
 const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel] }>()
 </script>
@@ -9,19 +11,19 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
     <!-- 频道预览图占位 -->
     <div class="channel-preview">
       <div class="preview-placeholder">
-        {{ channel.logo || '📺' }}
+        <RiPlayCircleLine class="preview-icon" />
       </div>
     </div>
     <!-- 卡片内容区 -->
     <div class="card-content">
       <div class="channel-info">
         <div class="channel-logo-small">
-          {{ channel.logo || '📺' }}
+          <RiPlayCircleLine class="logo-icon" />
         </div>
         <span class="channel-name">{{ channel.name }}</span>
       </div>
       <button class="favorite-btn" @click.stop="emit('remove', channel.id)">
-        ❤️
+        <RiHeartFill class="heart-icon" />
       </button>
     </div>
     <!-- 频道分组信息 -->
@@ -53,8 +55,16 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
 }
 
 .preview-placeholder {
-  font-size: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-icon {
+  width: 48px;
+  height: 48px;
   opacity: 0.6;
+  color: var(--text-secondary);
 }
 
 .card-content {
@@ -78,7 +88,12 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+}
+
+.logo-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
 }
 
 .channel-name {
@@ -90,13 +105,18 @@ const emit = defineEmits<{ remove: [channelId: string]; play: [channel: Channel]
 .favorite-btn {
   background: transparent;
   border: none;
-  font-size: 20px;
   padding: 4px;
   cursor: pointer;
   transition: transform var(--transition-fast);
   &:hover {
     transform: scale(1.3);
   }
+}
+
+.heart-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--favorite);
 }
 
 .channel-meta {

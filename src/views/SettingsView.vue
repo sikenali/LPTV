@@ -2,6 +2,13 @@
 import { ref } from 'vue'
 import SourceItem from '@/components/SourceItem.vue'
 import type { Source } from '@/types/source'
+import {
+  RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
+  RiFolderLine, RiUploadCloud2Line,
+  RiFilmLine, RiTv2Line, RiComputerLine, RiFlashlightLine,
+  RiHammerLine,
+  RiSunLine, RiMoonLine, RiRestartLine
+} from '@remixicon/vue'
 
 const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
 const addMethod = ref<'url' | 'file'>('url')
@@ -41,11 +48,11 @@ const handleSwitchSource = (sourceId: string) => {
 }
 
 const menuItems = [
-  { id: 'source' as const, label: '源管理', icon: '🔗' },
-  { id: 'schedule' as const, label: '定时管理', icon: '⏰' },
-  { id: 'player' as const, label: '播放设置', icon: '▶️' },
-  { id: 'ui' as const, label: '界面设置', icon: '🎨' },
-  { id: 'about' as const, label: '关于', icon: 'ℹ️' }
+  { id: 'source' as const, label: '源管理', icon: RiLink },
+  { id: 'schedule' as const, label: '定时管理', icon: RiTimerLine },
+  { id: 'player' as const, label: '播放设置', icon: RiPlayCircleLine },
+  { id: 'ui' as const, label: '界面设置', icon: RiPaletteLine },
+  { id: 'about' as const, label: '关于', icon: RiInformationLine }
 ]
 
 // UI Settings State
@@ -81,7 +88,7 @@ const shortcuts = [
           :class="{ active: activeTab === item.id }"
           @click="activeTab = item.id"
         >
-          <span class="menu-icon">{{ item.icon }}</span>
+          <component :is="item.icon" class="menu-icon" />
           <span class="menu-label">{{ item.label }}</span>
         </button>
       </div>
@@ -102,12 +109,12 @@ const shortcuts = [
           <!-- 添加方式选择 -->
           <div class="add-method-tabs">
             <button class="method-tab" :class="{ active: addMethod === 'url' }" @click="addMethod = 'url'">
-              <span class="method-icon">🔗</span>
+              <RiLink class="method-icon" />
               <span class="method-label">URL 地址添加</span>
               <span class="method-desc">输入直播源的网络地址</span>
             </button>
             <button class="method-tab" :class="{ active: addMethod === 'file' }" @click="addMethod = 'file'">
-              <span class="method-icon">📁</span>
+              <RiFolderLine class="method-icon" />
               <span class="method-label">本地文件导入</span>
               <span class="method-desc">从本地选择 m3u 文件</span>
             </button>
@@ -126,7 +133,7 @@ const shortcuts = [
           </div>
           <div v-else class="file-upload-area">
             <div class="upload-placeholder">
-              <span class="upload-icon">📂</span>
+              <RiUploadCloud2Line class="upload-icon" />
               <span class="upload-text">点击或拖拽 m3u/m3u8 文件到此处</span>
             </div>
           </div>
@@ -198,21 +205,21 @@ const shortcuts = [
           <h2 class="module-title">界面设置</h2>
           <p class="module-desc">自定义界面外观和交互体验</p>
         </div>
-        
+
         <!-- 主题模式 -->
         <div class="settings-section">
           <h3 class="section-title">主题模式</h3>
           <div class="option-grid">
             <button class="option-card" :class="{ active: theme === 'light' }" @click="theme = 'light'">
-              <span class="option-icon">☀️</span>
+              <RiSunLine class="option-icon" />
               <span class="option-label">浅色模式</span>
             </button>
             <button class="option-card" :class="{ active: theme === 'dark' }" @click="theme = 'dark'">
-              <span class="option-icon">🌙</span>
+              <RiMoonLine class="option-icon" />
               <span class="option-label">深色模式</span>
             </button>
             <button class="option-card" :class="{ active: theme === 'auto' }" @click="theme = 'auto'">
-              <span class="option-icon">🔄</span>
+              <RiRestartLine class="option-icon" />
               <span class="option-label">跟随系统</span>
             </button>
           </div>
@@ -273,7 +280,7 @@ const shortcuts = [
             <div class="preview-content">
               <div class="preview-header"></div>
               <div class="preview-player">
-                <span class="preview-play-icon">▶</span>
+                <RiPlayCircleLine class="preview-play-icon" />
               </div>
               <div class="preview-progress">
                 <div class="preview-progress-bar"></div>
@@ -294,12 +301,12 @@ const shortcuts = [
           <h3 class="section-title">播放器内核</h3>
           <div class="option-grid">
             <button class="option-card" :class="{ active: playerCore === 'hls' }" @click="playerCore = 'hls'">
-              <span class="option-icon">🎥</span>
+              <RiFilmLine class="option-icon" />
               <span class="option-label">HLS.js</span>
               <span class="option-desc">推荐，兼容性好</span>
             </button>
             <button class="option-card" :class="{ active: playerCore === 'native' }" @click="playerCore = 'native'">
-              <span class="option-icon">📺</span>
+              <RiTv2Line class="option-icon" />
               <span class="option-label">原生 Video</span>
               <span class="option-desc">轻量，支持 Safari</span>
             </button>
@@ -311,12 +318,12 @@ const shortcuts = [
           <h3 class="section-title">解码方式</h3>
           <div class="option-grid">
             <button class="option-card" :class="{ active: decodeMode === 'soft' }" @click="decodeMode = 'soft'">
-              <span class="option-icon">💻</span>
+              <RiComputerLine class="option-icon" />
               <span class="option-label">软解</span>
               <span class="option-desc">CPU 解码，兼容性强</span>
             </button>
             <button class="option-card" :class="{ active: decodeMode === 'hard' }" @click="decodeMode = 'hard'">
-              <span class="option-icon">⚡</span>
+              <RiFlashlightLine class="option-icon" />
               <span class="option-label">硬解</span>
               <span class="option-desc">GPU 加速，性能更好</span>
             </button>
@@ -364,7 +371,7 @@ const shortcuts = [
       <!-- 其他设置模块占位 -->
       <div v-else class="placeholder-module">
         <div class="placeholder-content">
-          <span class="placeholder-icon">🚧</span>
+          <RiHammerLine class="placeholder-icon" />
           <h3 class="placeholder-title">功能开发中</h3>
           <p class="placeholder-desc">{{ menuItems.find(i => i.id === activeTab)?.label }}功能即将上线</p>
         </div>
@@ -411,7 +418,7 @@ const shortcuts = [
     background-color: rgba(59, 130, 246, 0.15);
     color: var(--brand-primary);
   }
-  .menu-icon { font-size: 18px; }
+  .menu-icon { width: 18px; height: 18px; color: inherit; }
   .menu-label { font-size: 15px; font-weight: 500; }
 }
 
@@ -455,7 +462,7 @@ const shortcuts = [
   cursor: pointer;
   &.active { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.1); color: var(--brand-primary); }
   &:hover { border-color: var(--brand-primary); }
-  .method-icon { font-size: 22px; margin-bottom: 8px; }
+  .method-icon { width: 22px; height: 22px; margin-bottom: 8px; color: inherit; }
   .method-label { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
   .method-desc { font-size: 12px; opacity: 0.7; }
 }
@@ -498,7 +505,7 @@ const shortcuts = [
   transition: border-color var(--transition-fast);
   &:hover { border-color: var(--brand-primary); }
   .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-  .upload-icon { font-size: 48px; opacity: 0.5; }
+  .upload-icon { width: 48px; height: 48px; opacity: 0.5; color: var(--text-secondary); }
   .upload-text { font-size: 14px; color: var(--text-secondary); }
 }
 
@@ -668,7 +675,7 @@ const shortcuts = [
     background-color: rgba(59, 130, 246, 0.1);
     color: var(--brand-primary);
   }
-  .option-icon { font-size: 24px; }
+  .option-icon { width: 24px; height: 24px; color: inherit; }
   .option-label { font-size: 14px; font-weight: 500; }
 }
 
@@ -761,7 +768,8 @@ const shortcuts = [
 }
 
 .preview-play-icon {
-  font-size: 32px;
+  width: 32px;
+  height: 32px;
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -782,7 +790,7 @@ const shortcuts = [
 /* 占位模块 */
 .placeholder-module { display: flex; align-items: center; justify-content: center; height: 400px; }
 .placeholder-content { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.placeholder-icon { font-size: 64px; opacity: 0.5; }
+.placeholder-icon { width: 64px; height: 64px; opacity: 0.5; color: var(--text-secondary); }
 .placeholder-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
 .placeholder-desc { font-size: 14px; color: var(--text-secondary); margin: 0; }
 </style>
