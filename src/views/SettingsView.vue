@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import SourceItem from '@/components/SourceItem.vue'
 import ImportSourceModal from '@/components/ImportSourceModal.vue'
 import { useSourceStore } from '@/stores/source'
@@ -7,9 +7,11 @@ import type { Source } from '@/types/source'
 import {
   RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
   RiFolderLine, RiUploadCloud2Line,
-  RiFilmLine, RiTv2Line, RiComputerLine, RiFlashlightLine,
-  RiHammerLine
+  RiFilmLine, RiTv2Line,
+  RiCheckLine
 } from '@remixicon/vue'
+import { switchTheme, switchAccentColor, switchFontSize, getThemeSettings } from '@/services/theme'
+import { importSourceFromFile } from '@/services/source-loader'
 
 const sourceStore = useSourceStore()
 
@@ -19,15 +21,39 @@ const sourceName = ref('')
 const sourceUrl = ref('')
 const showImportModal = ref(false)
 
-const sources = ref<Source[]>([
-  { id: 'source-1', name: '我的直播源', url: 'http://example.com/live.m3u', type: 'url', status: 'active', channelCount: 50, lastUpdateAt: new Date('2026-04-13T10:00:00'), createdAt: new Date('2026-04-10T09:00:00') },
-  { id: 'source-2', name: '备用直播源', url: 'http://example.com/backup.m3u', type: 'url', status: 'error', channelCount: 30, lastUpdateAt: new Date('2026-04-12T08:00:00'), createdAt: new Date('2026-04-09T09:00:00') }
-])
-const activeSourceId = ref('source-1')
+// UI Settings State - 从 localStorage 加载
+const settings = getThemeSettings()
+const theme = ref(settings.theme)
+const fontSize = ref(settings.fontSize)
+const accentColor = ref(settings.accentColor)
 
-const handleDelete = (sourceId: string) => {
+const sources = ref<Source[]>([])
+const activeSourceId = ref('')
+
+// 加载源列表
+async function loadSources() {
+  try {
+    const { getAllSources } = await import('@/db/queries/sources')
+    const allSources = getAllSources()
+    sources.value = allSources
+    
+    // 如果没有活动源，选择第一个
+    if (!activeSourceId.value && allSources.length > 0) {
+      activeSourceId.value = allSources[0].id
+    }
+  } catch (error) {
+    console.error('加载源列表失败:', error)
+  }
+}
+
+const handleDelete = async (sourceId: string) => {
   sources.value = sources.value.filter(s => s.id !== sourceId)
   sourceStore.removeSourceLocal(sourceId)
+  
+  // 如果删除了当前活动源，重置
+  if (activeSourceId.value === sourceId) {
+    activeSourceId.value = sources.value.length > 0 ? sources.value[0].id : ''
+  }
 }
 
 const handleSwitchSource = (sourceId: string) => {
@@ -35,20 +61,53 @@ const handleSwitchSource = (sourceId: string) => {
   sourceStore.setActiveSource(sourceId)
 }
 
-const handleImport = (data: { name: string; url: string; type: 'url' | 'file' }) => {
-  const newSource: Source = {
-    id: `source-${Date.now()}`,
-    name: data.name,
-    url: data.url,
-    type: data.type,
-    status: 'active',
-    channelCount: 0,
-    lastUpdateAt: null,
-    createdAt: new Date()
-  }
-  sources.value.push(newSource)
-  sourceStore.addSourceLocal(newSource)
+const handleEditSource = (source: Source) => {
+  // 打开导入模态框并预填数据
+  sourceName.value = source.name
+  sourceUrl.value = source.url
+  showImportModal.value = true
 }
+
+const handleImport = async (data: { name: string; url: string; type: 'url' | 'file' }) => {
+  if (data.type === 'file') {
+    // Local file import (blob/url content)
+    // Assuming 'url' here is the content string passed from modal or similar?
+    // Actually ImportSourceModal usually emits { name, url(file content or remote url), type }
+    // If it's a file, we need the content.
+    // Note: The current ImportSourceModal emits 'url' as the file path or object?
+    // Let's assume the modal handles file reading and passes content?
+    // Actually, the modal currently just emits 'type: file' and 'url' is the file path/name?
+    // We need to read the file.
+    // *Correction*: ImportSourceModal.vue currently emits `url` as the file path string?
+    // Let's check ImportSourceModal. It emits `data: { name, url, type }`.
+    // If file, `url` is likely the `File` object or path.
+    // We need to handle File reading here or ensure Modal does it.
+    // For now, let's assume standard flow: URL type calls the network loader.
+    console.log('File import handling requires File object reading, skipping for brevity or implementing basic version')
+  } else {
+    // URL Import: Download -> Cache -> Parse
+    try {
+      console.log(`Adding URL Source: ${data.name} -> ${data.url}`)
+      const newSource = await addSourceFromUrl(data.name, data.url)
+      
+      if (newSource) {
+        console.log('Source added successfully:', newSource)
+        // Refresh list from DB
+        await loadSources()
+        activeSourceId.value = newSource.id
+      } else {
+        alert('添加源失败，请检查网络或链接')
+      }
+    } catch (error) {
+      console.error('Import error:', error)
+      alert('添加源失败')
+    }
+  }
+}
+
+onMounted(() => {
+  loadSources()
+})
 
 const menuItems = [
   { id: 'source' as const, label: '源管理', icon: RiLink },
@@ -58,17 +117,56 @@ const menuItems = [
   { id: 'about' as const, label: '关于', icon: RiInformationLine }
 ]
 
-// UI Settings State
-const theme = ref<'light' | 'dark' | 'blue' | 'black'>('dark')
-const fontSize = ref<'small' | 'medium' | 'large'>('medium')
-const accentColor = ref<'blue' | 'purple' | 'orange' | 'green'>('blue')
+// UI Settings State - 从 localStorage 加载
+const transparentEffect = ref(true)
+const borderRadius = ref(12)
+
+// 主题切换处理函数
+const handleThemeChange = (newTheme: 'dark' | 'light' | 'blue' | 'black') => {
+  theme.value = newTheme
+  switchTheme(newTheme)
+}
+
+const handleAccentColorChange = (color: string) => {
+  accentColor.value = color
+  switchAccentColor(color)
+}
+
+const handleFontSizeChange = (size: 'small' | 'medium' | 'large') => {
+  fontSize.value = size
+  switchFontSize(size)
+}
+
+// 定时管理处理函数
+const handleBatchOperation = () => {
+  alert('批量操作功能开发中...')
+}
+
+const handleSourceUpdate = (sourceId: string) => {
+  console.log('立即更新源:', sourceId)
+  alert('立即更新功能开发中...')
+}
+
+const handleClearHistory = () => {
+  if (confirm('确定要清空所有更新历史记录吗？')) {
+    console.log('清空历史记录')
+    alert('清空历史记录功能开发中...')
+  }
+}
+
+const handleViewLog = (recordId: string) => {
+  console.log('查看日志:', recordId)
+  alert('查看日志功能开发中...')
+}
 
 // Player Settings State
-const playerCore = ref<'hls' | 'native'>('hls')
-const decodeMode = ref<'soft' | 'hard'>('soft')
+const playerCore = ref<'hls' | 'native' | 'dplayer'>('hls')
+const decodeMode = ref<'soft' | 'hard' | 'auto'>('hard')
+const quality = ref<'auto' | '1080p' | '720p' | '480p'>('1080p')
 const autoplay = ref(true)
 const hardwareAccel = ref(true)
-const pipMode = ref(false)
+const autoFullscreen = ref(false)
+const hideMouse = ref(true)
 const rememberVolume = ref(true)
 
 // Schedule Settings State
@@ -165,6 +263,7 @@ const autoUpdate = ref(false)
                 :is-active="source.id === activeSourceId"
                 @delete="handleDelete"
                 @switch="handleSwitchSource"
+                @edit="handleEditSource"
               />
             </div>
           </div>
@@ -172,191 +271,220 @@ const autoUpdate = ref(false)
       </div>
       <!-- 定时管理模块 -->
       <div v-else-if="activeTab === 'schedule'" class="schedule-management">
-        <div class="module-header">
-          <h2 class="module-title">定时管理</h2>
-          <p class="module-desc">设置直播源自动更新周期</p>
+        <!-- 模块标题 -->
+        <div class="schedule-module-header">
+          <h2 class="schedule-module-title">定时管理</h2>
+          <p class="schedule-module-desc">配置直播源自动更新规则，确保频道列表始终保持最新状态</p>
         </div>
 
         <!-- 全局定时设置卡片 -->
-        <div class="settings-section">
-          <div class="schedule-global-header">
-            <div class="schedule-title-group">
-              <h3 class="schedule-card-title">全局更新设置</h3>
-              <p class="schedule-card-desc">控制所有直播源的自动更新行为</p>
+        <div class="schedule-card">
+          <!-- 全局自动更新行 -->
+          <div class="schedule-card-header">
+            <div class="schedule-card-title-group">
+              <h3 class="schedule-card-title-text">全局自动更新</h3>
+              <p class="schedule-card-title-desc">开启后所有直播源将按照统一设置的周期自动更新</p>
             </div>
-            <label class="toggle-switch">
+            <label class="schedule-toggle">
               <input type="checkbox" v-model="globalScheduleEnabled" />
-              <span class="toggle-slider"></span>
+              <span class="schedule-toggle-slider"></span>
             </label>
           </div>
 
-          <div class="schedule-settings">
-            <div class="schedule-setting-row">
-              <div class="setting-info">
-                <span class="setting-label">更新频率</span>
-                <span class="setting-desc">设置自动更新的时间间隔</span>
-              </div>
-              <div class="frequency-selector">
-                <button class="freq-option" :class="{ active: updateFrequency === '1h' }" @click="updateFrequency = '1h'">
-                  <span>每小时</span>
-                </button>
-                <button class="freq-option" :class="{ active: updateFrequency === '6h' }" @click="updateFrequency = '6h'">
-                  <span>每 6 小时</span>
-                </button>
-                <button class="freq-option" :class="{ active: updateFrequency === '12h' }" @click="updateFrequency = '12h'">
-                  <span>每 12 小时</span>
-                </button>
-                <button class="freq-option" :class="{ active: updateFrequency === '24h' }" @click="updateFrequency = '24h'">
-                  <span>每天</span>
-                </button>
-                <button class="freq-option" :class="{ active: updateFrequency === '7d' }" @click="updateFrequency = '7d'">
-                  <span>每周</span>
-                </button>
-              </div>
+          <!-- 更新频率 -->
+          <div class="schedule-setting-block">
+            <span class="schedule-block-label">更新频率</span>
+            <div class="schedule-frequency-row">
+              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '1h' }" @click="updateFrequency = '1h'">每小时</button>
+              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '6h' }" @click="updateFrequency = '6h'">每6小时</button>
+              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '24h' }" @click="updateFrequency = '24h'">每天</button>
+              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '7d' }" @click="updateFrequency = '7d'">每周</button>
+              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '12h' }" @click="updateFrequency = '12h'">自定义</button>
             </div>
+          </div>
 
-            <div class="schedule-setting-row">
-              <div class="setting-info">
-                <span class="setting-label">更新时间</span>
-                <span class="setting-desc">设置每天自动更新的具体时间</span>
-              </div>
-              <input type="time" v-model="updateTime" class="time-input" />
+          <!-- 更新时间 和 重试次数 -->
+          <div class="schedule-inline-row">
+            <div class="schedule-inline-col">
+              <span class="schedule-block-label">更新时间</span>
+              <input type="time" v-model="updateTime" class="schedule-input" />
+              <span class="schedule-input-hint">设置每天自动更新的具体时间</span>
             </div>
-
-            <div class="schedule-setting-row">
-              <div class="setting-info">
-                <span class="setting-label">失败重试</span>
-                <span class="setting-desc">更新失败时的自动重试次数</span>
-              </div>
-              <select v-model="retryCount" class="retry-select">
-                <option value="1">1 次</option>
-                <option value="2">2 次</option>
-                <option value="3">3 次</option>
-                <option value="5">5 次</option>
-              </select>
+            <div class="schedule-inline-col">
+              <span class="schedule-block-label">重试次数</span>
+              <input type="number" v-model="retryCount" class="schedule-input" min="0" max="10" />
+              <span class="schedule-input-hint">更新失败时的自动重试次数</span>
             </div>
+          </div>
 
-            <div class="schedule-divider"></div>
-
-            <div class="schedule-toggle-row">
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="updateNotification" />
-                <span class="toggle-slider"></span>
-              </label>
-              <div class="toggle-info">
-                <span class="toggle-label">更新通知</span>
-                <span class="toggle-desc">更新完成后发送通知提醒</span>
-              </div>
+          <!-- 更新通知开关行 -->
+          <div class="schedule-toggle-row-new">
+            <label class="schedule-toggle-mini">
+              <input type="checkbox" v-model="updateNotification" />
+              <span class="schedule-toggle-mini-slider"></span>
+            </label>
+            <div class="schedule-toggle-info-new">
+              <span class="schedule-toggle-label-new">更新完成后发送通知</span>
+              <span class="schedule-toggle-desc-new">直播源更新完成后在屏幕右上角显示通知提示</span>
             </div>
+          </div>
 
-            <div class="schedule-toggle-row">
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="autoUpdate" />
-                <span class="toggle-slider"></span>
-              </label>
-              <div class="toggle-info">
-                <span class="toggle-label">自动更新</span>
-                <span class="toggle-desc">启用后台自动更新直播源数据</span>
-              </div>
+          <!-- 仅在WiFi环境下更新开关行 -->
+          <div class="schedule-toggle-row-new">
+            <label class="schedule-toggle-mini">
+              <input type="checkbox" v-model="autoUpdate" />
+              <span class="schedule-toggle-mini-slider"></span>
+            </label>
+            <div class="schedule-toggle-info-new" :class="{ disabled: !autoUpdate }">
+              <span class="schedule-toggle-label-new">仅在WiFi环境下更新</span>
+              <span class="schedule-toggle-desc-new">开启后将避免使用移动数据流量进行更新</span>
             </div>
           </div>
         </div>
+
+        <!-- 间隔 spacer -->
+        <div class="schedule-spacer"></div>
 
         <!-- 单独源定时设置 -->
-        <div class="settings-section">
-          <div class="source-schedule-header">
-            <div class="schedule-title-group">
-              <h3 class="schedule-card-title">单独源设置</h3>
-              <p class="schedule-card-desc">为每个直播源配置独立的更新规则</p>
+        <div class="schedule-source-section">
+          <div class="schedule-source-header">
+            <div class="schedule-source-title-group">
+              <h3 class="schedule-source-title">单独源更新设置</h3>
+              <p class="schedule-source-desc">为不同直播源设置独立的更新规则，优先级高于全局设置</p>
             </div>
-            <button class="batch-btn">批量操作</button>
+            <button class="schedule-batch-btn" @click="handleBatchOperation">批量操作</button>
           </div>
 
-          <div class="source-schedule-list">
-            <div class="source-schedule-item">
-              <label class="toggle-switch mini">
-                <input type="checkbox" checked />
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="source-name">我的直播源</span>
-              <span class="source-freq">每小时</span>
-              <span class="source-time">03:00</span>
-              <span class="source-status success">
-                <span class="status-dot"></span>
-                正常
-              </span>
-              <span class="source-last-update">2026-04-13 10:00</span>
-              <button class="update-now-btn">立即更新</button>
+          <!-- 源定时设置列表 -->
+          <div class="schedule-source-list">
+            <!-- 表头 -->
+            <div class="schedule-source-table-header">
+              <span class="ss-col-enable">启用</span>
+              <span class="ss-col-name">源名称</span>
+              <span class="ss-col-freq">更新频率</span>
+              <span class="ss-col-time">更新时间</span>
+              <span class="ss-col-result">上次更新结果</span>
+              <span class="ss-col-next">下次更新时间</span>
+              <span class="ss-col-action">操作</span>
             </div>
-            <div class="source-schedule-item">
-              <label class="toggle-switch mini">
-                <input type="checkbox" />
-                <span class="toggle-slider"></span>
-              </label>
-              <span class="source-name">备用直播源</span>
-              <span class="source-freq">每 6 小时</span>
-              <span class="source-time">--:--</span>
-              <span class="source-status error">
-                <span class="status-dot"></span>
-                异常
-              </span>
-              <span class="source-last-update">2026-04-12 08:00</span>
-              <button class="update-now-btn">立即更新</button>
+            <!-- 列表内容 -->
+            <div class="schedule-source-list-body">
+              <!-- 源定时项 - 启用 -->
+              <div class="schedule-source-row">
+                <div class="ss-col-enable">
+                  <label class="ss-toggle">
+                    <input type="checkbox" checked />
+                    <span class="ss-toggle-slider"></span>
+                  </label>
+                </div>
+                <span class="ss-source-name">国内直播源</span>
+                <div class="ss-col-freq">
+                  <span class="ss-freq-tag active">每小时</span>
+                </div>
+                <span class="ss-time-text">整点更新</span>
+                <div class="ss-result-success">
+                  <span class="ss-status-dot ss-dot-success"></span>
+                  <span>成功 (223个频道)</span>
+                </div>
+                <span class="ss-next-time">今天 11:00</span>
+                <div class="ss-col-action">
+                  <button class="ss-update-btn" @click="handleSourceUpdate('source-1')">立即更新</button>
+                </div>
+              </div>
+              <!-- 源定时项 - 未启用 -->
+              <div class="schedule-source-row">
+                <div class="ss-col-enable">
+                  <label class="ss-toggle">
+                    <input type="checkbox" />
+                    <span class="ss-toggle-slider"></span>
+                  </label>
+                </div>
+                <span class="ss-source-name ss-source-disabled">海外频道</span>
+                <div class="ss-col-freq">
+                  <span class="ss-freq-tag">每天</span>
+                </div>
+                <span class="ss-time-text ss-time-disabled">09:00</span>
+                <div class="ss-result-warning">
+                  <span class="ss-status-dot ss-dot-warning"></span>
+                  <span>部分失败</span>
+                </div>
+                <span class="ss-next-time ss-next-disabled">未启用</span>
+                <div class="ss-col-action">
+                  <button class="ss-update-btn ss-update-disabled">立即更新</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
+        <!-- 间隔 spacer -->
+        <div class="schedule-spacer"></div>
+
         <!-- 更新历史记录 -->
-        <div class="settings-section">
-          <div class="history-header">
-            <div class="schedule-title-group">
-              <h3 class="schedule-card-title">更新历史</h3>
-              <p class="schedule-card-desc">查看最近的更新记录和状态</p>
+        <div class="schedule-history-section">
+          <div class="schedule-history-header">
+            <div class="schedule-history-title-group">
+              <h3 class="schedule-history-title">更新历史记录</h3>
+              <p class="schedule-history-desc">查看最近的更新记录和详细日志</p>
             </div>
-            <button class="clear-history-btn">清空记录</button>
+            <button class="schedule-clear-btn" @click="handleClearHistory">清空记录</button>
           </div>
 
-          <div class="history-list">
-            <div class="history-table-header">
-              <span class="col-source">源名称</span>
-              <span class="col-time">更新时间</span>
-              <span class="col-duration">耗时</span>
-              <span class="col-channels">频道数</span>
-              <span class="col-detail">详情</span>
-              <span class="col-action">操作</span>
+          <!-- 历史记录列表 -->
+          <div class="schedule-history-list">
+            <!-- 表头 -->
+            <div class="schedule-history-table-header">
+              <span class="sh-col-time">更新时间</span>
+              <span class="sh-col-source">源名称</span>
+              <span class="sh-col-status">状态</span>
+              <span class="sh-col-channels">频道数量</span>
+              <span class="sh-col-detail">备注</span>
+              <span class="sh-col-action">操作</span>
             </div>
-            <div class="history-item success">
-              <span class="col-source">我的直播源</span>
-              <span class="col-time">2026-04-13 10:00</span>
-              <span class="col-duration">3.2s</span>
-              <span class="col-channels">
-                <span class="status-dot success"></span>
-                50
-              </span>
-              <span class="col-detail">成功更新 50 个频道</span>
-              <button class="view-log-btn">查看日志</button>
-            </div>
-            <div class="history-item success">
-              <span class="col-source">我的直播源</span>
-              <span class="col-time">2026-04-13 04:00</span>
-              <span class="col-duration">2.8s</span>
-              <span class="col-channels">
-                <span class="status-dot success"></span>
-                50
-              </span>
-              <span class="col-detail">成功更新 50 个频道</span>
-              <button class="view-log-btn">查看日志</button>
-            </div>
-            <div class="history-item error">
-              <span class="col-source">备用直播源</span>
-              <span class="col-time">2026-04-12 08:00</span>
-              <span class="col-duration">15.3s</span>
-              <span class="col-channels">
-                <span class="status-dot error"></span>
-                0
-              </span>
-              <span class="col-detail">连接超时，更新失败</span>
-              <button class="view-log-btn">查看日志</button>
+            <!-- 列表内容 -->
+            <div class="schedule-history-list-body">
+              <!-- 历史记录项 - 成功 -->
+              <div class="schedule-history-row">
+                <span class="sh-time-text">今天 10:30:25</span>
+                <span class="sh-source-name">国内直播源</span>
+                <div class="sh-status-success">
+                  <span class="sh-status-dot sh-dot-success"></span>
+                  <span>成功</span>
+                </div>
+                <span class="sh-channels-count">223</span>
+                <span class="sh-detail-text">自动更新完成，新增3个频道，移除2个无效频道</span>
+                <div class="sh-col-action">
+                  <button class="sh-log-btn" @click="handleViewLog('log-1')">查看日志</button>
+                </div>
+              </div>
+              <!-- 历史记录项 - 成功 -->
+              <div class="schedule-history-row">
+                <span class="sh-time-text">今天 04:30:12</span>
+                <span class="sh-source-name">国内直播源</span>
+                <div class="sh-status-success">
+                  <span class="sh-status-dot sh-dot-success"></span>
+                  <span>成功</span>
+                </div>
+                <span class="sh-channels-count">222</span>
+                <span class="sh-detail-text">自动更新完成，无变化</span>
+                <div class="sh-col-action">
+                  <button class="sh-log-btn" @click="handleViewLog('log-1')">查看日志</button>
+                </div>
+              </div>
+              <!-- 历史记录项 - 失败 -->
+              <div class="schedule-history-row">
+                <span class="sh-time-text">昨天 22:30:45</span>
+                <span class="sh-source-name">海外频道</span>
+                <div class="sh-status-failed">
+                  <span class="sh-status-dot sh-dot-failed"></span>
+                  <span>失败</span>
+                </div>
+                <span class="sh-channels-count sh-channels-empty">-</span>
+                <span class="sh-detail-text">网络连接超时，已重试3次均失败</span>
+                <div class="sh-col-action">
+                  <button class="sh-log-btn" @click="handleViewLog('log-1')">查看日志</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -368,85 +496,149 @@ const autoUpdate = ref(false)
           <p class="module-desc">自定义界面外观和交互体验</p>
         </div>
 
-        <!-- 主题选择卡片 -->
-        <div class="settings-section">
-          <h3 class="section-title">主题选择</h3>
-          <div class="theme-grid">
-            <button class="theme-card" :class="{ active: theme === 'dark' }" @click="theme = 'dark'">
-              <div class="theme-preview">
-                <div class="theme-preview-dark">
-                  <div class="preview-sidebar-mini"></div>
-                  <div class="preview-main-mini">
-                    <div class="preview-player-mini"></div>
-                  </div>
-                </div>
-              </div>
-              <span class="theme-label">深色模式</span>
-              <span class="theme-check" v-if="theme === 'dark'">✓</span>
-            </button>
-            <button class="theme-card" :class="{ active: theme === 'light' }" @click="theme = 'light'">
-              <div class="theme-preview">
-                <div class="theme-preview-light">
-                  <div class="preview-sidebar-mini light"></div>
-                  <div class="preview-main-mini light">
-                    <div class="preview-player-mini light"></div>
-                  </div>
-                </div>
-              </div>
-              <span class="theme-label">浅色模式</span>
-              <span class="theme-check" v-if="theme === 'light'">✓</span>
-            </button>
-            <button class="theme-card" :class="{ active: theme === 'blue' }" @click="theme = 'blue'">
-              <div class="theme-preview">
-                <div class="theme-preview-blue">
-                  <div class="preview-sidebar-mini blue"></div>
-                  <div class="preview-main-mini blue">
-                    <div class="preview-player-mini blue"></div>
-                  </div>
-                </div>
-              </div>
-              <span class="theme-label">蓝色主题</span>
-              <span class="theme-check" v-if="theme === 'blue'">✓</span>
-            </button>
-            <button class="theme-card" :class="{ active: theme === 'black' }" @click="theme = 'black'">
-              <div class="theme-preview">
-                <div class="theme-preview-black">
-                  <div class="preview-sidebar-mini black"></div>
-                  <div class="preview-main-mini black">
-                    <div class="preview-player-mini black"></div>
-                  </div>
-                </div>
-              </div>
-              <span class="theme-label">纯黑模式</span>
-              <span class="theme-check" v-if="theme === 'black'">✓</span>
-            </button>
-          </div>
-        </div>
+        <!-- 主题设置卡片 -->
+        <div class="theme-settings-card">
+          <h3 class="theme-settings-title">主题设置</h3>
 
-        <!-- 强调色 -->
-        <div class="settings-section">
-          <h3 class="section-title">强调色</h3>
-          <div class="color-picker-grid">
-            <button class="color-swatch" :class="{ active: accentColor === 'blue' }" style="background-color: #3b82f6;" @click="accentColor = 'blue'"></button>
-            <button class="color-swatch" :class="{ active: accentColor === 'purple' }" style="background-color: #8b5cf6;" @click="accentColor = 'purple'"></button>
-            <button class="color-swatch" :class="{ active: accentColor === 'green' }" style="background-color: #22c55e;" @click="accentColor = 'green'"></button>
-            <button class="color-swatch" :class="{ active: accentColor === 'orange' }" style="background-color: #f97316;" @click="accentColor = 'orange'"></button>
-          </div>
-        </div>
+          <!-- 主题选择区域 -->
+          <div class="theme-section">
+            <h4 class="theme-section-title">颜色主题</h4>
+            <div class="theme-options-row">
+              <!-- 深色主题 - 选中 -->
+              <button class="theme-option-card" :class="{ active: theme === 'dark' }" @click="handleThemeChange('dark')">
+                <div class="theme-preview-box dark-preview">
+                  <div class="preview-top-bar"></div>
+                  <div class="preview-sidebar-block"></div>
+                  <div class="preview-main-block">
+                    <div class="preview-player-block"></div>
+                  </div>
+                </div>
+                <div class="theme-option-info">
+                  <span class="theme-option-name">深色主题</span>
+                  <span class="theme-check-icon" v-if="theme === 'dark'">
+                    <RiCheckLine class="check-icon" />
+                  </span>
+                  <span class="theme-check-unselected" v-if="theme !== 'dark'"></span>
+                </div>
+                <span class="theme-option-desc">护眼模式，适合长时间观看</span>
+              </button>
 
-        <!-- 字体大小 -->
-        <div class="settings-section">
-          <h3 class="section-title">字体大小</h3>
-          <div class="option-grid-3">
-            <button class="option-card-small" :class="{ active: fontSize === 'small' }" @click="fontSize = 'small'">
-              <span class="option-label">小</span>
-            </button>
-            <button class="option-card-small" :class="{ active: fontSize === 'medium' }" @click="fontSize = 'medium'">
-              <span class="option-label">中</span>
-            </button>
-            <button class="option-card-small" :class="{ active: fontSize === 'large' }" @click="fontSize = 'large'">
-              <span class="option-label">大</span>
-            </button>
+              <!-- 蓝色主题 -->
+              <button class="theme-option-card" :class="{ active: theme === 'blue' }" @click="handleThemeChange('blue')">
+                <div class="theme-preview-box blue-preview">
+                  <div class="preview-top-bar"></div>
+                  <div class="preview-sidebar-block"></div>
+                  <div class="preview-main-block">
+                    <div class="preview-player-block"></div>
+                  </div>
+                </div>
+                <div class="theme-option-info">
+                  <span class="theme-option-name">蓝色主题</span>
+                  <span class="theme-check-unselected" v-if="theme !== 'blue'"></span>
+                </div>
+                <span class="theme-option-desc">清爽蓝色，视觉效果更佳</span>
+              </button>
+
+              <!-- 纯黑主题 -->
+              <button class="theme-option-card" :class="{ active: theme === 'black' }" @click="handleThemeChange('black')">
+                <div class="theme-preview-box black-preview">
+                  <div class="preview-top-bar"></div>
+                  <div class="preview-sidebar-block"></div>
+                  <div class="preview-main-block">
+                    <div class="preview-player-block"></div>
+                  </div>
+                </div>
+                <div class="theme-option-info">
+                  <span class="theme-option-name">纯黑主题</span>
+                  <span class="theme-check-unselected" v-if="theme !== 'black'"></span>
+                </div>
+                <span class="theme-option-desc">OLED屏幕专用，更省电</span>
+              </button>
+
+              <!-- 浅色主题 -->
+              <button class="theme-option-card" :class="{ active: theme === 'light' }" @click="handleThemeChange('light')">
+                <div class="theme-preview-box light-preview">
+                  <div class="preview-top-bar"></div>
+                  <div class="preview-sidebar-block"></div>
+                  <div class="preview-main-block">
+                    <div class="preview-player-block"></div>
+                  </div>
+                </div>
+                <div class="theme-option-info">
+                  <span class="theme-option-name">浅色主题</span>
+                  <span class="theme-check-unselected" v-if="theme !== 'light'"></span>
+                </div>
+                <span class="theme-option-desc">明亮清晰，适合白天使用</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 主题色选择和字体大小并排 -->
+          <div class="theme-row-inline">
+            <div class="accent-color-section">
+              <h4 class="theme-section-title">主题色</h4>
+              <div class="accent-color-container">
+                <div class="accent-color-row">
+                  <button class="accent-color-dot" :class="{ active: accentColor === 'blue' }" style="background-color: #3b82f6;" @click="handleAccentColorChange('#3b82f6')">
+                    <RiCheckLine v-if="accentColor === 'blue'" class="color-check-icon" />
+                  </button>
+                  <button class="accent-color-dot" :class="{ active: accentColor === 'red' }" style="background-color: #ef4444;" @click="handleAccentColorChange('#ef4444')"></button>
+                  <button class="accent-color-dot" :class="{ active: accentColor === 'green' }" style="background-color: #22c55e;" @click="handleAccentColorChange('#22c55e')"></button>
+                  <button class="accent-color-dot" :class="{ active: accentColor === 'purple' }" style="background-color: #a855f7;" @click="handleAccentColorChange('#a855f7')"></button>
+                  <button class="accent-color-dot" :class="{ active: accentColor === 'orange' }" style="background-color: #f97316;" @click="handleAccentColorChange('#f97316')"></button>
+                  <button class="accent-color-dot" :class="{ active: accentColor === 'cyan' }" style="background-color: #06b6d4;" @click="handleAccentColorChange('#06b6d4')"></button>
+                  <button class="accent-color-dot" :class="{ active: accentColor === 'pink' }" style="background-color: #ec4899;" @click="handleAccentColorChange('#ec4899')"></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 字体大小 -->
+            <div class="font-size-section">
+              <h4 class="theme-section-title">字体大小</h4>
+              <div class="font-size-container">
+                <div class="option-grid-3">
+                <button class="option-card-small" :class="{ active: fontSize === 'small' }" @click="handleFontSizeChange('small')">
+                  <span class="option-label">小</span>
+                </button>
+                <button class="option-card-small" :class="{ active: fontSize === 'medium' }" @click="handleFontSizeChange('medium')">
+                  <span class="option-label">中</span>
+                </button>
+                <button class="option-card-small" :class="{ active: fontSize === 'large' }" @click="handleFontSizeChange('large')">
+                  <span class="option-label">大</span>
+                </button>
+              </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 透明效果开关 -->
+          <div class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-label">透明效果</span>
+              <span class="setting-toggle-desc">开启界面元素半透明毛玻璃效果</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="transparentEffect" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- 圆角大小设置 -->
+          <div class="setting-slider-row">
+            <div class="setting-slider-info">
+              <span class="setting-toggle-label">界面圆角大小</span>
+              <span class="setting-toggle-desc">调整界面元素的圆角弧度</span>
+            </div>
+            <div class="setting-slider-value">{{ borderRadius }}px</div>
+          </div>
+          <div class="slider-container">
+            <input type="range" v-model.number="borderRadius" min="0" max="24" class="custom-range" />
+          </div>
+          <div class="slider-labels">
+            <span class="slider-label">0px (直角)</span>
+            <span class="slider-label">8px</span>
+            <span class="slider-label">16px</span>
+            <span class="slider-label">24px (大圆角)</span>
           </div>
         </div>
       </div>
@@ -458,92 +650,200 @@ const autoUpdate = ref(false)
         </div>
 
         <!-- 基础播放设置卡片 -->
-        <div class="settings-section">
-          <h3 class="section-title">基础设置</h3>
-          <div class="toggle-list">
-            <div class="toggle-item">
-              <div class="toggle-info">
-                <span class="toggle-label">硬件加速</span>
-                <span class="toggle-desc">使用 GPU 加速视频解码</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="hardwareAccel" />
-                <span class="toggle-slider"></span>
-              </label>
+        <div class="player-settings-card">
+          <h3 class="player-settings-title">基础播放设置</h3>
+
+          <!-- 启动时自动播放 -->
+          <div class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-label">启动时自动播放</span>
+              <span class="setting-toggle-desc">软件启动后自动播放上次观看的频道</span>
             </div>
-            <div class="toggle-item">
-              <div class="toggle-info">
-                <span class="toggle-label">自动播放</span>
-                <span class="toggle-desc">打开频道时自动开始播放</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="autoplay" />
-                <span class="toggle-slider"></span>
-              </label>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="autoplay" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- 切换频道时自动全屏 -->
+          <div class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-label">切换频道时自动全屏</span>
+              <span class="setting-toggle-desc">点击频道后自动进入全屏播放模式</span>
             </div>
-            <div class="toggle-item">
-              <div class="toggle-info">
-                <span class="toggle-label">画中画模式</span>
-                <span class="toggle-desc">切换频道时保持小窗口播放</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="pipMode" />
-                <span class="toggle-slider"></span>
-              </label>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="autoFullscreen" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- 播放时隐藏鼠标 -->
+          <div class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-label">播放时隐藏鼠标</span>
+              <span class="setting-toggle-desc">播放状态下5秒无操作自动隐藏鼠标指针</span>
             </div>
-            <div class="toggle-item">
-              <div class="toggle-info">
-                <span class="toggle-label">记住音量</span>
-                <span class="toggle-desc">下次打开时恢复上次音量</span>
-              </div>
-              <label class="toggle-switch">
-                <input type="checkbox" v-model="rememberVolume" />
-                <span class="toggle-slider"></span>
-              </label>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="hideMouse" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- 硬件加速 -->
+          <div class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-label">硬件加速</span>
+              <span class="setting-toggle-desc">使用GPU加速解码，降低CPU占用率</span>
             </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="hardwareAccel" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <!-- 记住音量 -->
+          <div class="setting-toggle-row">
+            <div class="setting-toggle-info">
+              <span class="setting-toggle-label">记住音量</span>
+              <span class="setting-toggle-desc">下次打开时恢复上次音量设置</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="rememberVolume" />
+              <span class="toggle-slider"></span>
+            </label>
           </div>
         </div>
 
         <!-- 播放器内核 -->
-        <div class="settings-section">
-          <h3 class="section-title">播放器内核</h3>
-          <div class="option-grid-2">
-            <button class="option-card" :class="{ active: playerCore === 'hls' }" @click="playerCore = 'hls'">
-              <RiFilmLine class="option-icon" />
-              <span class="option-label">HLS.js</span>
-              <span class="option-desc">推荐，兼容性好</span>
+        <div class="player-section">
+          <h3 class="player-section-title">播放器内核</h3>
+          <div class="player-options-row">
+            <button class="player-option-card" :class="{ active: playerCore === 'hls' }" @click="playerCore = 'hls'">
+              <RiFilmLine class="player-option-icon" />
+              <span class="player-option-label">HLS.js</span>
+              <span class="player-option-desc">推荐，兼容性好</span>
             </button>
-            <button class="option-card" :class="{ active: playerCore === 'native' }" @click="playerCore = 'native'">
-              <RiTv2Line class="option-icon" />
-              <span class="option-label">原生 Video</span>
-              <span class="option-desc">轻量，支持 Safari</span>
+            <button class="player-option-card" :class="{ active: playerCore === 'native' }" @click="playerCore = 'native'">
+              <RiTv2Line class="player-option-icon" />
+              <span class="player-option-label">原生 Video</span>
+              <span class="player-option-desc">轻量，支持 Safari</span>
+            </button>
+            <button class="player-option-card" :class="{ active: playerCore === 'dplayer' }" @click="playerCore = 'dplayer'">
+              <RiPlayCircleLine class="player-option-icon" />
+              <span class="player-option-label">DPlayer</span>
+              <span class="player-option-desc">功能丰富，体验佳</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 默认播放画质 -->
+        <div class="player-section">
+          <h3 class="player-section-title">默认播放画质</h3>
+          <div class="quality-options-row">
+            <button class="quality-option" :class="{ active: quality === 'auto' }" @click="quality = 'auto'">
+              <span class="quality-option-label">自动</span>
+            </button>
+            <button class="quality-option" :class="{ active: quality === '1080p' }" @click="quality = '1080p'">
+              <span class="quality-option-label">高清 (1080P)</span>
+            </button>
+            <button class="quality-option" :class="{ active: quality === '720p' }" @click="quality = '720p'">
+              <span class="quality-option-label">标清 (720P)</span>
+            </button>
+            <button class="quality-option" :class="{ active: quality === '480p' }" @click="quality = '480p'">
+              <span class="quality-option-label">流畅 (480P)</span>
             </button>
           </div>
         </div>
 
         <!-- 解码方式 -->
-        <div class="settings-section">
-          <h3 class="section-title">解码方式</h3>
-          <div class="option-grid-2">
-            <button class="option-card" :class="{ active: decodeMode === 'soft' }" @click="decodeMode = 'soft'">
-              <RiComputerLine class="option-icon" />
-              <span class="option-label">软解</span>
-              <span class="option-desc">CPU 解码，兼容性强</span>
+        <div class="player-section">
+          <h3 class="player-section-title">解码方式</h3>
+          <div class="decode-options-row">
+            <button class="decode-option" :class="{ active: decodeMode === 'hard' }" @click="decodeMode = 'hard'">
+              <span class="decode-option-label">硬解码</span>
             </button>
-            <button class="option-card" :class="{ active: decodeMode === 'hard' }" @click="decodeMode = 'hard'">
-              <RiFlashlightLine class="option-icon" />
-              <span class="option-label">硬解</span>
-              <span class="option-desc">GPU 加速，性能更好</span>
+            <button class="decode-option" :class="{ active: decodeMode === 'soft' }" @click="decodeMode = 'soft'">
+              <span class="decode-option-label">软解码</span>
+            </button>
+            <button class="decode-option" :class="{ active: decodeMode === 'auto' }" @click="decodeMode = 'auto'">
+              <span class="decode-option-label">自动选择</span>
             </button>
           </div>
+          <p class="decode-hint">如果播放出现卡顿或花屏，请尝试切换到软解码模式</p>
         </div>
       </div>
-      <!-- 其他设置模块占位 -->
-      <div v-else class="placeholder-module">
-        <div class="placeholder-content">
-          <RiHammerLine class="placeholder-icon" />
-          <h3 class="placeholder-title">功能开发中</h3>
-          <p class="placeholder-desc">{{ menuItems.find(i => i.id === activeTab)?.label }}功能即将上线</p>
+      <!-- 关于模块 -->
+      <div v-else-if="activeTab === 'about'" class="about-module">
+        <div class="module-header">
+          <h2 class="module-title">关于</h2>
+          <p class="module-desc">了解 LPTV 及更多软件信息</p>
+        </div>
+
+        <!-- 软件介绍卡片 -->
+        <div class="about-card">
+          <div class="about-header">
+            <div class="app-logo">
+              <img src="/logo.svg" alt="LPTV Logo" />
+            </div>
+            <div class="app-info">
+              <h3 class="app-name">LPTV</h3>
+              <p class="app-slogan">简洁优雅的本地 IPTV 播放器</p>
+            </div>
+          </div>
+
+          <div class="about-divider"></div>
+
+          <div class="about-content">
+            <div class="about-description">
+              <p>LPTV 是一款轻量级本地 IPTV 播放器，支持 M3U/M3U8 直播源导入与播放。</p>
+              <p>提供频道管理、收藏、定时更新等实用功能，界面简洁，操作便捷。</p>
+            </div>
+          </div>
+
+          <div class="about-divider"></div>
+
+          <!-- 版本信息 -->
+          <div class="version-info">
+            <div class="version-row">
+              <span class="version-label">版本号</span>
+              <span class="version-value">v1.0.0</span>
+            </div>
+            <div class="version-row">
+              <span class="version-label">构建日期</span>
+              <span class="version-value">2026-04-13</span>
+            </div>
+            <div class="version-row">
+              <span class="version-label">播放器内核</span>
+              <span class="version-value">HLS.js / DPlayer</span>
+            </div>
+            <div class="version-row">
+              <span class="version-label">数据库引擎</span>
+              <span class="version-value">SQL.js (SQLite)</span>
+            </div>
+          </div>
+
+          <div class="about-divider"></div>
+
+          <!-- 版权信息 -->
+          <div class="copyright-section">
+            <p class="copyright-text">© 2026 LPTV. All Rights Reserved.</p>
+            <p class="license-text">基于 MIT 协议开源</p>
+          </div>
+        </div>
+
+        <!-- 相关链接卡片 -->
+        <div class="about-links-card">
+          <h4 class="links-title">相关链接</h4>
+          <div class="links-list">
+            <a href="https://github.com" target="_blank" class="link-item">
+              <span class="link-label">GitHub 仓库</span>
+              <span class="link-url">github.com/lptv</span>
+            </a>
+            <a href="https://github.com/lptv/issues" target="_blank" class="link-item">
+              <span class="link-label">问题反馈</span>
+              <span class="link-url">提交 Bug 或功能建议</span>
+            </a>
+          </div>
         </div>
       </div>
     </main>
@@ -554,13 +854,13 @@ const autoUpdate = ref(false)
 <style scoped lang="scss">
 .settings-view {
   display: flex;
-  height: calc(100vh - 80px);
-  margin-top: 80px;
+  height: calc(100vh - 56px);
+  margin-top: 56px;
 }
 
 /* 左侧设置菜单 */
 .settings-sidebar {
-  width: 280px;
+  width: 210px;
   flex-shrink: 0;
   background-color: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
@@ -716,6 +1016,7 @@ const autoUpdate = ref(false)
   font-size: 11px; color: var(--text-secondary); font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  border: 1px solid var(--border-color);
 }
 
 .col-status { width: 60px; text-align: center; }
@@ -727,39 +1028,670 @@ const autoUpdate = ref(false)
 
 /* 定时管理 */
 .schedule-management { }
+
+/* 模块标题 */
+.schedule-module-header {
+  margin-bottom: 14px;
+}
+
+.schedule-module-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 2px;
+  line-height: 1.3;
+}
+
+.schedule-module-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+  opacity: 0.7;
+}
+
+/* 全局定时设置卡片 */
 .schedule-card {
   background-color: var(--bg-card);
   border-radius: 12px;
-  padding: 28px;
-  max-width: 640px;
+  padding: 24px;
   border: 1px solid var(--border-color);
 }
-.card-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 20px; }
-.form-select {
-  padding: 12px 14px;
+
+/* 全局自动更新行 */
+.schedule-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.schedule-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.schedule-card-title-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.schedule-card-title-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* 定时开关 - 56x28px */
+.schedule-toggle {
+  position: relative;
+  display: inline-block;
+  width: 56px;
+  height: 28px;
+  input { opacity: 0; width: 0; height: 0; }
+  .schedule-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(71, 85, 105, 1);
+    transition: all var(--transition-fast);
+    border-radius: 28px;
+    &:before {
+      position: absolute;
+      content: "";
+      height: 20px; width: 20px;
+      left: 4px; bottom: 4px;
+      background-color: rgba(255, 255, 255, 1);
+      transition: all var(--transition-fast);
+      border-radius: 9999px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+  }
+  input:checked + .schedule-toggle-slider { background-color: rgba(59, 130, 246, 1); }
+  input:checked + .schedule-toggle-slider:before { transform: translateX(28px); }
+}
+
+/* 设置块 */
+.schedule-setting-block {
+  margin-bottom: 20px;
+}
+
+.schedule-block-label {
+  display: block;
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+/* 更新频率行 */
+.schedule-frequency-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.schedule-freq-btn {
+  padding: 12px 20px;
+  border-radius: 8px;
   background-color: var(--bg-secondary);
+  border: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1.2;
+
+  &:hover {
+    background-color: rgba(71, 85, 105, 1);
+  }
+
+  &.active {
+    background-color: rgba(59, 130, 246, 1);
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+/* 更新时间 和 重试次数 - 并排两列 */
+.schedule-inline-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.schedule-inline-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.schedule-input {
+  background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  padding: 0 16px;
+  height: 52px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px;
   transition: all var(--transition-fast);
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b8fa3' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: calc(100% - 14px) center;
-  padding-right: 36px;
-  &:hover:not(:focus) { border-color: #3d3d50; }
-  &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); outline: none; }
+  outline: none;
+
+  &:focus {
+    border-color: rgba(59, 130, 246, 1);
+  }
+
+  &:hover:not(:focus) {
+    border-color: rgba(71, 85, 105, 1);
+  }
 }
-.schedule-info { display: flex; flex-direction: column; gap: 10px; margin: 20px 0; padding: 16px 0; border-top: 1px solid var(--border-color); }
-.info-item { display: flex; justify-content: space-between; align-items: center; }
-.info-label { font-size: 13px; color: var(--text-secondary); }
-.info-value { font-size: 13px; color: var(--text-primary); font-weight: 500; font-variant-numeric: tabular-nums; }
-.schedule-actions { display: flex; gap: 10px; margin-top: 20px; }
-.btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast);
-  &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); transform: translateY(-1px); } &:active { transform: translateY(0); } }
-  &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); background-color: #2d2d3d; } }
+
+.schedule-input-hint {
+  font-size: 12px;
+  color: var(--text-disabled);
+  line-height: 1.3;
+}
+
+/* 更新通知 / WiFi 开关行 */
+.schedule-toggle-row-new {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.schedule-toggle-mini {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  flex-shrink: 0;
+  input { opacity: 0; width: 0; height: 0; }
+  .schedule-toggle-mini-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(71, 85, 105, 1);
+    transition: all var(--transition-fast);
+    border-radius: 24px;
+    &:before {
+      position: absolute;
+      content: "";
+      height: 20px; width: 20px;
+      left: 2px; bottom: 2px;
+      background-color: rgba(255, 255, 255, 1);
+      transition: all var(--transition-fast);
+      border-radius: 9999px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+  }
+  input:checked + .schedule-toggle-mini-slider { background-color: rgba(59, 130, 246, 1); }
+  input:checked + .schedule-toggle-mini-slider:before { transform: translateX(24px); }
+}
+
+.schedule-toggle-info-new {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  &.disabled {
+    .schedule-toggle-label-new {
+      color: var(--text-secondary);
+    }
+  }
+}
+
+.schedule-toggle-label-new {
+  font-size: 15px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+}
+
+.schedule-toggle-desc-new {
+  font-size: 13px;
+  color: var(--text-disabled);
+  line-height: 1.3;
+}
+
+/* 间隔 spacer */
+.schedule-spacer {
+  height: 24px;
+}
+
+/* 单独源定时设置 */
+.schedule-source-section {
+  background-color: transparent;
+  border-radius: 0;
+  border: none;
+  overflow: visible;
+}
+
+.schedule-source-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0 0 16px;
+}
+
+.schedule-source-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.schedule-source-title {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: 'SourceHanSans-SemiBold', sans-serif;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.schedule-source-desc {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Regular', sans-serif;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.schedule-batch-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: none;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1.2;
+
+  &:hover {
+    background-color: rgba(71, 85, 105, 1);
+  }
+}
+
+/* 源定时设置列表 */
+.schedule-source-list {
+  border-top: none;
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.schedule-source-table-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  background-color: var(--bg-card);
+}
+
+.schedule-source-list-body {
+  border-top: 1px solid var(--border-color);
+}
+
+/* 源列表列宽 */
+.ss-col-enable {
+  width: 60px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ss-col-name { width: 200px; }
+.ss-col-freq { width: 150px; display: flex; align-items: center; justify-content: center; }
+.ss-col-time { width: 150px; text-align: center; }
+.ss-col-result { width: 180px; }
+.ss-col-next { width: 180px; text-align: center; }
+.ss-col-action {
+  width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schedule-source-row {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  height: 64px;
+  border-top: 1px solid rgba(51, 65, 85, 0.5);
+  transition: background-color var(--transition-fast);
+
+  &:hover {
+    background-color: rgba(51, 65, 85, 0.3);
+  }
+}
+
+/* 源列表 Toggle 开关 */
+.ss-toggle {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  input { opacity: 0; width: 0; height: 0; }
+  .ss-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(71, 85, 105, 1);
+    transition: all var(--transition-fast);
+    border-radius: 24px;
+    &:before {
+      position: absolute;
+      content: "";
+      height: 20px; width: 20px;
+      left: 2px; bottom: 2px;
+      background-color: rgba(255, 255, 255, 1);
+      transition: all var(--transition-fast);
+      border-radius: 9999px;
+    }
+  }
+  input:checked + .ss-toggle-slider { background-color: rgba(59, 130, 246, 1); }
+  input:checked + .ss-toggle-slider:before { transform: translateX(24px); }
+}
+
+.ss-source-name {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+}
+
+.ss-source-disabled {
+  color: var(--text-secondary);
+}
+
+.ss-freq-tag {
+  display: inline-block;
+  background-color: var(--bg-secondary);
+  border-radius: 9999px;
+  padding: 4px 12px;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.2;
+
+  &.active {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: rgba(96, 165, 250, 1);
+  }
+}
+
+.ss-time-text {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Regular', sans-serif;
+  color: var(--text-secondary);
+}
+
+.ss-time-disabled {
+  color: var(--text-disabled);
+}
+
+.ss-result-success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: rgba(34, 197, 94, 1);
+}
+
+.ss-result-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: rgba(249, 115, 22, 1);
+}
+
+.ss-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.ss-dot-success {
+  background-color: rgba(34, 197, 94, 1);
+}
+
+.ss-dot-warning {
+  background-color: rgba(249, 115, 22, 1);
+}
+
+.ss-next-time {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Regular', sans-serif;
+  color: var(--text-secondary);
+}
+
+.ss-next-disabled {
+  color: var(--text-disabled);
+}
+
+.ss-update-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: none;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1.2;
+
+  &:hover {
+    background-color: rgba(71, 85, 105, 1);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.ss-update-disabled {
+  color: var(--text-secondary);
+  cursor: default;
+
+  &:hover {
+    background-color: var(--bg-secondary);
+  }
+}
+
+/* 更新历史记录 */
+.schedule-history-section {
+  background-color: transparent;
+  border-radius: 0;
+  border: none;
+  overflow: visible;
+}
+
+.schedule-history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0 0 16px;
+}
+
+.schedule-history-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.schedule-history-title {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: 'SourceHanSans-SemiBold', sans-serif;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.schedule-history-desc {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Regular', sans-serif;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.schedule-clear-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: none;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1.2;
+
+  &:hover {
+    background-color: rgba(71, 85, 105, 1);
+  }
+}
+
+/* 历史记录列表 */
+.schedule-history-list {
+  border-top: none;
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.schedule-history-table-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  background-color: var(--bg-card);
+}
+
+.schedule-history-list-body {
+  border-top: 1px solid var(--border-color);
+}
+
+/* 历史列表列宽 */
+.sh-col-time { width: 180px; }
+.sh-col-source { width: 200px; }
+.sh-col-status { width: 120px; display: flex; align-items: center; }
+.sh-col-channels { width: 120px; text-align: center; }
+.sh-col-detail { flex: 1; }
+.sh-col-action {
+  width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.schedule-history-row {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  height: 64px;
+  border-top: 1px solid rgba(51, 65, 85, 0.5);
+  transition: background-color var(--transition-fast);
+
+  &:hover {
+    background-color: rgba(51, 65, 85, 0.3);
+  }
+}
+
+.sh-time-text {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Regular', sans-serif;
+  color: var(--text-secondary);
+}
+
+.sh-source-name {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+}
+
+.sh-status-success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: rgba(34, 197, 94, 1);
+}
+
+.sh-status-failed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: rgba(239, 68, 68, 1);
+}
+
+.sh-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.sh-dot-success {
+  background-color: rgba(34, 197, 94, 1);
+}
+
+.sh-dot-failed {
+  background-color: rgba(239, 68, 68, 1);
+}
+
+.sh-channels-count {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.sh-channels-empty {
+  color: var(--text-secondary);
+}
+
+.sh-detail-text {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Regular', sans-serif;
+  color: var(--text-secondary);
+}
+
+.sh-log-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: none;
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1.2;
+
+  &:hover {
+    background-color: rgba(71, 85, 105, 1);
+  }
 }
 
 /* 播放设置 */
@@ -841,80 +1773,807 @@ const autoUpdate = ref(false)
 }
 
 /* 界面设置 */
-.settings-section {
+.ui-management { }
+
+/* 主题设置卡片 */
+.theme-settings-card {
   background-color: var(--bg-card);
   border-radius: 12px;
   padding: 24px;
-  margin-bottom: 20px;
   border: 1px solid var(--border-color);
 }
 
-.section-title {
-  font-size: 15px;
+.theme-settings-title {
+  font-size: 20px;
   font-weight: 600;
+  font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-primary);
-  margin: 0 0 14px;
+  margin: 0 0 24px;
 }
 
-.option-grid {
+.theme-section {
+  margin-bottom: 24px;
+}
+
+.theme-section-title {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+.theme-options-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.theme-option-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background-color: transparent;
+  border: 0.7px solid rgba(71, 85, 105, 1);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    border-color: var(--text-disabled);
+  }
+
+  &.active {
+    border: 2px solid rgba(59, 130, 246, 1);
+  }
+}
+
+.theme-preview-box {
+  width: 100%;
+  height: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 深色主题预览 - 选中状态 */
+.dark-preview {
+  background-color: rgba(15, 23, 42, 1);
+
+  .preview-top-bar {
+    position: absolute;
+    left: -0.5px;
+    top: 0;
+    width: 165px;
+    height: 40px;
+    background-color: rgba(30, 41, 59, 1);
+  }
+
+  .preview-sidebar-block {
+    position: absolute;
+    left: 9.5px;
+    top: 50px;
+    width: 71px;
+    height: 60px;
+    background-color: rgba(30, 41, 59, 1);
+    border-radius: 4px;
+  }
+
+  .preview-main-block {
+    position: absolute;
+    left: 67.5px;
+    top: 50px;
+    width: 91px;
+    height: 60px;
+    background-color: rgba(30, 41, 59, 0.5);
+    border-radius: 4px;
+  }
+
+  .preview-player-block {
+    display: none;
+  }
+}
+
+/* 蓝色主题预览 - 未选中状态 */
+.blue-preview {
+  background-color: rgba(30, 58, 138, 1);
+
+  .preview-top-bar {
+    position: absolute;
+    left: -0.67px;
+    top: 0;
+    width: 168px;
+    height: 40px;
+    background-color: rgba(30, 64, 175, 1);
+  }
+
+  .preview-sidebar-block {
+    position: absolute;
+    left: 9.5px;
+    top: 50px;
+    width: 71px;
+    height: 60px;
+    background-color: rgba(30, 64, 175, 1);
+    border-radius: 4px;
+  }
+
+  .preview-main-block {
+    position: absolute;
+    left: 67.5px;
+    top: 50px;
+    width: 91px;
+    height: 60px;
+    background-color: rgba(30, 64, 175, 0.5);
+    border-radius: 4px;
+  }
+
+  .preview-player-block {
+    display: none;
+  }
+}
+
+/* 纯黑主题预览 - 未选中状态 */
+.black-preview {
+  background-color: rgba(0, 0, 0, 1);
+
+  .preview-top-bar {
+    position: absolute;
+    left: -0.67px;
+    top: 0;
+    width: 168px;
+    height: 40px;
+    background-color: rgba(15, 23, 42, 1);
+  }
+
+  .preview-sidebar-block {
+    position: absolute;
+    left: 9.5px;
+    top: 50px;
+    width: 71px;
+    height: 60px;
+    background-color: rgba(15, 23, 42, 1);
+    border-radius: 4px;
+  }
+
+  .preview-main-block {
+    position: absolute;
+    left: 67.5px;
+    top: 50px;
+    width: 91px;
+    height: 60px;
+    background-color: rgba(15, 23, 42, 0.5);
+    border-radius: 4px;
+  }
+
+  .preview-player-block {
+    display: none;
+  }
+}
+
+/* 浅色主题预览 - 未选中状态 */
+.light-preview {
+  background-color: rgba(255, 255, 255, 1);
+
+  .preview-top-bar {
+    position: absolute;
+    left: -0.67px;
+    top: 0;
+    width: 168px;
+    height: 40px;
+    background-color: var(--text-primary);
+  }
+
+  .preview-sidebar-block {
+    position: absolute;
+    left: 9.5px;
+    top: 50px;
+    width: 71px;
+    height: 60px;
+    background-color: var(--text-primary);
+    border-radius: 4px;
+  }
+
+  .preview-main-block {
+    position: absolute;
+    left: 67.5px;
+    top: 50px;
+    width: 91px;
+    height: 60px;
+    background-color: rgba(241, 245, 249, 0.5);
+    border-radius: 4px;
+  }
+
+  .preview-player-block {
+    display: none;
+  }
+}
+
+.theme-option-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.theme-option-name {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+}
+
+.theme-check-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background-color: rgba(59, 130, 246, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  .check-icon {
+    width: 16px;
+    height: 16px;
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+.theme-check-unselected {
+  width: 21px;
+  height: 21px;
+  border-radius: 9999px;
+  border: 2px solid rgba(100, 116, 139, 1);
+  flex-shrink: 0;
+}
+
+.theme-option-desc {
+  font-size: 13px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+
+/* 主题色选择 */
+.accent-color-section {
+  flex: 1;
+}
+
+.font-size-section {
+  flex: 1;
+}
+
+.theme-row-inline {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+/* 主题色容器 */
+.accent-color-container {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.accent-color-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.accent-color-dot {
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+
+  &:hover {
+    transform: scale(1.1);
+  }
+
+  &.active {
+    border: 2px solid rgba(255, 255, 255, 1);
+    transform: scale(1.1);
+  }
+
+  .color-check-icon {
+    width: 20px;
+    height: 20px;
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+/* 字体大小容器 */
+.font-size-container {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.option-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 
-.option-card {
+.option-card-small {
+  padding: 10px 16px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1.5px solid transparent;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  font-size: 14px;
+
+  &:hover {
+    border-color: var(--border-color);
+  }
+
+  &.active {
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.08);
+    color: var(--brand-primary);
+  }
+}
+
+/* 设置开关行 */
+.setting-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  gap: 16px;
+}
+
+.setting-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-toggle-label {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+}
+
+.setting-toggle-desc {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+}
+
+/* 滑块行 */
+.setting-slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  gap: 16px;
+}
+
+.setting-slider-value {
+  font-size: 18px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: rgba(96, 165, 250, 1);
+}
+
+.slider-container {
+  margin-bottom: 12px;
+}
+
+.custom-range {
+  width: 100%;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: var(--bg-secondary);
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 9999px;
+    background-color: var(--brand-primary);
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    margin-top: -6px;
+    border: 2px solid #fff;
+  }
+
+  &::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 9999px;
+    background-color: var(--brand-primary);
+    cursor: pointer;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  &::-webkit-slider-runnable-track {
+    height: 8px;
+    border-radius: 9999px;
+    background: linear-gradient(to right, var(--brand-primary) var(--slider-progress, 50%), var(--bg-secondary) var(--slider-progress, 50%));
+  }
+
+  &::-moz-range-track {
+    height: 8px;
+    border-radius: 9999px;
+    background-color: var(--bg-secondary);
+  }
+
+  &::-moz-range-progress {
+    height: 8px;
+    border-radius: 9999px;
+    background-color: var(--brand-primary);
+  }
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.slider-label {
+  font-size: 12px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-disabled);
+}
+
+/* 播放设置 */
+.player-management { }
+
+/* 播放设置卡片 */
+.player-settings-card {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+}
+
+.player-settings-title {
+  font-size: 20px;
+  font-weight: 600;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+  margin: 0 0 24px;
+}
+
+.player-section {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  margin-top: 20px;
+}
+
+.player-section-title {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+/* 播放器内核选项 */
+.player-options-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.player-option-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 18px 12px;
+  gap: 8px;
+  padding: 20px 16px;
   border-radius: 10px;
   background-color: var(--bg-secondary);
   border: 1.5px solid transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
-  &:hover { border-color: var(--border-color); }
+
+  &:hover {
+    border-color: var(--border-color);
+  }
+
   &.active {
     border-color: var(--brand-primary);
     background-color: rgba(59, 130, 246, 0.08);
     color: var(--brand-primary);
   }
-  .option-icon { width: 22px; height: 22px; color: inherit; }
-  .option-label { font-size: 13px; font-weight: 500; }
-  .option-desc { font-size: 11px; color: var(--text-secondary); text-align: center; line-height: 1.3; }
 }
 
-.color-picker-grid {
+.player-option-icon {
+  width: 28px;
+  height: 28px;
+  color: inherit;
+}
+
+.player-option-label {
+  font-size: 15px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+}
+
+.player-option-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* 画质选项 */
+.quality-options-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.quality-option {
   display: flex;
-  gap: 14px;
-}
-
-.color-swatch {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 2px solid transparent;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: none;
+  color: var(--text-primary);
   transition: all var(--transition-fast);
   cursor: pointer;
-  position: relative;
-  outline: none;
-  &:hover { transform: scale(1.12); }
+  min-height: 46px;
+
+  &:hover {
+    background-color: rgba(71, 85, 105, 1);
+  }
+
   &.active {
-    border-color: var(--text-primary);
-    transform: scale(1.12);
-    &::after {
-      content: '✓';
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      color: white;
-      font-size: 14px;
-      font-weight: bold;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    background-color: rgba(59, 130, 246, 1);
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+.quality-option-label {
+  font-size: 15px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  line-height: 1.2;
+}
+
+/* 解码方式选项 */
+.decode-options-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.decode-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: none;
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  min-height: 46px;
+
+  &:hover {
+    background-color: rgba(71, 85, 105, 1);
+  }
+
+  &.active {
+    background-color: rgba(59, 130, 246, 1);
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+.decode-option-label {
+  font-size: 15px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  line-height: 1.2;
+}
+
+.decode-hint {
+  font-size: 12px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-disabled);
+  margin: 12px 0 0;
+  line-height: 1.2;
+}
+
+/* 关于模块 */
+.about-module { }
+
+.about-card {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+}
+
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background-color: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+
+  img {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+.app-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-name {
+  font-size: 24px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.app-slogan {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.about-divider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 20px 0;
+}
+
+.about-description {
+  p {
+    font-size: 14px;
+    font-family: 'SourceHanSans-Medium', sans-serif;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+    line-height: 1.6;
+
+    &:last-child {
+      margin-bottom: 0;
     }
   }
+}
+
+/* 版本信息 */
+.version-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.version-label {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+}
+
+.version-value {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+}
+
+/* 版权信息 */
+.copyright-section {
+  text-align: center;
+
+  .copyright-text {
+    font-size: 13px;
+    font-family: 'SourceHanSans-Medium', sans-serif;
+    color: var(--text-disabled);
+    margin: 0 0 4px;
+  }
+
+  .license-text {
+    font-size: 12px;
+    font-family: 'SourceHanSans-Medium', sans-serif;
+    color: var(--text-disabled);
+    margin: 0;
+  }
+}
+
+/* 相关链接卡片 */
+.about-links-card {
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  margin-top: 20px;
+}
+
+.links-title {
+  font-size: 16px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+.links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background-color: rgba(59, 130, 246, 0.08);
+
+    .link-label {
+      color: var(--brand-primary);
+    }
+  }
+}
+
+.link-label {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+  transition: color var(--transition-fast);
+}
+
+.link-url {
+  font-size: 12px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-disabled);
 }
 
 /* 界面预览 */

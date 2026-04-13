@@ -14,6 +14,22 @@ const handleImport = () => {
   if (activeTab.value === 'url' && sourceUrl.value) {
     emit('import', { name: sourceName.value || sourceUrl.value.split('/').pop() || '未命名', url: sourceUrl.value, type: 'url' })
     handleClose()
+  } else if (activeTab.value === 'file' && selectedFile.value) {
+    // 读取本地文件内容并传递给父组件
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result as string
+      emit('import', {
+        name: sourceName.value || selectedFile.value!.name.replace(/\.(m3u|m3u8)$/, ''),
+        url: content,
+        type: 'file'
+      })
+      handleClose()
+    }
+    reader.onerror = () => {
+      console.error('文件读取失败')
+    }
+    reader.readAsText(selectedFile.value)
   }
 }
 const handleFileSelect = (event: Event) => {
