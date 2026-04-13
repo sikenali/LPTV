@@ -1,5 +1,4 @@
 import initSqlJs, { type Database } from 'sql.js'
-import path from 'path'
 
 let db: Database | null = null
 
@@ -54,11 +53,15 @@ const SCHEMA_SQL = `
   );
 `
 
+let wasmUrl: string | null = null
+
+export function setWasmUrl(url: string): void {
+  wasmUrl = url
+}
+
 function getWasmLocation(): string {
-  // In Node.js environment, use local file from node_modules
-  if (typeof process !== 'undefined') {
-    return path.resolve(process.cwd(), 'node_modules/sql.js/dist/sql-wasm.wasm')
-  }
+  // If URL was set (from test environment), use it
+  if (wasmUrl) return wasmUrl
   // In browser, use CDN
   return `https://sql.js.org/dist/sql-wasm.wasm`
 }

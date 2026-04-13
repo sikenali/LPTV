@@ -13,5 +13,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     include: ['tests/**/*.test.ts']
+  },
+  define: {
+    'process.env.NODE_ENV': JSON.stringify('test')
   }
 })

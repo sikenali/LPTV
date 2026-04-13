@@ -1,10 +1,17 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { initDatabase, resetDatabase } from '@/db/database'
+import { initDatabase, resetDatabase, setWasmUrl } from '@/db/database'
 import * as sourcesQueries from '@/db/queries/sources'
 import * as channelsQueries from '@/db/queries/channels'
 import * as favoritesQueries from '@/db/queries/favorites'
 import type { Source } from '@/types/source'
 import type { Channel } from '@/types/channel'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+// Set WASM URL for Node.js test environment
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+setWasmUrl(path.resolve(__dirname, '../../node_modules/sql.js/dist/sql-wasm.wasm'))
 
 describe('Database Queries', () => {
   beforeEach(async () => {
