@@ -425,9 +425,21 @@ const shortcuts = [
 /* 右侧设置内容区 */
 .settings-content {
   flex: 1;
-  padding: 40px 64px;
+  padding: 40px 60px;
   overflow-y: auto;
   background-color: var(--bg-primary);
+
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+    &:hover { background: #4a4e69; }
+  }
 }
 
 /* 模块标题 */
