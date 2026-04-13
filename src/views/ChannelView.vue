@@ -1,50 +1,104 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import ChannelGroup from '@/components/ChannelGroup.vue'
 import VideoPlayer from '@/components/VideoPlayer.vue'
+import PlayerView from '@/components/PlayerView.vue'
+import NoSignalView from '@/components/NoSignalView.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { useChannelStore } from '@/stores/channel'
 import { useFavoriteStore } from '@/stores/favorite'
-import type { Channel } from '@/types/channel'
+import { useSourceStore } from '@/stores/source'
+import type { Channel, ChannelGroup as ChannelGroupType } from '@/types/channel'
+import { getAllSources } from '@/db/queries/sources'
+import { getChannelsGroupedByGroup } from '@/db/queries/channels'
+import { dbInitialized } from '@/db/database'
 import {
-  RiSearchLine, RiTvLine, RiHeartFill, RiHeartLine,
-  RiVolumeUpLine, RiPlayFill, RiSkipBackMiniLine, RiSkipForwardMiniLine,
-  RiFullscreenLine, RiCalendarEventLine, RiHdLine
+  RiSearchLine, RiTvLine
 } from '@remixicon/vue'
 
 const channelStore = useChannelStore()
 const favoriteStore = useFavoriteStore()
+const sourceStore = useSourceStore()
+const route = useRoute()
 const searchQuery = ref('')
 
-// 从 Store 加载频道数据
-const demoGroups = ref([
-  { id: 'g1', name: '央视频道', channels: [
-    { id: 'ch1', name: 'CCTV-1 综合', url: 'http://example.com/cctv1.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-    { id: 'ch2', name: 'CCTV-2 财经', url: 'http://example.com/cctv2.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: true, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-    { id: 'ch3', name: 'CCTV-5 体育', url: 'http://example.com/cctv5.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-    { id: 'ch7', name: 'CCTV-6 电影', url: 'http://example.com/cctv6.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-    { id: 'ch8', name: 'CCTV-8 电视剧', url: 'http://example.com/cctv8.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-    { id: 'ch9', name: 'CCTV-10 科教', url: 'http://example.com/cctv10.m3u8', groupId: 'g1', groupName: '央视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
-  ]},
-  { id: 'g2', name: '卫视频道', channels: [
-    { id: 'ch4', name: '湖南卫视', url: 'http://example.com/hunan.m3u8', groupId: 'g2', groupName: '卫视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() },
-    { id: 'ch5', name: '东方卫视', url: 'http://example.com/dongfang.m3u8', groupId: 'g2', groupName: '卫视频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
-  ]},
-  { id: 'g3', name: '地方频道', channels: [
-    { id: 'ch6', name: '北京卫视', url: 'http://example.com/beijing.m3u8', groupId: 'g3', groupName: '地方频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
-  ]},
-  { id: 'g4', name: '其他频道', channels: [
-    { id: 'ch10', name: '测试频道', url: 'http://example.com/test.m3u8', groupId: 'g4', groupName: '其他频道', isFavorite: false, sourceId: 'demo', createdAt: new Date(), updatedAt: new Date() }
-  ]}
-])
-
+// 从数据库加载的频道数据
+const channelGroups = ref<ChannelGroupType[]>([])
 const currentChannel = ref<Channel | null>(null)
+const activeSourceId = ref<string | null>(null)
+const currentSourceStatus = ref<'active' | 'error' | 'parsing'>('active')
+
+// 根据源状态判断是否有信号
+const hasSignal = computed(() => currentSourceStatus.value === 'active')
+
+// 加载源和频道数据
+async function loadData() {
+  try {
+    // 等待数据库初始化完成
+    await dbInitialized
+
+    const sources = getAllSources()
+    console.log('加载源列表:', sources)
+    sourceStore.setSources(sources)
+
+    if (sources.length === 0) {
+      // 没有任何源时，显示空状态
+      console.log('没有可用的直播源')
+      channelGroups.value = []
+      return
+    }
+
+    // 使用第一个可用的源（我的直播源优先）
+    const primarySource = sources.find(s => s.name === '我的直播源') || sources[0]
+    console.log('使用源:', primarySource.name, 'ID:', primarySource.id, '状态:', primarySource.status)
+    activeSourceId.value = primarySource.id
+    currentSourceStatus.value = primarySource.status
+    sourceStore.setActiveSource(primarySource.id)
+
+    // 加载频道数据
+    const groups = getChannelsGroupedByGroup(primarySource.id)
+    console.log('加载频道分组:', Object.keys(groups).length, '个分组')
+    channelGroups.value = Object.entries(groups).map(([name, channels]) => ({
+      id: `group-${name}`,
+      name,
+      channels,
+      isExpanded: true
+    }))
+
+    // 初始化收藏状态
+    channelGroups.value.forEach(group => {
+      group.channels.forEach(ch => {
+        ch.isFavorite = favoriteStore.isFavorite(ch.id)
+      })
+    })
+
+    // 恢复上次选择的频道
+    if (channelStore.currentChannel) {
+      currentChannel.value = channelStore.currentChannel
+    }
+
+    // 处理 URL 中的 channel 参数
+    const channelIdFromUrl = route.query.channel as string
+    if (channelIdFromUrl) {
+      const allChannels = channelGroups.value.flatMap(g => g.channels)
+      const targetChannel = allChannels.find(ch => ch.id === channelIdFromUrl)
+      if (targetChannel) {
+        currentChannel.value = targetChannel
+        channelStore.selectChannel(targetChannel)
+      }
+    }
+  } catch (error) {
+    console.error('加载频道数据失败:', error)
+    channelGroups.value = []
+  }
+}
 
 // 过滤后的频道（支持搜索）
 const filteredGroups = computed(() => {
-  if (!searchQuery.value) return demoGroups.value
+  if (!searchQuery.value) return channelGroups.value
   const query = searchQuery.value.toLowerCase()
-  return demoGroups.value
+  return channelGroups.value
     .map(group => ({
       ...group,
       channels: group.channels.filter(ch => ch.name.toLowerCase().includes(query))
@@ -52,17 +106,9 @@ const filteredGroups = computed(() => {
     .filter(group => group.channels.length > 0)
 })
 
-// 初始化收藏状态
 onMounted(() => {
-  demoGroups.value.forEach(group => {
-    group.channels.forEach(ch => {
-      ch.isFavorite = favoriteStore.isFavorite(ch.id)
-    })
-  })
-  // 恢复上次选择的频道
-  if (channelStore.currentChannel) {
-    currentChannel.value = channelStore.currentChannel
-  }
+  loadData()
+  favoriteStore.loadFavorites()
 })
 
 const isGroupExpanded = (groupId: string) => channelStore.expandedGroups.has(groupId)
@@ -70,21 +116,62 @@ const handleToggleGroup = (groupId: string) => channelStore.toggleGroup(groupId)
 
 const handleSelectChannel = (channel: Channel) => {
   currentChannel.value = channel
+  // 切换频道时重置错误状态，假设新频道可能可用
+  currentSourceStatus.value = 'active'
   channelStore.selectChannel(channel)
 }
 
 const handleToggleFavorite = (channel: Channel) => {
-  channel.isFavorite = !channel.isFavorite
-  if (channel.isFavorite) {
-    favoriteStore.addFavoriteLocal(channel)
-  } else {
-    favoriteStore.removeFavoriteLocal(channel.id)
-  }
+  favoriteStore.toggleFavorite(channel)
 }
 
-const currentTime = ref('01:23:45')
-const totalTime = ref('LIVE')
-const volume = ref(80)
+const handlePlayerError = () => {
+  console.warn('播放器发生致命错误，切换到无信号状态')
+  currentSourceStatus.value = 'error'
+}
+
+const currentTime = ref('19:35')
+const totalTime = ref('20:00')
+const volume = ref(72)
+const progress = ref(35)
+
+// 播放器控制函数
+const togglePlay = () => {
+  console.log('Toggle play/pause')
+  // TODO: 连接 VideoPlayer 的实际播放状态
+}
+
+const prevChannel = () => {
+  if (channelGroups.value.length === 0) return
+  const allChannels = channelGroups.value.flatMap(g => g.channels)
+  if (!currentChannel.value || allChannels.length === 0) return
+
+  const currentIndex = allChannels.findIndex(ch => ch.id === currentChannel.value!.id)
+  const prevIndex = currentIndex <= 0 ? allChannels.length - 1 : currentIndex - 1
+  handleSelectChannel(allChannels[prevIndex])
+}
+
+const nextChannel = () => {
+  if (channelGroups.value.length === 0) return
+  const allChannels = channelGroups.value.flatMap(g => g.channels)
+  if (!currentChannel.value || allChannels.length === 0) return
+
+  const currentIndex = allChannels.findIndex(ch => ch.id === currentChannel.value!.id)
+  const nextIndex = currentIndex >= allChannels.length - 1 ? 0 : currentIndex + 1
+  handleSelectChannel(allChannels[nextIndex])
+}
+
+const toggleFullscreen = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(err => {
+      console.error('进入全屏失败:', err)
+    })
+  } else {
+    document.exitFullscreen().catch(err => {
+      console.error('退出全屏失败:', err)
+    })
+  }
+}
 </script>
 
 <template>
@@ -101,97 +188,74 @@ const volume = ref(80)
         <ChannelGroup v-for="group in filteredGroups" :key="group.id" :group-name="group.name" :channel-count="group.channels.length"
           :channels="group.channels" :is-expanded="isGroupExpanded(group.id)" :current-channel-id="currentChannel?.id ?? null"
           @toggle="handleToggleGroup(group.id)" @select="handleSelectChannel" @toggle-favorite="handleToggleFavorite" />
-        <div v-if="filteredGroups.length === 0" class="no-results">
+        <div v-if="filteredGroups.length === 0 && channelGroups.length > 0" class="no-results">
           <RiSearchLine class="no-results-icon" />
           <span>未找到匹配的频道</span>
+        </div>
+        <div v-if="channelGroups.length === 0 && filteredGroups.length === 0" class="empty-hint">
+          <RiTvLine class="empty-icon" />
+          <span class="empty-title">暂无直播源</span>
+          <span class="empty-desc">请前往设置页面添加直播源</span>
         </div>
       </div>
     </aside>
     <!-- 右侧播放主区域 -->
     <main class="channel-main">
-      <!-- 播放信息栏 -->
-      <div class="player-info-bar">
-        <div class="channel-info">
-          <div class="channel-logo-placeholder">
-            <RiTvLine class="logo-icon" />
-          </div>
-          <div class="channel-details">
-            <span class="channel-name-large">{{ currentChannel?.name ?? '未选择频道' }}</span>
-            <span class="channel-desc">{{ currentChannel?.groupName ?? '请先选择频道' }}</span>
-          </div>
-        </div>
-        <div class="info-actions">
-          <button class="action-btn" @click="currentChannel && handleToggleFavorite(currentChannel)">
-            <RiHeartFill v-if="currentChannel?.isFavorite" class="action-icon" />
-            <RiHeartLine v-else class="action-icon" />
-          </button>
-          <button class="action-btn">
-            <RiFullscreenLine class="action-icon" />
-          </button>
-        </div>
-      </div>
-      <!-- 视频播放窗口 -->
-      <div v-if="currentChannel" class="video-player-wrapper">
-        <VideoPlayer :url="currentChannel.url" />
-      </div>
-      <EmptyState v-else :icon="RiTvLine" title="选择一个频道开始观看" description="从左侧频道列表中选择一个频道" />
-      <!-- 播放控制栏 -->
-      <div class="playback-controls">
-        <div class="progress-bar">
-          <div class="progress-filled" style="width: 35%;"></div>
-          <div class="progress-thumb" style="left: 35%;"></div>
-        </div>
-        <div class="control-buttons">
-          <div class="controls-left">
-            <button class="ctrl-btn"><RiPlayFill class="ctrl-icon" /></button>
-            <button class="ctrl-btn"><RiSkipBackMiniLine class="ctrl-icon" /></button>
-            <button class="ctrl-btn"><RiSkipForwardMiniLine class="ctrl-icon" /></button>
-            <span class="time-display">{{ currentTime }} / {{ totalTime }}</span>
-          </div>
-          <div class="controls-right">
-            <div class="volume-control">
-              <RiVolumeUpLine class="volume-icon" />
-              <div class="volume-bar">
-                <div class="volume-filled" :style="{ width: volume + '%' }"></div>
-              </div>
-            </div>
-            <button class="ctrl-btn">
-              <RiCalendarEventLine class="ctrl-icon" />
-              <span>节目单</span>
-            </button>
-            <button class="ctrl-btn">
-              <RiHdLine class="ctrl-icon" />
-              <span>画质</span>
-            </button>
-          </div>
-        </div>
-      </div>
-      <!-- 节目预告栏 -->
-      <div class="program-guide">
-        <div class="guide-header">
-          <span class="guide-title">节目预告</span>
-          <span class="guide-date">2026年4月13日 周一</span>
-        </div>
-        <div class="program-list">
-          <div class="program-item active">
-            <span class="program-time">08:00</span>
-            <span class="program-name">早间新闻</span>
-            <span class="program-status">正在播放</span>
-          </div>
-          <div class="program-item">
-            <span class="program-time">09:00</span>
-            <span class="program-name">朝闻天下</span>
-          </div>
-          <div class="program-item">
-            <span class="program-time">10:00</span>
-            <span class="program-name">新闻30分</span>
-          </div>
-          <div class="program-item">
-            <span class="program-time">12:00</span>
-            <span class="program-name">法治在线</span>
-          </div>
-        </div>
-      </div>
+      <!-- 有频道选择时显示播放器 -->
+      <PlayerView
+        v-if="currentChannel && hasSignal"
+        :channel-name="currentChannel.name"
+        :channel-desc="`${currentChannel.groupName} · 正在播放`"
+        :logo-text="currentChannel.name.split('-')[0]?.trim() || 'TV'"
+        :is-favorite="favoriteStore.isFavorite(currentChannel.id)"
+        :current-time="currentTime"
+        :total-time="totalTime"
+        :progress="progress"
+        :volume="volume"
+        @toggle-favorite="currentChannel && handleToggleFavorite(currentChannel)"
+        @toggle-play="togglePlay"
+        @prev-channel="prevChannel"
+        @next-channel="nextChannel"
+        @fullscreen="toggleFullscreen"
+      >
+        <template #player>
+          <VideoPlayer :url="currentChannel.url" @error="handlePlayerError" />
+        </template>
+      </PlayerView>
+
+      <!-- 无信号时显示无信号界面 -->
+      <PlayerView
+        v-if="currentChannel && !hasSignal"
+        :channel-name="currentChannel.name"
+        :channel-desc="`${currentChannel.groupName} · 无信号`"
+        :logo-text="currentChannel.name.split('-')[0]?.trim() || 'TV'"
+        :is-favorite="favoriteStore.isFavorite(currentChannel.id)"
+        :current-time="currentTime"
+        :total-time="totalTime"
+        :progress="progress"
+        :volume="volume"
+        @toggle-favorite="currentChannel && handleToggleFavorite(currentChannel)"
+        @toggle-play="togglePlay"
+        @prev-channel="prevChannel"
+        @next-channel="nextChannel"
+        @fullscreen="toggleFullscreen"
+      >
+        <template #player>
+          <NoSignalView
+            message="当前频道无信号"
+            check-message="请检查信号源连接或切换至其他频道"
+            estimated-time="预计信号恢复时间：08:00 - 09:30"
+          />
+        </template>
+      </PlayerView>
+
+      <!-- 未选择频道时显示空状态 -->
+      <EmptyState
+        v-else
+        :icon="RiTvLine"
+        title="选择一个频道开始观看"
+        description="从左侧频道列表中选择一个频道"
+      />
     </main>
   </div>
 </template>
@@ -199,14 +263,14 @@ const volume = ref(80)
 <style scoped lang="scss">
 .channel-view {
   display: flex;
-  height: calc(100vh - 80px);
-  margin-top: 80px;
+  height: calc(100vh - 56px);
+  margin-top: 56px;
   overflow: hidden;
 }
 
 /* 左侧边栏 */
 .channel-sidebar {
-  width: 380px;
+  width: 210px;
   flex-shrink: 0;
   background-color: var(--bg-secondary);
   display: flex;
@@ -265,285 +329,56 @@ const volume = ref(80)
   }
 }
 
+.no-results {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--text-secondary);
+  .no-results-icon {
+    width: 24px;
+    height: 24px;
+    opacity: 0.5;
+  }
+  span {
+    font-size: 13px;
+    opacity: 0.7;
+  }
+}
+
+.empty-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 16px;
+  color: var(--text-secondary);
+  .empty-icon {
+    width: 40px;
+    height: 40px;
+    opacity: 0.3;
+  }
+  .empty-title {
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0.6;
+  }
+  .empty-desc {
+    font-size: 12px;
+    opacity: 0.5;
+    text-align: center;
+  }
+}
+
 /* 右侧主区域 */
 .channel-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-primary);
-  padding: 24px 32px;
-  gap: 16px;
-  overflow-y: auto;
+  overflow: hidden;
   min-width: 0;
-}
-
-/* 播放信息栏 */
-.player-info-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  background-color: var(--bg-card);
-  border-radius: 10px;
-  min-height: 60px;
-  border: 1px solid var(--border-color);
-}
-
-.channel-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
-
-.channel-logo-placeholder {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 1px solid var(--border-color);
-}
-
-.logo-icon {
-  width: 20px;
-  height: 20px;
-  color: var(--text-secondary);
-  opacity: 0.7;
-}
-
-.channel-details { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.channel-name-large {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.4;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.channel-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.4; opacity: 0.8; }
-
-.info-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.action-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  &:hover {
-    background-color: var(--brand-primary);
-    border-color: var(--brand-primary);
-  }
-  &:active { transform: scale(0.95); }
-}
-.action-icon { width: 18px; height: 18px; }
-
-/* 视频播放窗口 */
-.video-player-wrapper {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: linear-gradient(180deg, #0a0a0a 0%, #111 100%);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
-  border: 1px solid var(--border-color);
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at center, rgba(59, 130, 246, 0.03) 0%, transparent 70%);
-    pointer-events: none;
-  }
-}
-
-.player-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  color: var(--text-secondary);
-  position: relative;
-  z-index: 1;
-  .play-icon {
-    width: 56px;
-    height: 56px;
-    opacity: 0.3;
-    transition: all var(--transition-fast);
-  }
-  .placeholder-text {
-    font-size: 14px;
-    letter-spacing: 0.3px;
-    opacity: 0.7;
-  }
-}
-
-.video-player-wrapper:hover .play-icon {
-  opacity: 0.5;
-  transform: scale(1.05);
-}
-
-/* 播放控制栏 */
-.playback-controls {
-  background-color: var(--bg-card);
-  border-radius: 10px;
-  padding: 12px 16px;
-  border: 1px solid var(--border-color);
-}
-
-.progress-bar {
-  position: relative;
-  height: 4px;
-  background-color: var(--bg-secondary);
-  border-radius: 2px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  transition: height 0.15s;
-  &:hover { height: 6px; }
-}
-
-.progress-filled {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background-color: var(--brand-primary);
-  border-radius: 2px;
-  transition: background-color 0.15s;
-}
-
-.progress-thumb {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: var(--brand-primary);
-  cursor: grab;
-  opacity: 0;
-  transition: all 0.15s;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-  &:active { cursor: grabbing; }
-}
-
-.progress-bar:hover .progress-thumb { opacity: 1; }
-.progress-bar:active .progress-thumb { transform: translate(-50%, -50%) scale(1.2); }
-
-.control-buttons { display: flex; align-items: center; justify-content: space-between; }
-.controls-left, .controls-right { display: flex; align-items: center; gap: 8px; }
-
-.ctrl-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background-color: transparent;
-  border: none;
-  color: var(--text-primary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  &:hover { background-color: var(--bg-secondary); }
-  &:active { transform: scale(0.95); }
-}
-.ctrl-icon { width: 16px; height: 16px; flex-shrink: 0; }
-
-.time-display {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-left: 4px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.8;
-}
-
-.volume-control { display: flex; align-items: center; gap: 8px; }
-.volume-icon { width: 16px; height: 16px; color: var(--text-primary); flex-shrink: 0; }
-.volume-bar {
-  width: 80px;
-  height: 4px;
-  background-color: var(--bg-secondary);
-  border-radius: 2px;
-  position: relative;
-  cursor: pointer;
-  transition: height 0.15s;
-  &:hover { height: 6px; }
-}
-.volume-filled {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background-color: var(--brand-primary);
-  border-radius: 2px;
-}
-
-/* 节目预告栏 */
-.program-guide {
-  background-color: var(--bg-card);
-  border-radius: 10px;
-  padding: 16px;
-  border: 1px solid var(--border-color);
-}
-
-.guide-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-.guide-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
-.guide-date { font-size: 12px; color: var(--text-secondary); opacity: 0.7; }
-
-.program-list { display: flex; flex-direction: column; gap: 4px; }
-
-.program-item {
-  display: flex;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 6px;
-  gap: 12px;
-  transition: all 0.15s;
-  cursor: pointer;
-  &:hover:not(.active) {
-    background-color: var(--bg-secondary);
-  }
-  &.active {
-    background-color: rgba(59, 130, 246, 0.08);
-    border-left: 3px solid var(--brand-primary);
-    padding-left: 9px;
-  }
-}
-
-.program-time {
-  font-size: 13px;
-  color: var(--text-secondary);
-  min-width: 56px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.8;
-}
-.program-name { flex: 1; font-size: 14px; color: var(--text-primary); }
-.program-status {
-  font-size: 11px;
-  color: var(--brand-primary);
-  font-weight: 500;
-  background-color: rgba(59, 130, 246, 0.12);
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 0;
 }
 </style>
