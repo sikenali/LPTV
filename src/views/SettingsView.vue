@@ -53,6 +53,20 @@ const theme = ref<'light' | 'dark' | 'auto'>('dark')
 const fontSize = ref<'small' | 'medium' | 'large'>('medium')
 const accentColor = ref<'blue' | 'purple' | 'orange' | 'green'>('blue')
 const density = ref<'compact' | 'standard' | 'loose'>('standard')
+
+// Player Settings State
+const playerCore = ref<'hls' | 'native'>('hls')
+const decodeMode = ref<'soft' | 'hard'>('soft')
+const autoplay = ref(true)
+const rememberPosition = ref(true)
+
+const shortcuts = [
+  { key: 'Space', action: '播放/暂停' },
+  { key: 'F', action: '全屏切换' },
+  { key: 'M', action: '静音切换' },
+  { key: '↑', action: '音量增加' },
+  { key: '↓', action: '音量减少' }
+]
 </script>
 
 <template>
@@ -268,6 +282,85 @@ const density = ref<'compact' | 'standard' | 'loose'>('standard')
           </div>
         </div>
       </div>
+      <!-- 播放设置模块 -->
+      <div v-else-if="activeTab === 'player'" class="player-management">
+        <div class="module-header">
+          <h2 class="module-title">播放设置</h2>
+          <p class="module-desc">配置播放器内核、解码方式及快捷键</p>
+        </div>
+
+        <!-- 播放器内核 -->
+        <div class="settings-section">
+          <h3 class="section-title">播放器内核</h3>
+          <div class="option-grid">
+            <button class="option-card" :class="{ active: playerCore === 'hls' }" @click="playerCore = 'hls'">
+              <span class="option-icon">🎥</span>
+              <span class="option-label">HLS.js</span>
+              <span class="option-desc">推荐，兼容性好</span>
+            </button>
+            <button class="option-card" :class="{ active: playerCore === 'native' }" @click="playerCore = 'native'">
+              <span class="option-icon">📺</span>
+              <span class="option-label">原生 Video</span>
+              <span class="option-desc">轻量，支持 Safari</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 解码方式 -->
+        <div class="settings-section">
+          <h3 class="section-title">解码方式</h3>
+          <div class="option-grid">
+            <button class="option-card" :class="{ active: decodeMode === 'soft' }" @click="decodeMode = 'soft'">
+              <span class="option-icon">💻</span>
+              <span class="option-label">软解</span>
+              <span class="option-desc">CPU 解码，兼容性强</span>
+            </button>
+            <button class="option-card" :class="{ active: decodeMode === 'hard' }" @click="decodeMode = 'hard'">
+              <span class="option-icon">⚡</span>
+              <span class="option-label">硬解</span>
+              <span class="option-desc">GPU 加速，性能更好</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 播放行为 -->
+        <div class="settings-section">
+          <h3 class="section-title">播放行为</h3>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">自动播放</span>
+              <span class="setting-desc">打开频道时自动开始播放</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="autoplay" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">记忆播放位置</span>
+              <span class="setting-desc">下次播放时从上次的位置继续</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="rememberPosition" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 快捷键设置 -->
+        <div class="settings-section">
+          <h3 class="section-title">快捷键设置</h3>
+          <div class="shortcuts-list">
+            <div v-for="(sc, index) in shortcuts" :key="index" class="shortcut-item">
+              <span class="shortcut-action">{{ sc.action }}</span>
+              <div class="shortcut-keys">
+                <kbd class="key-badge">{{ sc.key }}</kbd>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <!-- 其他设置模块占位 -->
       <div v-else class="placeholder-module">
         <div class="placeholder-content">
@@ -459,6 +552,80 @@ const density = ref<'compact' | 'standard' | 'loose'>('standard')
 .btn { padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all var(--transition-fast);
   &.btn-primary { background-color: var(--brand-primary); color: white; &:hover { background-color: var(--brand-hover); } }
   &.btn-secondary { background-color: var(--bg-secondary); color: var(--text-secondary); &:hover { color: var(--text-primary); } }
+}
+
+/* 播放设置 */
+.option-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color);
+  &:last-child { border-bottom: none; }
+}
+
+.setting-info { display: flex; flex-direction: column; gap: 4px; }
+.setting-label { font-size: 15px; font-weight: 500; color: var(--text-primary); }
+.setting-desc { font-size: 13px; color: var(--text-secondary); }
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    transition: var(--transition-fast);
+    border-radius: 24px;
+    &:before {
+      position: absolute;
+      content: "";
+      height: 18px; width: 18px;
+      left: 2px; bottom: 2px;
+      background-color: white;
+      transition: var(--transition-fast);
+      border-radius: 50%;
+    }
+  }
+  input:checked + .toggle-slider { background-color: var(--brand-primary); border-color: var(--brand-primary); }
+  input:checked + .toggle-slider:before { transform: translateX(24px); }
+}
+
+.shortcuts-list { display: flex; flex-direction: column; gap: 12px; }
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.shortcut-action { font-size: 14px; color: var(--text-primary); }
+.shortcut-keys { display: flex; gap: 8px; }
+
+.key-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  min-width: 40px;
+  text-align: center;
 }
 
 /* 界面设置 */
