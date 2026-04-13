@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import SourceItem from '@/components/SourceItem.vue'
+import ImportSourceModal from '@/components/ImportSourceModal.vue'
+import { useSourceStore } from '@/stores/source'
 import type { Source } from '@/types/source'
 import {
   RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
@@ -9,10 +11,13 @@ import {
   RiHammerLine
 } from '@remixicon/vue'
 
+const sourceStore = useSourceStore()
+
 const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
 const addMethod = ref<'url' | 'file'>('url')
 const sourceName = ref('')
 const sourceUrl = ref('')
+const showImportModal = ref(false)
 
 const sources = ref<Source[]>([
   { id: 'source-1', name: '我的直播源', url: 'http://example.com/live.m3u', type: 'url', status: 'active', channelCount: 50, lastUpdateAt: new Date('2026-04-13T10:00:00'), createdAt: new Date('2026-04-10T09:00:00') },
@@ -20,30 +25,29 @@ const sources = ref<Source[]>([
 ])
 const activeSourceId = ref('source-1')
 
-const handleAddSource = () => {
-  if (sourceUrl.value) {
-    const newSource: Source = {
-      id: `source-${Date.now()}`,
-      name: sourceName.value || sourceUrl.value.split('/').pop() || '未命名',
-      url: sourceUrl.value,
-      type: addMethod.value,
-      status: 'active',
-      channelCount: 0,
-      lastUpdateAt: null,
-      createdAt: new Date()
-    }
-    sources.value.push(newSource)
-    sourceName.value = ''
-    sourceUrl.value = ''
-  }
-}
-
 const handleDelete = (sourceId: string) => {
   sources.value = sources.value.filter(s => s.id !== sourceId)
+  sourceStore.removeSourceLocal(sourceId)
 }
 
 const handleSwitchSource = (sourceId: string) => {
   activeSourceId.value = sourceId
+  sourceStore.setActiveSource(sourceId)
+}
+
+const handleImport = (data: { name: string; url: string; type: 'url' | 'file' }) => {
+  const newSource: Source = {
+    id: `source-${Date.now()}`,
+    name: data.name,
+    url: data.url,
+    type: data.type,
+    status: 'active',
+    channelCount: 0,
+    lastUpdateAt: null,
+    createdAt: new Date()
+  }
+  sources.value.push(newSource)
+  sourceStore.addSourceLocal(newSource)
 }
 
 const menuItems = [
@@ -129,7 +133,7 @@ const autoUpdate = ref(false)
               <label class="form-label">直播源地址</label>
               <input v-model="sourceUrl" type="text" class="form-input" placeholder="请输入 m3u/m3u8 直播源地址" />
             </div>
-            <button class="btn-add-source" @click="handleAddSource">添加源</button>
+            <button class="btn-add-source" @click="showImportModal = true">添加源</button>
           </div>
           <div v-else class="file-upload-area">
             <div class="upload-placeholder">
@@ -543,6 +547,7 @@ const autoUpdate = ref(false)
         </div>
       </div>
     </main>
+    <ImportSourceModal :visible="showImportModal" @close="showImportModal = false" @import="handleImport" />
   </div>
 </template>
 
