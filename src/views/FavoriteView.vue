@@ -199,4 +199,24 @@ onMounted(() => {
     line-height: 1.4;
   }
 }
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .favorite-view {
+    padding: 16px;
+  }
+
+  .favorites-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  :deep(.favorite-card) {
+    padding: 12px;
+  }
+
+  :deep(.channel-name) {
+    white-space: normal;
+  }
+}
 </style>
