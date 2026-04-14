@@ -42,6 +42,12 @@ export async function initializeDefaultSources(): Promise<void> {
     if (existingSources.length === 0) {
       console.log('数据库为空，导入默认直播源...')
       for (const defaultSource of DEFAULT_SOURCES) {
+        // 检查源是否已存在（避免重复插入）
+        const exists = getSourceById(defaultSource.id)
+        if (exists) {
+          console.log(`默认源已存在: ${defaultSource.name}`)
+          continue
+        }
         console.log(`正在导入默认源: ${defaultSource.name}`)
         console.log(`URL: ${defaultSource.url}`)
         await loadSourceData(defaultSource)

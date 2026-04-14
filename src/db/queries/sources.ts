@@ -4,7 +4,7 @@ import type { Source, SourceStatus } from '@/types/source'
 export function insertSource(source: Source): void {
   const db = getDatabase()
   db.run(
-    `INSERT INTO sources (id, name, url, type, status, channel_count, last_update_at, last_error, created_at)
+    `INSERT OR REPLACE INTO sources (id, name, url, type, status, channel_count, last_update_at, last_error, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       source.id,
