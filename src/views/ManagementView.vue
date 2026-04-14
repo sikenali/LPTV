@@ -4,8 +4,9 @@ import { getAllChannels } from '@/db/queries/channels'
 import { checkAllChannels, type ChannelCheckResult } from '@/services/channel-checker'
 import { findDuplicates, deduplicateChannels, getDuplicateStats, type DuplicateGroup } from '@/services/channel-dedup'
 import { exportToM3U, downloadM3U, exportAsTxt, downloadTxt } from '@/services/channel-export'
+import { fetchRemoteIPTV } from '@/services/remote-iptv-fetcher'
 import type { Channel } from '@/types/channel'
-import { RiPlayCircleLine, RiFilterLine, RiDownloadCloud2Line } from '@remixicon/vue'
+import { RiPlayCircleLine, RiFilterLine, RiDownloadCloud2Line, RiCloudLine } from '@remixicon/vue'
 
 const channels = ref<Channel[]>([])
 const checkResults = ref<ChannelCheckResult[]>([])
@@ -13,6 +14,11 @@ const isChecking = ref(false)
 const progressPercent = ref(0)
 const duplicateGroups = ref<DuplicateGroup[]>([])
 const duplicateStats = computed(() => getDuplicateStats(channels.value))
+
+// 远程抓取状态
+const isFetchingRemote = ref(false)
+const remoteProgressPercent = ref(0)
+const remoteChannels = ref<Channel[]>([])
 
 onMounted(() => {
   loadChannels()
@@ -72,6 +78,51 @@ function handleExportTxt() {
   const content = exportAsTxt(channels.value)
   downloadTxt(content, `iptv_${Date.now()}.txt`)
 }
+
+// 远程导入直播源
+async function handleRemoteImport() {
+  if (isFetchingRemote.value) return
+
+  isFetchingRemote.value = true
+  remoteProgressPercent.value = 0
+  remoteChannels.value = []
+
+  try {
+    const { channels: fetchedChannels, sourceName } = await fetchRemoteIPTV()
+    remoteChannels.value = fetchedChannels
+
+    // 模拟进度
+    remoteProgressPercent.value = 100
+
+    // 合并到本地频道列表
+    const existingUrls = new Set(channels.value.map(c => c.url))
+    const newChannels = fetchedChannels.filter(c => !existingUrls.has(c.url))
+
+    if (newChannels.length > 0) {
+      // 这里应该调用数据库保存方法
+      // 目前仅显示抓取结果
+      console.log(`成功抓取 ${newChannels.length} 个新频道来自 ${sourceName}`)
+      alert(`成功抓取 ${newChannels.length} 个新频道！\n来源: ${sourceName}`)
+    } else {
+      alert('没有新的频道需要导入（所有频道已存在）')
+    }
+  } catch (error) {
+    console.error('远程导入失败:', error)
+    alert('远程导入失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  } finally {
+    isFetchingRemote.value = false
+  }
+}
+
+// 下载远程抓取的 M3U
+function handleDownloadRemoteM3U() {
+  if (remoteChannels.value.length === 0) {
+    alert('请先点击"远程导入"抓取数据')
+    return
+  }
+  const content = exportToM3U(remoteChannels.value)
+  downloadM3U(content, `remote_iptv_${Date.now()}.m3u`)
+}
 </script>
 
 <template>
@@ -79,6 +130,37 @@ function handleExportTxt() {
     <div class="page-header">
       <h1>数据管理</h1>
       <p>频道检测、去重、整合、导出</p>
+    </div>
+
+    <!-- 远程导入面板 -->
+    <div class="management-card">
+      <div class="card-header">
+        <RiCloudLine class="card-icon" />
+        <h3>远程直播源导入</h3>
+      </div>
+      <p class="card-desc">从 GitHub 仓库自动抓取最新直播源</p>
+      <button class="btn-primary" @click="handleRemoteImport" :disabled="isFetchingRemote">
+        {{ isFetchingRemote ? '抓取中...' : '远程导入' }}
+      </button>
+
+      <div v-if="isFetchingRemote" class="progress-container">
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: remoteProgressPercent + '%' }"></div>
+        </div>
+        <span class="progress-text">{{ remoteProgressPercent }}%</span>
+      </div>
+
+      <div v-if="remoteChannels.length" class="remote-results">
+        <div class="results-header">
+          <span>抓取结果</span>
+          <span class="results-count">{{ remoteChannels.length }} 个频道</span>
+        </div>
+        <div class="remote-actions">
+          <button class="btn-secondary" @click="handleDownloadRemoteM3U">
+            下载 M3U 文件
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 频道检测面板 -->
@@ -164,10 +246,8 @@ function handleExportTxt() {
 
 <style scoped lang="scss">
 .management-view {
-  padding: 40px 60px;
-  height: calc(100vh - 56px);
+  height: 100%;
   overflow-y: auto;
-  margin-top: 56px;
 
   &::-webkit-scrollbar {
     width: 8px;
@@ -183,21 +263,21 @@ function handleExportTxt() {
 }
 
 .page-header {
-  margin-bottom: 32px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 14px;
 
   h1 {
-    font-size: 26px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--text-primary);
-    margin: 0 0 8px;
+    margin: 0 0 2px;
+    line-height: 1.3;
   }
   p {
-    font-size: 14px;
+    font-size: 12px;
     color: var(--text-secondary);
     margin: 0;
-    opacity: 0.8;
+    line-height: 1.5;
+    opacity: 0.7;
   }
 }
 
@@ -425,5 +505,54 @@ function handleExportTxt() {
   font-size: 12px;
   color: var(--text-secondary);
   margin-bottom: 8px;
+}
+
+/* 远程导入结果 */
+.remote-results {
+  margin-top: 16px;
+
+  .results-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+
+    .results-count {
+      font-size: 12px;
+      color: var(--success);
+      font-weight: 500;
+    }
+  }
+
+  .remote-actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .management-view {
+    padding: 16px;
+  }
+
+  .management-card {
+    padding: 16px;
+  }
+
+  .page-header {
+    h1 {
+      font-size: 20px;
+    }
+    p {
+      font-size: 12px;
+    }
+  }
+
+  .btn-primary {
+    width: 100%;
+  }
 }
 </style>
