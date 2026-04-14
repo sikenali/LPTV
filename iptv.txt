@@ -1,0 +1,248 @@
+IPTV整合，实现自由观看电视
+背景
+关于iptv，之前在说软路由的时候说过一次。可以借助软路由的组播转单播来实现iptv观看。
+具体参考OpenWrt应用场景：IPTV融合介绍
+
+刨除了机顶盒的限制，实现了家里多台设备，随时观看iptv的诉求。
+但是有些频道，本地运营商提供iptv没有覆盖完全。比如一些体育频道，以及影视频道等。
+
+于是产生一个想法，电视家一类的软件都能播放，那这些频道的iptv源肯定是可以找到的，能否将这些频道的源与本地共同组成家庭内部的iptv源。
+
+然后开始找源，然后校验，再整合的过程。这篇文章总结一下这个过程，以及分享过程中的一些经验。
+
+总体思路
+总体思路遵循 寻找源、校验源，清晰源和整合的步骤。
+
+图片
+
+寻找源：这里主要是从互联网，用搜索工具去查找各种自己需要的iptv源。
+校验源：对第一步找到的源，集合本地的网络进行校验，找到可用的源。这里因为每家的网络的环境其实是有差异的，比如是否支持iptv等。
+清洗：这里主要是对整个可用的源进行去重，格式整理，epg节目信息添加等操作
+整合：是将找到的可用的信息同本地的iptv源进行整合、发布，统一到家里的电视，pad上去进行播放。
+有些文章只说了上面的思路，但是没说具体怎么操作。下面具体说下，我每一步怎么操作的。
+
+具体操作过程
+寻找源
+这个阶段，主要是利用好搜索引擎，论坛，github，接口解密等等。这里分享下我怎么找的
+
+有一个专门的iptv源搜索工具：电视直播源搜索引擎  。
+论坛我主要是在恩山，智能电视等寻找，很多大牛自己分享了自己整合的源。
+github的项目有几类，有些自己通过自己的方法拿到了，托管到git上的， 也有一些专门提供这类源的。。
+至于接口解密，这是主要是tvbox的接口节目，比如肥猫、饭太硬的接口。
+不过这些源普遍存在一些问题
+
+重复太多。基本上大部分分享的源基本都是重复的。
+有用的不多。很多播放源同家里运营商iptv提供的是一样的，想要看的体育频道，影视频道等没有的还是没有
+有些播放源则需要科学上网
+我想要的是，给定一个列表清单，自动给我匹配出相应的频道列表。
+
+考虑到我的需求，我自己写了个脚本，去这个网站http://tonkiang.us/ 拉取所有想要的频道，倒也实现了，献丑贴下代码，不感兴趣的跳过继续往后看。
+
+engine_url = "http://tonkiang.us/"
+
+# 爬取CCTV频道资源
+def spider_source():
+ 
+    # 爬取直播源引擎
+    groups = ["CCTV6"]
+    for group_addr in groups:
+        # 获取当前时间
+        current_time = datetime.now()
+    
+        page = 1
+        number = 0
+        page_count = 1
+        counts = 1
+        timeout_cnt = 0
+        # 初始化集合数据
+        data_list = []
+
+        # 生成数据格式
+        while page <= page_count and number < counts:
+            #url = engine_url + "?page=" + str(page) + "&s=" + group_addr
+            url = engine_url + "?name=" + group_addr  ##修改地址
+            # 发起HTTP请求获取网页内容
+            try:
+                response = requests.get(url, timeout=15)
+                # 处理响应
+                response.raise_for_status()
+                # 检查请求是否成功
+                html_content = response.text
+                #print(html_content)
+                
+                print(f"{current_time} 搜索频道直播源：{url}")
+
+                # 使用BeautifulSoup解析网页内容
+                soup = BeautifulSoup(html_content, "html.parser")
+
+                # 查找所有class为"result"的<div>标签
+                result_divs = soup.find_all("div", attrs={"class": "resultplus"})
+                # 循环处理每个结果<div>标签
+                for result_div in result_divs:
+                    m3u8_name = ""
+                    m3u8_link = ""
+                    # 获取m3u8名称
+                    channel_div = result_div.find(name="div", attrs={"class": "channel"})
+                    #print(result_div.text)
+                    if channel_div is not None:
+                        name_div = channel_div.find(name="div", attrs={"class": "tip", "style": "float: left;"})
+                        if name_div is not None:
+                            m3u8_name = name_div.text.strip()
+                            #print(f"m3u name is {m3u8_name}")
+                        else: 
+                            counts_text = channel_div.text.strip()
+                            # 提取数字部分
+                            counts = int(''.join(filter(str.isdigit, counts_text)))
+                            print(f"{current_time} 总记录数：{counts}")
+                            page_count = int(counts) // 30
+                            if counts/30 > page_count:
+                                page_count += 1
+                            print(f"{current_time} 总页码数：{page_count}")
+
+                    # 获取m3u8链接
+                    #m3u8_div = result_div.find(name="div", attrs={"class": "ujbmjx"})
+                    m3u8_div = result_div.find_all(name="tba")
+                    if len(m3u8_div) == 2:
+
+                        m3u8_link = m3u8_div[-1].text.strip()
+                        print(f"频道名称： {m3u8_name}, 频道地址是 {m3u8_link}")
+
+            except (requests.Timeout, requests.RequestException) as e:
+                timeout_cnt += 1
+                print(f"{current_time} 请求发生超时，异常次数：{timeout_cnt}")
+                if timeout_cnt <= 10:
+                    # 继续下一次循环迭代
+                    continue
+                else:
+                    print(f"{current_time} 超时次数过多：{timeout_cnt} 次，请检查网络是否正常")
+            page += 1
+
+# 执行主程序函数
+spider_source()
+但是这个站点速度有点慢，代码逻辑也没仔细打磨，搞一段放弃了。想找大佬造好的轮子，我拿来直接用。
+
+git上一搜还真有，项目地址：https://github.com/yuanzl77/IPTV 
+
+这个大牛的思路是这样的，自定定义搜索的范围以及要搜索的目标以及v4还是v6，在source_urls里面可用随意定义source。
+
+ip_version_priority = "ipv6"
+
+source_urls = [
+ ...
+]
+然后在demo.txt下定义要搜索的目标，代码入口如下
+
+if __name__ == "__main__":
+    template_file = "demo.txt"
+    channels, template_channels = filter_source_urls(template_file)
+    updateChannelUrlsM3U(channels, template_channels)
+整体结构和逻辑不算复杂，感兴趣的自己去读吧。
+
+这样我就可以把前面我找到的所有站点投一股脑丢给他，自己定义想要看的频道，然后等他跑完就行。
+
+校验源
+这里校验是很关键的一步，就是判断这些源能不能在你家的网络下播放，如果能播放，时延是多少，分辨率是多少。
+
+大概的思路，就是后台用直接打开这个频道，根据返回的结果判断。其中用到了ffmpeg或者opencv相关的模块来提取分辨率信息。具体参考这个项目：https://github.com/flyfishes/IPTV-M3U-Checker2
+
+不过这个相对来说还是复杂，我又找了一个开箱即用的，还有打包好的容器镜像， 项目地址：https://github.com/zhimin-dev/iptv-checker 提供了命令行和web页面两种方式，输入一个列表，生成可用的iptv源，非常完美。
+
+root@cdb832788958:/app# ./iptv-checker-rs check -h
+检查相关命令
+
+Usage: iptv-checker-rs check [OPTIONS]
+
+Options:
+  -i, --input-file <INPUT_FILE>    输入文件，可以是本地文件或者是网络文件，支持标准m3u格式以及非标准的格式：CCTV,https://xxxx.com/xxx.m3u8格式
+  -o, --output-file <OUTPUT_FILE>  输出文件，如果不指定，则默认生成一个随机文件名 [default: ]
+  -t, --timeout <TIMEOUT>          超时时间，默认超时时间为28秒 [default: 28000]
+      --debug                      debug使用，可以看到相关的中间日志
+  -c, --concurrency <CONCURRENCY>  并发数 [default: 1]
+      --like <KEYWORD_LIKE>        想看关键词
+      --dislike <KEYWORD_DISLIKE>  不想看关键词
+      --sort                       频道排序
+  -h, --help                       Print help
+清洗源
+前面的第一步，因为自定义了搜索的范围，而这些范围的重复率也高，所以找到的源重复率非常高。同时不知道哪个源可以用，所以即使重复了，第二步校验的时候也保留了。但是最终不能将重复的源整合起来用，体验太差。
+
+前面两步其实是最难的，这一步主要是简单的数据处理。这里说的清洗，主要是针对前面找到可用的目标源，这里主要是去重。同时，也根据节目信息，添加log，epg等信息。
+
+这个好像没找到合适的项目参考，所以自己写了个脚本，对字符串进行拼凑（这里便于理解，只贴了去重部分，供参考）
+
+if __name__ == "__main__":
+    file_name = sys.argv[1] # 可用的iptv文件名，包括重复信息等
+    userfull_line = ""
+    tv_name = [] # key信息
+
+    with open(file_name,'r',encoding="utf-8") as f:
+        all_info = f.readlines()
+        all_len = len(all_info)
+        index = 1
+        for line in all_info:
+            # 获取tvg_name
+            tv = all_info[index].split(" ")[2].split("=")[1]
+            try:
+                tv = all_info[index].split(" ")[2].split("=")[1]
+            except Exception as e:
+                print(e)
+            if tv in tv_name:
+                pass
+            else:
+                tv_name.append(tv)
+                userfull_line += all_info[index]
+                userfull_line += all_info[index+1]
+
+            index += 2
+            if index >= all_len:
+                print("duplicate finish")
+                break
+
+    with open("duplicate.m3u", "w",encoding="utf-8") as ff:
+        ff.write(userfull_line)
+
+整合
+这里是最简单的一步，将找到的去重了的源直接整合起来放到nas或者httpserver上。然后播放器，或者tvbox等在内网直接指向这个他就行了。可以是txt格式，也可以是m3u格式。
+
+这里我把前面几个过程用一个shell全部整合起来了。实现了自动更新，校验。
+
+注意：脚本供参考，不能直接用，很多是我本地特有的路径或者名称。
+
+#!/bin/bash
+cd /opt/itv/
+# 获取本地iptv源
+# 输出localiptv.m3u文件
+# getlocaliptv是我自己写的获取本地iptv的脚本
+./getlocaliptv
+
+# 获取互联网iptv，searchiptv是基于yuanzl7的程序我直接打包的，便于发布
+# 输出live.m3u
+cd /opt/itv/searchTv
+./searchiptv 
+
+sleep 60
+
+# 检查互联网iptv的可用
+/usr/bin/cp -rf live.m3u ../output/
+cd ..
+# 调用iptv-checker容器里面的命令
+# 输出可用的m3u文件available.m3u
+docker exec  myIp  /app/iptv-checker-rs check -i static/output/live.m3u -o static/output/available.m3u -t 8000
+sleep 30
+
+# 去除重复的
+# duplicate是我程序自己打包的代码
+./duplicate output/available.m3u  
+
+#汇总互联网源和本地iptv源
+cat duplicate.m3u >> localiptv.m3u
+
+# 放到nas上去供播放器调用
+/usr/bin/cp -rf localiptv.m3u /nasdir/media/
+
+总结
+上面总结了我整合iptv的一些思路，以及用到的一些资源。这里面主要用到一些大佬开源的项目，也有一些我自己折腾的脚本。基本实现了自动找源，自动校验清晰，可用在家里面看一些iptv没有覆盖到的节目，如一些体育频道等。
+
+
+
+
+

@@ -16,50 +16,6 @@ import {
   deleteChannelsBySourceId
 } from '@/db/queries/channels'
 
-// 默认直播源配置（测试使用 best_sorted.m3u8）
-const DEFAULT_SOURCES = [
-  {
-    id: 'default-source-primary',
-    name: '我的直播源',
-    url: 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8',
-    type: 'url' as const,
-    status: 'parsing' as const,
-    channelCount: 0,
-    lastUpdateAt: null,
-    createdAt: new Date()
-  }
-]
-
-/**
- * 检查并初始化默认直播源
- * 如果数据库中不存在默认源，则自动导入
- */
-export async function initializeDefaultSources(): Promise<void> {
-  try {
-    const existingSources = getAllSources()
-
-    // 如果数据库中没有任何源，导入默认的 best_sorted.m3u8
-    if (existingSources.length === 0) {
-      console.log('数据库为空，导入默认直播源...')
-      for (const defaultSource of DEFAULT_SOURCES) {
-        // 检查源是否已存在（避免重复插入）
-        const exists = getSourceById(defaultSource.id)
-        if (exists) {
-          console.log(`默认源已存在: ${defaultSource.name}`)
-          continue
-        }
-        console.log(`正在导入默认源: ${defaultSource.name}`)
-        console.log(`URL: ${defaultSource.url}`)
-        await loadSourceData(defaultSource)
-      }
-    } else {
-      console.log(`数据库已有 ${existingSources.length} 个源，跳过默认源导入`)
-    }
-  } catch (error) {
-    console.error('初始化默认直播源失败:', error)
-  }
-}
-
 /**
  * 加载单个源的数据（优化：下载 -> 缓存到资源目录 -> 解析 -> 播放）
  * 逻辑：
