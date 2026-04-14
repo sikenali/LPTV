@@ -18,14 +18,19 @@ export function isExternalUrl(url: string): boolean {
 }
 
 export async function fetchWithRetry(url: string, options: FetchOptions = {}): Promise<string> {
-  const { retries = 3, timeout = 30000, baseDelay = 1000 } = options
+  const { retries = 5, timeout = 30000, baseDelay = 2000 } = options
   const targetUrl = toProxyUrl(url)
   let lastError: Error | null = null
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), timeout)
-      const response = await fetch(targetUrl, { signal: controller.signal })
+      const response = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'text/plain,application/octet-stream,*/*;q=0.9',
+        }
+      })
       clearTimeout(timeoutId)
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       return await response.text()

@@ -93,8 +93,9 @@ async function loadSourceData(sourceConfig: Omit<Source, 'channelCount' | 'lastU
       try {
         console.log(`正在下载源文件: ${source.name}...`)
         content = await fetchWithRetry(source.url, {
-          retries: 2,
-          timeout: 15000
+          retries: 5,
+          timeout: 30000,
+          baseDelay: 2000
         })
         
         // 核心优化：下载成功后，立即缓存到资源目录 (IndexedDB)
