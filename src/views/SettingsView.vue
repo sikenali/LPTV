@@ -6,7 +6,7 @@ import { useSourceStore } from '@/stores/source'
 import { usePlayerSettingsStore } from '@/stores/player-settings'
 import type { Source } from '@/types/source'
 import {
-  RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
+  RiLink, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
   RiFolderLine, RiUploadCloud2Line,
   RiFilmLine, RiTv2Line,
   RiCheckLine
@@ -108,7 +108,8 @@ onMounted(() => {
 
 const menuItems = [
   { id: 'source' as const, label: '源管理', icon: RiLink },
-  { id: 'schedule' as const, label: '定时管理', icon: RiTimerLine },
+  // 定时管理功能开发中，暂时隐藏
+  // { id: 'schedule' as const, label: '定时管理', icon: RiTimerLine },
   { id: 'player' as const, label: '播放设置', icon: RiPlayCircleLine },
   { id: 'ui' as const, label: '界面设置', icon: RiPaletteLine },
   { id: 'about' as const, label: '关于', icon: RiInformationLine }
@@ -156,13 +157,12 @@ const handleViewLog = (recordId: string) => {
   alert('查看日志功能开发中...')
 }
 
-// Player Settings State
 // Player Settings 已从 playerSettings Store 管理
-const autoplay = ref(true)
-const hardwareAccel = ref(true)
-const autoFullscreen = ref(false)
-const hideMouse = ref(true)
-const rememberVolume = ref(true)
+
+// 辅助函数：处理 checkbox 变化
+const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
+  setter((e.target as HTMLInputElement).checked)
+}
 
 // Schedule Settings State
 const globalScheduleEnabled = ref(true)
@@ -655,7 +655,7 @@ const autoUpdate = ref(false)
               <span class="setting-toggle-desc">软件启动后自动播放上次观看的频道</span>
             </div>
             <label class="toggle-switch">
-              <input type="checkbox" v-model="autoplay" />
+              <input type="checkbox" :checked="playerSettings.autoplay" @change="onCheckboxChange(playerSettings.setAutoplay)" />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -667,7 +667,7 @@ const autoUpdate = ref(false)
               <span class="setting-toggle-desc">点击频道后自动进入全屏播放模式</span>
             </div>
             <label class="toggle-switch">
-              <input type="checkbox" v-model="autoFullscreen" />
+              <input type="checkbox" :checked="playerSettings.autoFullscreen" @change="onCheckboxChange(playerSettings.setAutoFullscreen)" />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -679,19 +679,19 @@ const autoUpdate = ref(false)
               <span class="setting-toggle-desc">播放状态下5秒无操作自动隐藏鼠标指针</span>
             </div>
             <label class="toggle-switch">
-              <input type="checkbox" v-model="hideMouse" />
+              <input type="checkbox" :checked="playerSettings.hideMouse" @change="onCheckboxChange(playerSettings.setHideMouse)" />
               <span class="toggle-slider"></span>
             </label>
           </div>
 
-          <!-- 硬件加速 -->
-          <div class="setting-toggle-row">
+          <!-- 硬件加速（开发中） -->
+          <div class="setting-toggle-row" style="opacity: 0.5;">
             <div class="setting-toggle-info">
               <span class="setting-toggle-label">硬件加速</span>
-              <span class="setting-toggle-desc">使用GPU加速解码，降低CPU占用率</span>
+              <span class="setting-toggle-desc">使用GPU加速解码，降低CPU占用率（开发中）</span>
             </div>
             <label class="toggle-switch">
-              <input type="checkbox" v-model="hardwareAccel" />
+              <input type="checkbox" disabled />
               <span class="toggle-slider"></span>
             </label>
           </div>
@@ -703,7 +703,7 @@ const autoUpdate = ref(false)
               <span class="setting-toggle-desc">下次打开时恢复上次音量设置</span>
             </div>
             <label class="toggle-switch">
-              <input type="checkbox" v-model="rememberVolume" />
+              <input type="checkbox" :checked="playerSettings.rememberVolume" @change="onCheckboxChange(playerSettings.setRememberVolume)" />
               <span class="toggle-slider"></span>
             </label>
           </div>
