@@ -24,6 +24,9 @@ const sourceStore = useSourceStore()
 const playerStore = usePlayerStore()
 const route = useRoute()
 const searchQuery = ref('')
+const videoPlayerRef = ref<InstanceType<typeof VideoPlayer> | null>(null)
+const sidebarOpen = ref(false)
+const closeSidebar = () => { sidebarOpen.value = false }
 
 // 从数据库加载的频道数据
 const channelGroups = ref<ChannelGroupType[]>([])
@@ -130,6 +133,8 @@ const handleSelectChannel = (channel: Channel) => {
   currentSourceStatus.value = 'active'
   playerStore.setError(null)
   channelStore.selectChannel(channel)
+  // 移动端选择后关闭侧边栏
+  closeSidebar()
 }
 
 const handleToggleFavorite = (channel: Channel) => {
@@ -151,15 +156,19 @@ const estimatedRecoveryTime = computed(() => {
 
 // 播放器控制函数
 const togglePlay = () => {
-  const video = document.querySelector('.video-player video') as HTMLVideoElement
-  if (!video) return
-  if (playerStore.isPlaying) {
-    video.pause()
-  } else {
-    video.play().catch(() => {
-      playerStore.setError('播放失败，请稍后重试')
-    })
-  }
+  videoPlayerRef.value?.togglePlay()
+}
+
+const handlePlayerSeek = (ratio: number) => {
+  videoPlayerRef.value?.seek(ratio)
+}
+
+const handlePlayerSetVolume = (percent: number) => {
+  videoPlayerRef.value?.setVolume(percent)
+}
+
+const handlePlayerToggleMute = () => {
+  videoPlayerRef.value?.toggleMute()
 }
 
 const prevChannel = () => {
@@ -222,6 +231,13 @@ const toggleFullscreen = () => {
     </aside>
     <!-- 右侧播放主区域 -->
     <main class="channel-main">
+      <!-- 移动端频道切换按钮 -->
+      <div class="mobile-channel-bar">
+        <button class="mobile-channel-btn" @click="sidebarOpen = true">
+          <RiTvLine class="mobile-channel-icon" />
+          <span>{{ currentChannel?.name || '选择频道' }}</span>
+        </button>
+      </div>
       <!-- 有频道选择时显示播放器 -->
       <PlayerView
         v-if="currentChannel && hasSignal"
@@ -234,9 +250,12 @@ const toggleFullscreen = () => {
         @prev-channel="prevChannel"
         @next-channel="nextChannel"
         @fullscreen="toggleFullscreen"
+        @seek="handlePlayerSeek"
+        @set-volume="handlePlayerSetVolume"
+        @toggle-mute="handlePlayerToggleMute"
       >
         <template #player>
-          <VideoPlayer :url="currentChannel.url" @error="handlePlayerError" />
+          <VideoPlayer ref="videoPlayerRef" :url="currentChannel.url" @error="handlePlayerError" />
         </template>
       </PlayerView>
 
@@ -252,6 +271,9 @@ const toggleFullscreen = () => {
         @prev-channel="prevChannel"
         @next-channel="nextChannel"
         @fullscreen="toggleFullscreen"
+        @seek="handlePlayerSeek"
+        @set-volume="handlePlayerSetVolume"
+        @toggle-mute="handlePlayerToggleMute"
       >
         <template #player>
           <NoSignalView
@@ -270,6 +292,8 @@ const toggleFullscreen = () => {
         description="从左侧频道列表中选择一个频道"
       />
     </main>
+    <!-- 移动端侧边栏遮罩 -->
+    <div class="channel-sidebar-overlay" :class="{ visible: sidebarOpen }" @click="closeSidebar"></div>
   </div>
 </template>
 
@@ -393,5 +417,91 @@ const toggleFullscreen = () => {
   overflow: hidden;
   min-width: 0;
   padding: 0;
+}
+
+/* 移动端频道栏 */
+.mobile-channel-bar {
+  display: none;
+  padding: 8px 16px;
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mobile-channel-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+
+  .mobile-channel-icon {
+    width: 18px;
+    height: 18px;
+    color: var(--brand-primary);
+    flex-shrink: 0;
+  }
+}
+
+/* 移动端侧边栏遮罩 */
+.channel-sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+
+  &.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .channel-view {
+    flex-direction: column;
+  }
+
+  .mobile-channel-bar {
+    display: block;
+  }
+
+  .channel-sidebar-overlay {
+    display: block;
+  }
+
+  .channel-sidebar {
+    position: fixed;
+    top: 56px;
+    left: -100%;
+    width: 80vw;
+    max-width: 280px;
+    height: calc(100vh - 56px);
+    z-index: 1000;
+    transition: left 0.3s ease;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
+  }
+
+  .channel-sidebar.visible {
+    left: 0;
+  }
+
+  .channel-main {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+  }
 }
 </style>
