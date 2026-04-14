@@ -4,18 +4,22 @@ import SourceItem from '@/components/SourceItem.vue'
 import ImportSourceModal from '@/components/ImportSourceModal.vue'
 import { useSourceStore } from '@/stores/source'
 import { usePlayerSettingsStore } from '@/stores/player-settings'
+import { useScheduleSettingsStore } from '@/stores/schedule-settings'
 import type { Source } from '@/types/source'
 import {
-  RiLink, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
+  RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
   RiFolderLine, RiUploadCloud2Line,
   RiFilmLine, RiTv2Line,
   RiCheckLine
 } from '@remixicon/vue'
 import { switchTheme, switchAccentColor, switchFontSize, getThemeSettings } from '@/services/theme'
 import { importSourceFromFile, addSourceFromUrl } from '@/services/source-loader'
+import { executeSourceUpdate, rescheduleTimer } from '@/services/schedule-manager'
+import { getAllSources } from '@/db/queries/sources'
 
 const sourceStore = useSourceStore()
 const playerSettings = usePlayerSettingsStore()
+const scheduleSettings = useScheduleSettingsStore()
 
 const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
 const addMethod = ref<'url' | 'file'>('url')
@@ -108,8 +112,7 @@ onMounted(() => {
 
 const menuItems = [
   { id: 'source' as const, label: '源管理', icon: RiLink },
-  // 定时管理功能开发中，暂时隐藏
-  // { id: 'schedule' as const, label: '定时管理', icon: RiTimerLine },
+  { id: 'schedule' as const, label: '定时管理', icon: RiTimerLine },
   { id: 'player' as const, label: '播放设置', icon: RiPlayCircleLine },
   { id: 'ui' as const, label: '界面设置', icon: RiPaletteLine },
   { id: 'about' as const, label: '关于', icon: RiInformationLine }
@@ -137,24 +140,32 @@ const handleFontSizeChange = (size: 'small' | 'medium' | 'large') => {
 
 // 定时管理处理函数
 const handleBatchOperation = () => {
-  alert('批量操作功能开发中...')
+  // 批量操作：全选/全不选所有源的定时开关
+  const allSources = getAllSources()
+  const allEnabled = allSources.every(s => scheduleSettings.perSource[s.id]?.enabled)
+  allSources.forEach(s => {
+    scheduleSettings.setSourceSchedule(s.id, {
+      enabled: !allEnabled,
+      frequency: scheduleSettings.perSource[s.id]?.frequency ?? '6h',
+      time: scheduleSettings.perSource[s.id]?.time ?? '00:00'
+    })
+  })
+  rescheduleTimer()
 }
 
-const handleSourceUpdate = (sourceId: string) => {
+const handleSourceUpdate = async (sourceId: string) => {
   console.log('立即更新源:', sourceId)
-  alert('立即更新功能开发中...')
+  await executeSourceUpdate(sourceId)
 }
 
 const handleClearHistory = () => {
   if (confirm('确定要清空所有更新历史记录吗？')) {
-    console.log('清空历史记录')
-    alert('清空历史记录功能开发中...')
+    scheduleSettings.clearHistory()
   }
 }
 
-const handleViewLog = (recordId: string) => {
-  console.log('查看日志:', recordId)
-  alert('查看日志功能开发中...')
+const handleViewLog = (_recordId: string) => {
+  alert('日志详情功能开发中...')
 }
 
 // Player Settings 已从 playerSettings Store 管理
@@ -164,13 +175,30 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
   setter((e.target as HTMLInputElement).checked)
 }
 
-// Schedule Settings State
-const globalScheduleEnabled = ref(true)
-const updateFrequency = ref<'1h' | '6h' | '12h' | '24h' | '7d'>('6h')
-const updateTime = ref('03:00')
-const retryCount = ref('3')
-const updateNotification = ref(true)
-const autoUpdate = ref(false)
+// 辅助函数：频率标签映射
+function frequencyLabel(freq: string): string {
+  const map: Record<string, string> = { '1h': '每小时', '6h': '每6小时', '12h': '每12小时', '24h': '每天', '7d': '每周' }
+  return map[freq] || freq
+}
+
+// 辅助函数：频率转毫秒
+function frequencyToMsMap(freq: string): number {
+  const map: Record<string, number> = { '1h': 3600000, '6h': 21600000, '12h': 43200000, '24h': 86400000, '7d': 604800000 }
+  return map[freq] || 21600000
+}
+
+// 辅助函数：格式化下次更新时间
+function formatNextUpdate(lastUpdate: Date | null, frequency: string): string {
+  if (!lastUpdate) return '未更新'
+  const next = new Date(new Date(lastUpdate).getTime() + frequencyToMsMap(frequency))
+  return `下次: ${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`
+}
+
+// 辅助函数：格式化历史时间
+function formatHistoryTime(timestamp: string): string {
+  const d = new Date(timestamp)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
+}
 </script>
 
 <template>
@@ -281,7 +309,7 @@ const autoUpdate = ref(false)
               <p class="schedule-card-title-desc">开启后所有直播源将按照统一设置的周期自动更新</p>
             </div>
             <label class="schedule-toggle">
-              <input type="checkbox" v-model="globalScheduleEnabled" />
+              <input type="checkbox" :checked="scheduleSettings.globalEnabled" @change="onCheckboxChange((v) => { scheduleSettings.setGlobalEnabled(v); rescheduleTimer() })" />
               <span class="schedule-toggle-slider"></span>
             </label>
           </div>
@@ -290,11 +318,11 @@ const autoUpdate = ref(false)
           <div class="schedule-setting-block">
             <span class="schedule-block-label">更新频率</span>
             <div class="schedule-frequency-row">
-              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '1h' }" @click="updateFrequency = '1h'">每小时</button>
-              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '6h' }" @click="updateFrequency = '6h'">每6小时</button>
-              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '24h' }" @click="updateFrequency = '24h'">每天</button>
-              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '7d' }" @click="updateFrequency = '7d'">每周</button>
-              <button class="schedule-freq-btn" :class="{ active: updateFrequency === '12h' }" @click="updateFrequency = '12h'">自定义</button>
+              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '1h' }" @click="scheduleSettings.setFrequency('1h'); rescheduleTimer()">每小时</button>
+              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '6h' }" @click="scheduleSettings.setFrequency('6h'); rescheduleTimer()">每6小时</button>
+              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '24h' }" @click="scheduleSettings.setFrequency('24h'); rescheduleTimer()">每天</button>
+              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '7d' }" @click="scheduleSettings.setFrequency('7d'); rescheduleTimer()">每周</button>
+              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '12h' }" @click="scheduleSettings.setFrequency('12h'); rescheduleTimer()">每12小时</button>
             </div>
           </div>
 
@@ -302,12 +330,12 @@ const autoUpdate = ref(false)
           <div class="schedule-inline-row">
             <div class="schedule-inline-col">
               <span class="schedule-block-label">更新时间</span>
-              <input type="time" v-model="updateTime" class="schedule-input" />
+              <input type="time" :value="scheduleSettings.time" @change="scheduleSettings.setTime(($event.target as HTMLInputElement).value)" class="schedule-input" />
               <span class="schedule-input-hint">设置每天自动更新的具体时间</span>
             </div>
             <div class="schedule-inline-col">
               <span class="schedule-block-label">重试次数</span>
-              <input type="number" v-model="retryCount" class="schedule-input" min="0" max="10" />
+              <input type="number" :value="scheduleSettings.retries" @change="scheduleSettings.setRetries(parseInt(($event.target as HTMLInputElement).value))" class="schedule-input" min="0" max="10" />
               <span class="schedule-input-hint">更新失败时的自动重试次数</span>
             </div>
           </div>
@@ -315,7 +343,7 @@ const autoUpdate = ref(false)
           <!-- 更新通知开关行 -->
           <div class="schedule-toggle-row-new">
             <label class="schedule-toggle-mini">
-              <input type="checkbox" v-model="updateNotification" />
+              <input type="checkbox" :checked="scheduleSettings.notification" @change="onCheckboxChange(scheduleSettings.setNotification)" />
               <span class="schedule-toggle-mini-slider"></span>
             </label>
             <div class="schedule-toggle-info-new">
@@ -327,10 +355,10 @@ const autoUpdate = ref(false)
           <!-- 仅在WiFi环境下更新开关行 -->
           <div class="schedule-toggle-row-new">
             <label class="schedule-toggle-mini">
-              <input type="checkbox" v-model="autoUpdate" />
+              <input type="checkbox" :checked="scheduleSettings.wifiOnly" @change="onCheckboxChange(scheduleSettings.setWifiOnly)" />
               <span class="schedule-toggle-mini-slider"></span>
             </label>
-            <div class="schedule-toggle-info-new" :class="{ disabled: !autoUpdate }">
+            <div class="schedule-toggle-info-new" :class="{ disabled: !scheduleSettings.wifiOnly }">
               <span class="schedule-toggle-label-new">仅在WiFi环境下更新</span>
               <span class="schedule-toggle-desc-new">开启后将避免使用移动数据流量进行更新</span>
             </div>
@@ -364,49 +392,45 @@ const autoUpdate = ref(false)
             </div>
             <!-- 列表内容 -->
             <div class="schedule-source-list-body">
-              <!-- 源定时项 - 启用 -->
-              <div class="schedule-source-row">
+              <div
+                v-for="source in sources"
+                :key="source.id"
+                class="schedule-source-row"
+              >
                 <div class="ss-col-enable">
                   <label class="ss-toggle">
-                    <input type="checkbox" checked />
+                    <input
+                      type="checkbox"
+                      :checked="scheduleSettings.perSource[source.id]?.enabled ?? false"
+                      @change="scheduleSettings.setSourceSchedule(source.id, {
+                        enabled: ($event.target as HTMLInputElement).checked,
+                        frequency: scheduleSettings.perSource[source.id]?.frequency ?? scheduleSettings.frequency,
+                        time: scheduleSettings.perSource[source.id]?.time ?? scheduleSettings.time
+                      }); rescheduleTimer()"
+                    />
                     <span class="ss-toggle-slider"></span>
                   </label>
                 </div>
-                <span class="ss-source-name">国内直播源</span>
+                <span class="ss-source-name" :class="{ 'ss-source-disabled': !(scheduleSettings.perSource[source.id]?.enabled ?? false) }">{{ source.name }}</span>
                 <div class="ss-col-freq">
-                  <span class="ss-freq-tag active">每小时</span>
+                  <span class="ss-freq-tag" :class="{ active: scheduleSettings.perSource[source.id]?.enabled }">
+                    {{ frequencyLabel(scheduleSettings.perSource[source.id]?.frequency ?? scheduleSettings.frequency) }}
+                  </span>
                 </div>
-                <span class="ss-time-text">整点更新</span>
-                <div class="ss-result-success">
-                  <span class="ss-status-dot ss-dot-success"></span>
-                  <span>成功 (223个频道)</span>
+                <span class="ss-time-text" :class="{ 'ss-time-disabled': !(scheduleSettings.perSource[source.id]?.enabled ?? false) }">
+                  {{ scheduleSettings.perSource[source.id]?.time ?? scheduleSettings.time }}
+                </span>
+                <div class="ss-result-success" :class="{ 'ss-result-warning': source.status !== 'active' }">
+                  <span class="ss-status-dot" :class="source.status === 'active' ? 'ss-dot-success' : 'ss-dot-warning'"></span>
+                  <span>{{ source.status === 'active' ? `正常 (${source.channelCount}个频道)` : source.status }}</span>
                 </div>
-                <span class="ss-next-time">今天 11:00</span>
+                <span class="ss-next-time">{{ formatNextUpdate(source.lastUpdateAt, scheduleSettings.perSource[source.id]?.frequency ?? scheduleSettings.frequency) }}</span>
                 <div class="ss-col-action">
-                  <button class="ss-update-btn" @click="handleSourceUpdate('source-1')">立即更新</button>
+                  <button class="ss-update-btn" @click="handleSourceUpdate(source.id)">立即更新</button>
                 </div>
               </div>
-              <!-- 源定时项 - 未启用 -->
-              <div class="schedule-source-row">
-                <div class="ss-col-enable">
-                  <label class="ss-toggle">
-                    <input type="checkbox" />
-                    <span class="ss-toggle-slider"></span>
-                  </label>
-                </div>
-                <span class="ss-source-name ss-source-disabled">海外频道</span>
-                <div class="ss-col-freq">
-                  <span class="ss-freq-tag">每天</span>
-                </div>
-                <span class="ss-time-text ss-time-disabled">09:00</span>
-                <div class="ss-result-warning">
-                  <span class="ss-status-dot ss-dot-warning"></span>
-                  <span>部分失败</span>
-                </div>
-                <span class="ss-next-time ss-next-disabled">未启用</span>
-                <div class="ss-col-action">
-                  <button class="ss-update-btn ss-update-disabled">立即更新</button>
-                </div>
+              <div v-if="sources.length === 0" class="empty-schedule-hint">
+                <span>暂无直播源，请先在源管理页面添加直播源</span>
               </div>
             </div>
           </div>
@@ -438,47 +462,21 @@ const autoUpdate = ref(false)
             </div>
             <!-- 列表内容 -->
             <div class="schedule-history-list-body">
-              <!-- 历史记录项 - 成功 -->
-              <div class="schedule-history-row">
-                <span class="sh-time-text">今天 10:30:25</span>
-                <span class="sh-source-name">国内直播源</span>
-                <div class="sh-status-success">
-                  <span class="sh-status-dot sh-dot-success"></span>
-                  <span>成功</span>
+              <div v-for="entry in scheduleSettings.history" :key="entry.id" class="schedule-history-row">
+                <span class="sh-time-text">{{ formatHistoryTime(entry.timestamp) }}</span>
+                <span class="sh-source-name">{{ entry.sourceName }}</span>
+                <div :class="entry.status === 'success' ? 'sh-status-success' : 'sh-status-failed'">
+                  <span :class="entry.status === 'success' ? 'sh-status-dot sh-dot-success' : 'sh-status-dot sh-dot-failed'"></span>
+                  <span>{{ entry.status === 'success' ? '成功' : '失败' }}</span>
                 </div>
-                <span class="sh-channels-count">223</span>
-                <span class="sh-detail-text">自动更新完成，新增3个频道，移除2个无效频道</span>
+                <span class="sh-channels-count" :class="{ 'sh-channels-empty': entry.channelCount === 0 }">{{ entry.channelCount || '-' }}</span>
+                <span class="sh-detail-text">{{ entry.message }}</span>
                 <div class="sh-col-action">
-                  <button class="sh-log-btn" @click="handleViewLog('log-1')">查看日志</button>
+                  <button class="sh-log-btn" @click="handleViewLog(entry.id)">查看日志</button>
                 </div>
               </div>
-              <!-- 历史记录项 - 成功 -->
-              <div class="schedule-history-row">
-                <span class="sh-time-text">今天 04:30:12</span>
-                <span class="sh-source-name">国内直播源</span>
-                <div class="sh-status-success">
-                  <span class="sh-status-dot sh-dot-success"></span>
-                  <span>成功</span>
-                </div>
-                <span class="sh-channels-count">222</span>
-                <span class="sh-detail-text">自动更新完成，无变化</span>
-                <div class="sh-col-action">
-                  <button class="sh-log-btn" @click="handleViewLog('log-1')">查看日志</button>
-                </div>
-              </div>
-              <!-- 历史记录项 - 失败 -->
-              <div class="schedule-history-row">
-                <span class="sh-time-text">昨天 22:30:45</span>
-                <span class="sh-source-name">海外频道</span>
-                <div class="sh-status-failed">
-                  <span class="sh-status-dot sh-dot-failed"></span>
-                  <span>失败</span>
-                </div>
-                <span class="sh-channels-count sh-channels-empty">-</span>
-                <span class="sh-detail-text">网络连接超时，已重试3次均失败</span>
-                <div class="sh-col-action">
-                  <button class="sh-log-btn" @click="handleViewLog('log-1')">查看日志</button>
-                </div>
+              <div v-if="scheduleSettings.history.length === 0" class="empty-history-hint">
+                <span>暂无更新历史记录</span>
               </div>
             </div>
           </div>
