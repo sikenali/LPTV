@@ -40,6 +40,9 @@ const emit = defineEmits<{
   prevChannel: []
   nextChannel: []
   fullscreen: []
+  seek: [ratio: number]
+  setVolume: [percent: number]
+  toggleMute: []
 }>()
 
 const playerStore = usePlayerStore()
@@ -73,29 +76,17 @@ const handleProgressClick = (event: MouseEvent) => {
   if (!bar) return
   const rect = bar.getBoundingClientRect()
   const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
-  const video = document.querySelector('.video-player video') as HTMLVideoElement
-  if (video && video.duration && !isNaN(video.duration) && isFinite(video.duration)) {
-    video.currentTime = ratio * video.duration
-  }
+  emit('seek', ratio)
 }
 
 const handleVolumeClick = (event: MouseEvent) => {
-  const bar = (event.currentTarget as HTMLElement)
-  const rect = bar.getBoundingClientRect()
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const percent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
-  const video = document.querySelector('.video-player video') as HTMLVideoElement
-  if (video) {
-    video.volume = percent
-    playerStore.setVolume(percent)
-  }
+  emit('setVolume', percent)
 }
 
 const toggleMuteState = () => {
-  const video = document.querySelector('.video-player video') as HTMLVideoElement
-  if (video) {
-    video.muted = !video.muted
-    playerStore.setMuted(video.muted)
-  }
+  emit('toggleMute')
 }
 
 const togglePlayState = () => {

@@ -11,10 +11,37 @@ const emit = defineEmits<{ error: [] }>()
 const playerContainer = ref<HTMLElement | null>(null)
 let hls: Hls | null = null
 let dp: DPlayer | null = null
+let videoEl: HTMLVideoElement | null = null
 let recoveryAttempts = 0
 const MAX_RECOVERY_ATTEMPTS = 3
 const playerStore = usePlayerStore()
 const playerSettings = usePlayerSettingsStore()
+
+// 暴露播放器方法供父组件调用
+defineExpose({
+  togglePlay: () => {
+    if (!videoEl) return
+    if (videoEl.paused) {
+      videoEl.play().catch(() => playerStore.setError('播放失败，请稍后重试'))
+    } else {
+      videoEl.pause()
+    }
+  },
+  seek: (ratio: number) => {
+    if (!videoEl || !videoEl.duration || isNaN(videoEl.duration) || !isFinite(videoEl.duration)) return
+    videoEl.currentTime = ratio * videoEl.duration
+  },
+  setVolume: (percent: number) => {
+    if (!videoEl) return
+    videoEl.volume = percent
+    playerStore.setVolume(percent)
+  },
+  toggleMute: () => {
+    if (!videoEl) return
+    videoEl.muted = !videoEl.muted
+    playerStore.setMuted(videoEl.muted)
+  }
+})
 
 onMounted(() => { if (playerContainer.value) initPlayer() })
 onBeforeUnmount(() => { destroyPlayer() })
@@ -45,12 +72,12 @@ function initPlayer() {
 
 function initHlsPlayer() {
   if (!Hls.isSupported()) { initNativePlayer(); return }
-  const video = document.createElement('video')
-  video.controls = false
-  video.autoplay = true
-  video.style.width = '100%'
-  video.style.height = '100%'
-  playerContainer.value!.appendChild(video)
+  videoEl = document.createElement('video')
+  videoEl.controls = false
+  videoEl.autoplay = true
+  videoEl.style.width = '100%'
+  videoEl.style.height = '100%'
+  playerContainer.value!.appendChild(videoEl)
 
   hls = new Hls({
     maxLoadingDelay: 10,
@@ -68,12 +95,12 @@ function initHlsPlayer() {
   })
 
   hls.loadSource(toProxyUrl(props.url))
-  hls.attachMedia(video)
+  hls.attachMedia(videoEl)
 
   hls.on(Hls.Events.MANIFEST_PARSED, () => {
     playerStore.setLoading(false)
     recoveryAttempts = 0
-    video.play().catch(() => playerStore.setError('自动播放被阻止，请点击播放按钮'))
+    videoEl!.play().catch(() => playerStore.setError('自动播放被阻止，请点击播放按钮'))
   })
 
   hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -95,77 +122,94 @@ function initHlsPlayer() {
   hls.on(Hls.Events.LEVEL_LOADED, () => { playerStore.setLoading(false); recoveryAttempts = 0 })
   hls.on(Hls.Events.FRAG_LOADED, () => { recoveryAttempts = 0 })
 
-  video.onplay = () => { playerStore.play(props.url); playerStore.setLoading(false) }
-  video.onpause = () => playerStore.pause()
-  video.onended = () => playerStore.pause()
-  video.ontimeupdate = () => {
-    if (video.duration && !isNaN(video.duration)) {
-      playerStore.setCurrentTime(video.currentTime)
-      playerStore.setTotalTime(video.duration)
+  videoEl.onplay = () => { playerStore.play(props.url); playerStore.setLoading(false) }
+  videoEl.onpause = () => playerStore.pause()
+  videoEl.onended = () => playerStore.pause()
+  videoEl.ontimeupdate = () => {
+    if (videoEl!.duration && !isNaN(videoEl!.duration)) {
+      playerStore.setCurrentTime(videoEl!.currentTime)
+      playerStore.setTotalTime(videoEl!.duration)
     }
   }
-  video.onvolumechange = () => {
-    playerStore.setVolume(video.volume)
-    playerStore.setMuted(video.muted)
+  videoEl.onvolumechange = () => {
+    playerStore.setVolume(videoEl!.volume)
+    playerStore.setMuted(videoEl!.muted)
   }
 }
 
 function initNativePlayer() {
   if (!playerContainer.value) return
-  const video = document.createElement('video')
-  video.controls = false
-  video.autoplay = true
-  video.style.width = '100%'
-  video.style.height = '100%'
-  video.src = toProxyUrl(props.url)
-  playerContainer.value.appendChild(video)
+  videoEl = document.createElement('video')
+  videoEl.controls = false
+  videoEl.autoplay = true
+  videoEl.style.width = '100%'
+  videoEl.style.height = '100%'
+  videoEl.src = toProxyUrl(props.url)
+  playerContainer.value.appendChild(videoEl)
 
-  video.onloadeddata = () => playerStore.setLoading(false)
-  video.onerror = () => {
+  videoEl.onloadeddata = () => playerStore.setLoading(false)
+  videoEl.onerror = () => {
     playerStore.setLoading(false)
     playerStore.setError('频道暂时不可用，请稍后重试')
     emit('error')
   }
-  video.onplay = () => { playerStore.play(props.url); playerStore.setLoading(false) }
-  video.onpause = () => playerStore.pause()
-  video.onended = () => playerStore.pause()
-  video.ontimeupdate = () => {
-    if (video.duration && !isNaN(video.duration)) {
-      playerStore.setCurrentTime(video.currentTime)
-      playerStore.setTotalTime(video.duration)
+  videoEl.onplay = () => { playerStore.play(props.url); playerStore.setLoading(false) }
+  videoEl.onpause = () => playerStore.pause()
+  videoEl.onended = () => playerStore.pause()
+  videoEl.ontimeupdate = () => {
+    if (videoEl!.duration && !isNaN(videoEl!.duration)) {
+      playerStore.setCurrentTime(videoEl!.currentTime)
+      playerStore.setTotalTime(videoEl!.duration)
     }
   }
-  video.onvolumechange = () => {
-    playerStore.setVolume(video.volume)
-    playerStore.setMuted(video.muted)
+  videoEl.onvolumechange = () => {
+    playerStore.setVolume(videoEl!.volume)
+    playerStore.setMuted(videoEl!.muted)
   }
 }
 
 function initDPlayer() {
   if (!playerContainer.value) return
-  playerStore.setLoading(false)
-
   dp = new DPlayer({
     container: playerContainer.value,
     autoplay: true,
     video: {
-      url: props.url,
+      url: toProxyUrl(props.url),
       type: 'hls',
     },
   })
 
-  dp.on('play', () => playerStore.play(props.url))
+  // DPlayer 初始化后获取 video 元素
+  videoEl = dp.video
+
+  dp.on('canplay', () => {
+    playerStore.setLoading(false)
+  })
+
+  dp.on('play', () => { playerStore.play(props.url); playerStore.setLoading(false) })
   dp.on('pause', () => playerStore.pause())
   dp.on('ended', () => playerStore.pause())
   dp.on('error', () => {
-    playerStore.setError('频道暂时不可用，请稍后重试')
-    emit('error')
+    playerStore.setLoading(false)
+    // DPlayer 错误恢复机制：尝试重新播放
+    if (recoveryAttempts < MAX_RECOVERY_ATTEMPTS) {
+      recoveryAttempts++
+      if (videoEl) {
+        videoEl.currentTime = 0
+        videoEl.load()
+        videoEl.play().catch(() => {})
+      }
+    } else {
+      playerStore.setError('频道暂时不可用，请稍后重试')
+      emit('error')
+    }
   })
 }
 
 function destroyPlayer() {
   if (hls) { hls.destroy(); hls = null }
   if (dp) { dp.destroy(); dp = null }
+  videoEl = null
   recoveryAttempts = 0
   if (playerContainer.value) {
     while (playerContainer.value.firstChild) playerContainer.value.removeChild(playerContainer.value.firstChild)
