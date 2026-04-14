@@ -26,6 +26,7 @@ const addMethod = ref<'url' | 'file'>('url')
 const sourceName = ref('')
 const sourceUrl = ref('')
 const showImportModal = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 // UI Settings State - 从 localStorage 加载
 const settings = getThemeSettings()
@@ -103,6 +104,56 @@ const handleImport = async (data: { name: string; url: string; type: 'url' | 'fi
   } catch (error) {
     console.error('导入错误:', error)
     alert('导入失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  }
+}
+
+// 处理文件选择（点击或拖拽）
+const handleFileSelect = async (file: File) => {
+  if (!file.name.match(/\.(m3u|m3u8)$/i)) {
+    alert('请选择 .m3u 或 .m3u8 格式的文件')
+    return
+  }
+
+  try {
+    const content = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsText(file)
+    })
+
+    const name = file.name.replace(/\.(m3u|m3u8)$/i, '')
+    await handleImport({ name, url: content, type: 'file' })
+  } catch (error) {
+    console.error('文件读取失败:', error)
+    alert('文件读取失败，请重试')
+  }
+}
+
+// 点击上传区域触发文件选择
+const onUploadAreaClick = () => {
+  fileInputRef.value?.click()
+}
+
+// 文件 input change 事件
+const onFileInputChange = (e: Event) => {
+  const target = e.target as HTMLInputElement
+  if (target.files && target.files[0]) {
+    handleFileSelect(target.files[0])
+  }
+}
+
+// 拖拽事件处理
+const onDragOver = (e: DragEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+const onDrop = (e: DragEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
+  if (e.dataTransfer?.files && e.dataTransfer.files[0]) {
+    handleFileSelect(e.dataTransfer.files[0])
   }
 }
 
@@ -256,7 +307,14 @@ function formatHistoryTime(timestamp: string): string {
             </div>
             <button class="btn-add-source" @click="showImportModal = true">添加源</button>
           </div>
-          <div v-else class="file-upload-area">
+          <div v-else class="file-upload-area" @click="onUploadAreaClick" @dragover="onDragOver" @drop="onDrop">
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept=".m3u,.m3u8"
+              class="file-input-hidden"
+              @change="onFileInputChange"
+            />
             <div class="upload-placeholder">
               <RiUploadCloud2Line class="upload-icon" />
               <span class="upload-text">点击或拖拽 m3u/m3u8 文件到此处</span>
@@ -988,6 +1046,10 @@ function formatHistoryTime(timestamp: string): string {
   .upload-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; }
   .upload-icon { width: 36px; height: 36px; opacity: 0.5; color: var(--text-secondary); }
   .upload-text { font-size: 13px; color: var(--text-secondary); }
+}
+
+.file-input-hidden {
+  display: none;
 }
 
 /* 已添加源列表 */
