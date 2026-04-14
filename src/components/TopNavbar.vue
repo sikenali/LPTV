@@ -76,9 +76,12 @@ const navigate = (path: string) => router.push(path)
 
 .nav-item {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 2px;
   padding: 6px 12px;
+  min-width: 56px;
   background: transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
@@ -99,14 +102,15 @@ const navigate = (path: string) => router.push(path)
 }
 
 .nav-icon {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   color: inherit;
   transition: transform var(--transition-fast);
 }
 
 .nav-label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
+  line-height: 1;
 }
 </style>
