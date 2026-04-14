@@ -125,9 +125,9 @@ export function applyAccentColor(color: string): void {
  */
 export function applyFontSize(size: 'small' | 'medium' | 'large'): void {
   const sizes = {
-    small: { body: '12px', caption: '11px', subtitle: '14px', title: '20px' },
-    medium: { body: '14px', caption: '13px', subtitle: '16px', title: '24px' },
-    large: { body: '16px', caption: '14px', subtitle: '18px', title: '28px' }
+    small: { body: '12px', caption: '11px', subtitle: '14px', title: '20px', base: '12px' },
+    medium: { body: '14px', caption: '13px', subtitle: '16px', title: '24px', base: '14px' },
+    large: { body: '16px', caption: '14px', subtitle: '18px', title: '28px', base: '16px' }
   }
 
   const config = sizes[size]
@@ -138,6 +138,8 @@ export function applyFontSize(size: 'small' | 'medium' | 'large'): void {
   root.style.setProperty('--font-size-caption', config.caption)
   root.style.setProperty('--font-size-subtitle', config.subtitle)
   root.style.setProperty('--font-size-title', config.title)
+  root.style.setProperty('--font-size-base', config.base)
+  root.style.fontSize = config.base
 }
 
 /**

@@ -1134,7 +1134,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .schedule-card-title-text {
-  font-size: 16px;
+  font-size: var(--font-size-subtitle);
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
@@ -1142,7 +1142,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .schedule-card-title-desc {
-  font-size: 13px;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary);
   margin: 0;
   line-height: 1.4;
@@ -1159,7 +1159,7 @@ function formatHistoryTime(timestamp: string): string {
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: rgba(71, 85, 105, 1);
+    background-color: var(--bg-card);
     transition: all var(--transition-fast);
     border-radius: 28px;
     &:before {
@@ -1173,7 +1173,7 @@ function formatHistoryTime(timestamp: string): string {
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
   }
-  input:checked + .schedule-toggle-slider { background-color: rgba(59, 130, 246, 1); }
+  input:checked + .schedule-toggle-slider { background-color: var(--brand-primary); }
   input:checked + .schedule-toggle-slider:before { transform: translateX(28px); }
 }
 
@@ -1184,7 +1184,7 @@ function formatHistoryTime(timestamp: string): string {
 
 .schedule-block-label {
   display: block;
-  font-size: 16px;
+  font-size: var(--font-size-subtitle);
   color: var(--text-secondary);
   margin-bottom: 12px;
 }
@@ -1202,18 +1202,18 @@ function formatHistoryTime(timestamp: string): string {
   background-color: var(--bg-secondary);
   border: none;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   cursor: pointer;
   transition: all var(--transition-fast);
   line-height: 1.2;
 
   &:hover {
-    background-color: rgba(71, 85, 105, 1);
+    background-color: var(--bg-card);
   }
 
   &.active {
-    background-color: rgba(59, 130, 246, 1);
+    background-color: var(--brand-primary);
     color: rgba(255, 255, 255, 1);
   }
 }
@@ -1239,21 +1239,22 @@ function formatHistoryTime(timestamp: string): string {
   padding: 0 16px;
   height: 52px;
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: var(--font-size-body);
   transition: all var(--transition-fast);
   outline: none;
 
   &:focus {
-    border-color: rgba(59, 130, 246, 1);
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
   }
 
   &:hover:not(:focus) {
-    border-color: rgba(71, 85, 105, 1);
+    border-color: var(--border-color);
   }
 }
 
 .schedule-input-hint {
-  font-size: 12px;
+  font-size: var(--font-size-caption);
   color: var(--text-disabled);
   line-height: 1.3;
 }
@@ -1277,7 +1278,7 @@ function formatHistoryTime(timestamp: string): string {
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: rgba(71, 85, 105, 1);
+    background-color: var(--bg-card);
     transition: all var(--transition-fast);
     border-radius: 24px;
     &:before {
@@ -1291,7 +1292,7 @@ function formatHistoryTime(timestamp: string): string {
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
   }
-  input:checked + .schedule-toggle-mini-slider { background-color: rgba(59, 130, 246, 1); }
+  input:checked + .schedule-toggle-mini-slider { background-color: var(--brand-primary); }
   input:checked + .schedule-toggle-mini-slider:before { transform: translateX(24px); }
 }
 
@@ -1308,13 +1309,13 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .schedule-toggle-label-new {
-  font-size: 15px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-primary);
 }
 
 .schedule-toggle-desc-new {
-  font-size: 13px;
+  font-size: var(--font-size-caption);
   color: var(--text-disabled);
   line-height: 1.3;
 }
@@ -1375,7 +1376,7 @@ function formatHistoryTime(timestamp: string): string {
   line-height: 1.2;
 
   &:hover {
-    background-color: rgba(71, 85, 105, 1);
+    background-color: var(--bg-card);
   }
 }
 
@@ -1391,7 +1392,7 @@ function formatHistoryTime(timestamp: string): string {
   display: flex;
   align-items: center;
   padding: 16px 24px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-secondary);
   background-color: var(--bg-card);
@@ -1459,12 +1460,12 @@ function formatHistoryTime(timestamp: string): string {
       border-radius: 9999px;
     }
   }
-  input:checked + .ss-toggle-slider { background-color: rgba(59, 130, 246, 1); }
+  input:checked + .ss-toggle-slider { background-color: var(--brand-primary); }
   input:checked + .ss-toggle-slider:before { transform: translateX(24px); }
 }
 
 .ss-source-name {
-  font-size: 16px;
+  font-size: var(--font-size-subtitle);
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-primary);
 }
@@ -1478,7 +1479,7 @@ function formatHistoryTime(timestamp: string): string {
   background-color: var(--bg-secondary);
   border-radius: 9999px;
   padding: 4px 12px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-secondary);
   text-align: center;
@@ -1486,12 +1487,12 @@ function formatHistoryTime(timestamp: string): string {
 
   &.active {
     background-color: rgba(59, 130, 246, 0.2);
-    color: rgba(96, 165, 250, 1);
+    color: var(--brand-primary);
   }
 }
 
 .ss-time-text {
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Regular', sans-serif;
   color: var(--text-secondary);
 }
@@ -1504,18 +1505,18 @@ function formatHistoryTime(timestamp: string): string {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
-  color: rgba(34, 197, 94, 1);
+  color: var(--success);
 }
 
 .ss-result-warning {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
-  color: rgba(249, 115, 22, 1);
+  color: var(--warning);
 }
 
 .ss-status-dot {
@@ -1534,7 +1535,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .ss-next-time {
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Regular', sans-serif;
   color: var(--text-secondary);
 }
@@ -1549,14 +1550,14 @@ function formatHistoryTime(timestamp: string): string {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
   border: none;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   cursor: pointer;
   transition: all var(--transition-fast);
   line-height: 1.2;
 
   &:hover {
-    background-color: rgba(71, 85, 105, 1);
+    background-color: var(--bg-card);
   }
 
   &:active {
@@ -1595,7 +1596,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .schedule-history-title {
-  font-size: 20px;
+  font-size: var(--font-size-title);
   font-weight: 600;
   font-family: 'SourceHanSans-SemiBold', sans-serif;
   color: var(--text-primary);
@@ -1604,7 +1605,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .schedule-history-desc {
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Regular', sans-serif;
   color: var(--text-secondary);
   margin: 0;
@@ -1617,14 +1618,14 @@ function formatHistoryTime(timestamp: string): string {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
   border: none;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   cursor: pointer;
   transition: all var(--transition-fast);
   line-height: 1.2;
 
   &:hover {
-    background-color: rgba(71, 85, 105, 1);
+    background-color: var(--bg-card);
   }
 }
 
@@ -1640,7 +1641,7 @@ function formatHistoryTime(timestamp: string): string {
   display: flex;
   align-items: center;
   padding: 16px 24px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-secondary);
   background-color: var(--bg-card);
@@ -1677,13 +1678,13 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .sh-time-text {
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Regular', sans-serif;
   color: var(--text-secondary);
 }
 
 .sh-source-name {
-  font-size: 16px;
+  font-size: var(--font-size-subtitle);
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-primary);
 }
@@ -1692,18 +1693,18 @@ function formatHistoryTime(timestamp: string): string {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
-  color: rgba(34, 197, 94, 1);
+  color: var(--success);
 }
 
 .sh-status-failed {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
-  color: rgba(239, 68, 68, 1);
+  color: var(--error);
 }
 
 .sh-status-dot {
@@ -1722,7 +1723,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .sh-channels-count {
-  font-size: 16px;
+  font-size: var(--font-size-subtitle);
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-primary);
   text-align: center;
@@ -1733,7 +1734,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .sh-detail-text {
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Regular', sans-serif;
   color: var(--text-secondary);
 }
@@ -1744,14 +1745,14 @@ function formatHistoryTime(timestamp: string): string {
   background-color: var(--bg-secondary);
   color: var(--text-primary);
   border: none;
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-family: 'SourceHanSans-Medium', sans-serif;
   cursor: pointer;
   transition: all var(--transition-fast);
   line-height: 1.2;
 
   &:hover {
-    background-color: rgba(71, 85, 105, 1);
+    background-color: var(--bg-card);
   }
 }
 
