@@ -57,8 +57,9 @@ async function loadData() {
       return
     }
 
-    // 使用第一个可用的源（我的直播源优先）
-    const primarySource = sources.find(s => s.name === '我的直播源') || sources[0]
+    // 使用第一个可用的有效源（有频道且状态正常）
+    const validSource = sources.find(s => s.status === 'active' && s.channelCount > 0)
+    const primarySource = validSource || sources.find(s => s.name === '我的直播源') || sources[0]
     console.log('使用源:', primarySource.name, 'ID:', primarySource.id, '状态:', primarySource.status)
     activeSourceId.value = primarySource.id
     currentSourceStatus.value = primarySource.status
