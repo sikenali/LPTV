@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import SourceItem from '@/components/SourceItem.vue'
 import ImportSourceModal from '@/components/ImportSourceModal.vue'
 import { useSourceStore } from '@/stores/source'
+import { usePlayerSettingsStore } from '@/stores/player-settings'
 import type { Source } from '@/types/source'
 import {
   RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
@@ -14,6 +15,7 @@ import { switchTheme, switchAccentColor, switchFontSize, getThemeSettings } from
 import { importSourceFromFile, addSourceFromUrl } from '@/services/source-loader'
 
 const sourceStore = useSourceStore()
+const playerSettings = usePlayerSettingsStore()
 
 const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
 const addMethod = ref<'url' | 'file'>('url')
@@ -155,9 +157,7 @@ const handleViewLog = (recordId: string) => {
 }
 
 // Player Settings State
-const playerCore = ref<'hls' | 'native' | 'dplayer'>('hls')
-const decodeMode = ref<'soft' | 'hard' | 'auto'>('hard')
-const quality = ref<'auto' | '1080p' | '720p' | '480p'>('1080p')
+// Player Settings 已从 playerSettings Store 管理
 const autoplay = ref(true)
 const hardwareAccel = ref(true)
 const autoFullscreen = ref(false)
@@ -713,17 +713,17 @@ const autoUpdate = ref(false)
         <div class="player-section">
           <h3 class="player-section-title">播放器内核</h3>
           <div class="player-options-row">
-            <button class="player-option-card" :class="{ active: playerCore === 'hls' }" @click="playerCore = 'hls'">
+            <button class="player-option-card" :class="{ active: playerSettings.core === 'hls' }" @click="playerSettings.setCore('hls')">
               <RiFilmLine class="player-option-icon" />
               <span class="player-option-label">HLS.js</span>
               <span class="player-option-desc">推荐，兼容性好</span>
             </button>
-            <button class="player-option-card" :class="{ active: playerCore === 'native' }" @click="playerCore = 'native'">
+            <button class="player-option-card" :class="{ active: playerSettings.core === 'native' }" @click="playerSettings.setCore('native')">
               <RiTv2Line class="player-option-icon" />
               <span class="player-option-label">原生 Video</span>
               <span class="player-option-desc">轻量，支持 Safari</span>
             </button>
-            <button class="player-option-card" :class="{ active: playerCore === 'dplayer' }" @click="playerCore = 'dplayer'">
+            <button class="player-option-card" :class="{ active: playerSettings.core === 'dplayer' }" @click="playerSettings.setCore('dplayer')">
               <RiPlayCircleLine class="player-option-icon" />
               <span class="player-option-label">DPlayer</span>
               <span class="player-option-desc">功能丰富，体验佳</span>
@@ -735,16 +735,16 @@ const autoUpdate = ref(false)
         <div class="player-section">
           <h3 class="player-section-title">默认播放画质</h3>
           <div class="quality-options-row">
-            <button class="quality-option" :class="{ active: quality === 'auto' }" @click="quality = 'auto'">
+            <button class="quality-option" :class="{ active: playerSettings.quality === 'auto' }" @click="playerSettings.setQuality('auto')">
               <span class="quality-option-label">自动</span>
             </button>
-            <button class="quality-option" :class="{ active: quality === '1080p' }" @click="quality = '1080p'">
+            <button class="quality-option" :class="{ active: playerSettings.quality === '1080p' }" @click="playerSettings.setQuality('1080p')">
               <span class="quality-option-label">高清 (1080P)</span>
             </button>
-            <button class="quality-option" :class="{ active: quality === '720p' }" @click="quality = '720p'">
+            <button class="quality-option" :class="{ active: playerSettings.quality === '720p' }" @click="playerSettings.setQuality('720p')">
               <span class="quality-option-label">标清 (720P)</span>
             </button>
-            <button class="quality-option" :class="{ active: quality === '480p' }" @click="quality = '480p'">
+            <button class="quality-option" :class="{ active: playerSettings.quality === '480p' }" @click="playerSettings.setQuality('480p')">
               <span class="quality-option-label">流畅 (480P)</span>
             </button>
           </div>
@@ -754,13 +754,13 @@ const autoUpdate = ref(false)
         <div class="player-section">
           <h3 class="player-section-title">解码方式</h3>
           <div class="decode-options-row">
-            <button class="decode-option" :class="{ active: decodeMode === 'hard' }" @click="decodeMode = 'hard'">
+            <button class="decode-option" :class="{ active: playerSettings.decodeMode === 'hard' }" @click="playerSettings.setDecodeMode('hard')">
               <span class="decode-option-label">硬解码</span>
             </button>
-            <button class="decode-option" :class="{ active: decodeMode === 'soft' }" @click="decodeMode = 'soft'">
+            <button class="decode-option" :class="{ active: playerSettings.decodeMode === 'soft' }" @click="playerSettings.setDecodeMode('soft')">
               <span class="decode-option-label">软解码</span>
             </button>
-            <button class="decode-option" :class="{ active: decodeMode === 'auto' }" @click="decodeMode = 'auto'">
+            <button class="decode-option" :class="{ active: playerSettings.decodeMode === 'auto' }" @click="playerSettings.setDecodeMode('auto')">
               <span class="decode-option-label">自动选择</span>
             </button>
           </div>
