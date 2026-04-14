@@ -5,7 +5,6 @@ import { getCachedResource, saveResource } from '@/db/resource-cache'
 import {
   insertSource,
   getSourceById,
-  getAllSources,
   updateSourceStatus,
   updateSourceChannelCount,
   updateSourceLastUpdateAt,

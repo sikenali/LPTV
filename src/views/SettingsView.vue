@@ -2,12 +2,13 @@
 import { ref, onMounted } from 'vue'
 import SourceItem from '@/components/SourceItem.vue'
 import ImportSourceModal from '@/components/ImportSourceModal.vue'
+import ManagementView from '@/views/ManagementView.vue'
 import { useSourceStore } from '@/stores/source'
 import { usePlayerSettingsStore } from '@/stores/player-settings'
 import { useScheduleSettingsStore } from '@/stores/schedule-settings'
 import type { Source } from '@/types/source'
 import {
-  RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
+  RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine, RiDatabaseLine,
   RiFolderLine, RiUploadCloud2Line,
   RiFilmLine, RiTv2Line,
   RiCheckLine
@@ -21,7 +22,7 @@ const sourceStore = useSourceStore()
 const playerSettings = usePlayerSettingsStore()
 const scheduleSettings = useScheduleSettingsStore()
 
-const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
+const activeTab = ref<'source' | 'management' | 'schedule' | 'player' | 'ui' | 'about'>('source')
 const addMethod = ref<'url' | 'file'>('url')
 const sourceName = ref('')
 const sourceUrl = ref('')
@@ -163,6 +164,7 @@ onMounted(() => {
 
 const menuItems = [
   { id: 'source' as const, label: '源管理', icon: RiLink },
+  { id: 'management' as const, label: '数据管理', icon: RiDatabaseLine },
   { id: 'schedule' as const, label: '定时管理', icon: RiTimerLine },
   { id: 'player' as const, label: '播放设置', icon: RiPlayCircleLine },
   { id: 'ui' as const, label: '界面设置', icon: RiPaletteLine },
@@ -349,6 +351,10 @@ function formatHistoryTime(timestamp: string): string {
             </div>
           </div>
         </div>
+      </div>
+      <!-- 数据管理模块 -->
+      <div v-else-if="activeTab === 'management'" class="management-tab">
+        <ManagementView />
       </div>
       <!-- 定时管理模块 -->
       <div v-else-if="activeTab === 'schedule'" class="schedule-management">
