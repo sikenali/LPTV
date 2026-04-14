@@ -6,6 +6,7 @@ import './styles/global.scss'
 import { initDatabase } from '@/db/database'
 import { initializeDefaultSources } from '@/services/source-loader'
 import { initTheme } from '@/services/theme'
+import { initScheduleManager } from '@/services/schedule-manager'
 
 const app = createApp(App)
 
@@ -25,6 +26,9 @@ initDatabase()
     app.use(createPinia())
     app.use(router)
     app.mount('#app')
+
+    // 初始化定时更新管理器
+    initScheduleManager()
   })
   .catch(err => {
     console.error('应用初始化失败:', err)
@@ -32,4 +36,7 @@ initDatabase()
     app.use(createPinia())
     app.use(router)
     app.mount('#app')
+
+    // 初始化定时更新管理器
+    initScheduleManager()
   })
