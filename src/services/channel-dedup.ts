@@ -20,7 +20,7 @@ export function findDuplicates(channels: Channel[]): DuplicateGroup[] {
   }
 
   const duplicates: DuplicateGroup[] = []
-  for (const [name, group] of groups.entries()) {
+  for (const [_name, group] of groups.entries()) {
     if (group.length > 1) {
       duplicates.push({
         name: group[0].name, // 保留原始名称

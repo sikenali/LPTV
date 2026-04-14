@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { RiTvLine, RiHeartLine, RiSettings3Line } from '@remixicon/vue'
+import { RiTvLine, RiHeartLine, RiSettings3Line, RiDatabaseLine } from '@remixicon/vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -9,6 +9,7 @@ const router = useRouter()
 const navItems = computed(() => [
   { name: 'channel', label: '频道', icon: RiTvLine, path: '/' },
   { name: 'favorites', label: '收藏', icon: RiHeartLine, path: '/favorites' },
+  { name: 'management', label: '数据管理', icon: RiDatabaseLine, path: '/management' },
   { name: 'settings', label: '设置', icon: RiSettings3Line, path: '/settings' }
 ])
 
