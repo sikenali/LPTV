@@ -29,11 +29,15 @@ const searchQuery = ref('')
 const channelGroups = ref<ChannelGroupType[]>([])
 const currentChannel = ref<Channel | null>(null)
 const activeSourceId = ref<string | null>(null)
-const currentSourceStatus = ref<'active' | 'error' | 'parsing'>('active')
+const currentSourceStatus = ref<'active' | 'error' | 'parsing'>('parsing')
 
-// 根据源状态和播放器错误状态判断是否有信号
+// 根据源状态、播放器加载和错误状态判断是否有信号
 const hasSignal = computed(() => {
-  return currentSourceStatus.value === 'active' && !playerStore.error
+  return (
+    currentSourceStatus.value === 'active' &&
+    !playerStore.error &&
+    !playerStore.loading
+  )
 })
 
 // 加载源和频道数据
@@ -120,7 +124,8 @@ const handleToggleGroup = (groupId: string) => channelStore.toggleGroup(groupId)
 
 const handleSelectChannel = (channel: Channel) => {
   currentChannel.value = channel
-  // 切换频道时重置错误状态
+  // 切换频道时重置播放器和错误状态
+  playerStore.reset()
   currentSourceStatus.value = 'active'
   playerStore.setError(null)
   channelStore.selectChannel(channel)
@@ -135,8 +140,6 @@ const handlePlayerError = () => {
   playerStore.setError('频道暂时不可用，请稍后重试')
 }
 
-const volume = ref(72)
-
 // 计算估计恢复时间（当前时间 + 30 分钟）
 const estimatedRecoveryTime = computed(() => {
   const now = new Date()
@@ -147,8 +150,15 @@ const estimatedRecoveryTime = computed(() => {
 
 // 播放器控制函数
 const togglePlay = () => {
-  console.log('Toggle play/pause')
-  // TODO: 连接 VideoPlayer 的实际播放状态
+  const video = document.querySelector('.video-player video') as HTMLVideoElement
+  if (!video) return
+  if (playerStore.isPlaying) {
+    video.pause()
+  } else {
+    video.play().catch(() => {
+      playerStore.setError('播放失败，请稍后重试')
+    })
+  }
 }
 
 const prevChannel = () => {
@@ -218,7 +228,6 @@ const toggleFullscreen = () => {
         :channel-desc="`${currentChannel.groupName} · 正在播放`"
         :logo-text="currentChannel.name.split('-')[0]?.trim() || 'TV'"
         :is-favorite="favoriteStore.isFavorite(currentChannel.id)"
-        :volume="volume"
         @toggle-favorite="currentChannel && handleToggleFavorite(currentChannel)"
         @toggle-play="togglePlay"
         @prev-channel="prevChannel"
@@ -237,7 +246,6 @@ const toggleFullscreen = () => {
         :channel-desc="`${currentChannel.groupName} · 无信号`"
         :logo-text="currentChannel.name.split('-')[0]?.trim() || 'TV'"
         :is-favorite="favoriteStore.isFavorite(currentChannel.id)"
-        :volume="volume"
         @toggle-favorite="currentChannel && handleToggleFavorite(currentChannel)"
         @toggle-play="togglePlay"
         @prev-channel="prevChannel"

@@ -17,6 +17,7 @@ export const usePlayerStore = defineStore('player', {
     setCurrentTime(time: number) { this.currentTime = time },
     setTotalTime(time: number) { this.totalTime = time },
     setVolume(vol: number) { this.volume = Math.max(0, Math.min(1, vol)) },
+    setMuted(muted: boolean) { this.muted = muted },
     toggleMute() { this.muted = !this.muted },
     setError(msg: string | null) { this.error = msg },
     setLoading(loading: boolean) { this.loading = loading },
@@ -27,6 +28,8 @@ export const usePlayerStore = defineStore('player', {
       this.loading = false
       this.currentTime = 0
       this.totalTime = 0
+      this.volume = 1
+      this.muted = false
     }
   }
 })

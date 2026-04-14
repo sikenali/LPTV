@@ -82,9 +82,7 @@ function initPlayer() {
   }
   video.onvolumechange = () => {
     playerStore.setVolume(video.volume)
-    if (video.muted !== playerStore.muted) {
-      playerStore.toggleMute()
-    }
+    playerStore.setMuted(video.muted)
   }
 }
 

@@ -25,16 +25,12 @@ interface Props {
   channelDesc: string
   logoText?: string
   isFavorite?: boolean
-  volume?: number
-  isMuted?: boolean
   programs?: ProgramItem[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
   logoText: 'CCTV1',
   isFavorite: false,
-  volume: 72,
-  isMuted: false,
   programs: () => []
 })
 
@@ -44,10 +40,6 @@ const emit = defineEmits<{
   prevChannel: []
   nextChannel: []
   fullscreen: []
-  changeVolume: [volume: number]
-  toggleMute: []
-  updateProgress: [progress: number]
-  playStateChange: [isPlaying: boolean]
 }>()
 
 const playerStore = usePlayerStore()
@@ -60,7 +52,7 @@ const progress = computed(() => {
   if (playerStore.totalTime === 0) return 0
   return (playerStore.currentTime / playerStore.totalTime) * 100
 })
-const currentVolume = computed(() => props.volume)
+const currentVolume = computed(() => Math.round(playerStore.volume * 100))
 const currentMuted = computed(() => playerStore.muted)
 
 function formatTime(seconds: number): string {
@@ -80,20 +72,35 @@ const handleProgressClick = (event: MouseEvent) => {
   const bar = (event.currentTarget as HTMLElement).querySelector('.progress-bar')
   if (!bar) return
   const rect = bar.getBoundingClientRect()
-  const percent = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100))
-  emit('updateProgress', percent)
+  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+  const video = document.querySelector('.video-player video') as HTMLVideoElement
+  if (video && video.duration && !isNaN(video.duration) && isFinite(video.duration)) {
+    video.currentTime = ratio * video.duration
+  }
 }
 
 const handleVolumeClick = (event: MouseEvent) => {
   const bar = (event.currentTarget as HTMLElement)
   const rect = bar.getBoundingClientRect()
-  const percent = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100))
-  emit('changeVolume', percent)
+  const percent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+  const video = document.querySelector('.video-player video') as HTMLVideoElement
+  if (video) {
+    video.volume = percent
+    playerStore.setVolume(percent)
+  }
+}
+
+const toggleMuteState = () => {
+  const video = document.querySelector('.video-player video') as HTMLVideoElement
+  if (video) {
+    video.muted = !video.muted
+    playerStore.setMuted(video.muted)
+  }
 }
 
 const togglePlayState = () => {
+  // 直接触发父组件的 togglePlay，该函数会操作 video 元素
   emit('togglePlay')
-  emit('playStateChange', !playerStore.isPlaying)
 }
 </script>
 
@@ -165,7 +172,7 @@ const togglePlayState = () => {
 
         <div class="controls-right">
           <div class="volume-control">
-            <button class="volume-icon-btn" @click="emit('toggleMute')">
+            <button class="volume-icon-btn" @click="toggleMuteState">
               <RiVolumeMuteLine v-if="currentMuted" class="volume-icon" />
               <RiVolumeUpLine v-else class="volume-icon" />
             </button>
