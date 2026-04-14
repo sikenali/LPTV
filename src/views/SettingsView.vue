@@ -2,32 +2,29 @@
 import { ref, onMounted } from 'vue'
 import SourceItem from '@/components/SourceItem.vue'
 import ImportSourceModal from '@/components/ImportSourceModal.vue'
-import ManagementView from '@/views/ManagementView.vue'
 import { useSourceStore } from '@/stores/source'
 import { usePlayerSettingsStore } from '@/stores/player-settings'
 import { useScheduleSettingsStore } from '@/stores/schedule-settings'
 import type { Source } from '@/types/source'
 import {
-  RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine, RiDatabaseLine,
-  RiFolderLine, RiUploadCloud2Line,
-  RiFilmLine, RiTv2Line,
+  RiLink, RiTimerLine, RiPlayCircleLine, RiPaletteLine, RiInformationLine,
+  RiCloudLine,
+  RiFilmLine, RiTv2Line, RiTvLine, RiCpuLine, RiBrushLine,
+  RiSettings3Line, RiShieldCheckLine, RiFileCodeLine,
   RiCheckLine
 } from '@remixicon/vue'
 import { switchTheme, switchAccentColor, switchFontSize, getThemeSettings } from '@/services/theme'
 import { importSourceFromFile, addSourceFromUrl } from '@/services/source-loader'
 import { executeSourceUpdate, rescheduleTimer } from '@/services/schedule-manager'
-import { getAllSources } from '@/db/queries/sources'
 
 const sourceStore = useSourceStore()
 const playerSettings = usePlayerSettingsStore()
 const scheduleSettings = useScheduleSettingsStore()
 
-const activeTab = ref<'source' | 'management' | 'schedule' | 'player' | 'ui' | 'about'>('source')
-const addMethod = ref<'url' | 'file'>('url')
+const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
 const sourceName = ref('')
 const sourceUrl = ref('')
 const showImportModal = ref(false)
-const fileInputRef = ref<HTMLInputElement | null>(null)
 
 // UI Settings State - 从 localStorage 加载
 const settings = getThemeSettings()
@@ -108,63 +105,12 @@ const handleImport = async (data: { name: string; url: string; type: 'url' | 'fi
   }
 }
 
-// 处理文件选择（点击或拖拽）
-const handleFileSelect = async (file: File) => {
-  if (!file.name.match(/\.(m3u|m3u8)$/i)) {
-    alert('请选择 .m3u 或 .m3u8 格式的文件')
-    return
-  }
-
-  try {
-    const content = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = reject
-      reader.readAsText(file)
-    })
-
-    const name = file.name.replace(/\.(m3u|m3u8)$/i, '')
-    await handleImport({ name, url: content, type: 'file' })
-  } catch (error) {
-    console.error('文件读取失败:', error)
-    alert('文件读取失败，请重试')
-  }
-}
-
-// 点击上传区域触发文件选择
-const onUploadAreaClick = () => {
-  fileInputRef.value?.click()
-}
-
-// 文件 input change 事件
-const onFileInputChange = (e: Event) => {
-  const target = e.target as HTMLInputElement
-  if (target.files && target.files[0]) {
-    handleFileSelect(target.files[0])
-  }
-}
-
-// 拖拽事件处理
-const onDragOver = (e: DragEvent) => {
-  e.preventDefault()
-  e.stopPropagation()
-}
-
-const onDrop = (e: DragEvent) => {
-  e.preventDefault()
-  e.stopPropagation()
-  if (e.dataTransfer?.files && e.dataTransfer.files[0]) {
-    handleFileSelect(e.dataTransfer.files[0])
-  }
-}
-
 onMounted(() => {
   loadSources()
 })
 
 const menuItems = [
   { id: 'source' as const, label: '源管理', icon: RiLink },
-  { id: 'management' as const, label: '数据管理', icon: RiDatabaseLine },
   { id: 'schedule' as const, label: '定时管理', icon: RiTimerLine },
   { id: 'player' as const, label: '播放设置', icon: RiPlayCircleLine },
   { id: 'ui' as const, label: '界面设置', icon: RiPaletteLine },
@@ -191,34 +137,69 @@ const handleFontSizeChange = (size: 'small' | 'medium' | 'large') => {
   switchFontSize(size)
 }
 
-// 定时管理处理函数
-const handleBatchOperation = () => {
-  // 批量操作：全选/全不选所有源的定时开关
-  const allSources = getAllSources()
-  const allEnabled = allSources.every(s => scheduleSettings.perSource[s.id]?.enabled)
-  allSources.forEach(s => {
-    scheduleSettings.setSourceSchedule(s.id, {
-      enabled: !allEnabled,
-      frequency: scheduleSettings.perSource[s.id]?.frequency ?? '6h',
-      time: scheduleSettings.perSource[s.id]?.time ?? '00:00'
-    })
-  })
-  rescheduleTimer()
-}
+// 远程导入状态
+const isFetchingRemote = ref(false)
+const remoteProgressPercent = ref(0)
+const remoteUrlInput = ref('')
+const importResult = ref<{ success: boolean; message: string } | null>(null)
 
-const handleSourceUpdate = async (sourceId: string) => {
-  console.log('立即更新源:', sourceId)
-  await executeSourceUpdate(sourceId)
-}
+// 从 URL 远程导入并添加到源列表
+async function handleRemoteImportFromUrl() {
+  const url = remoteUrlInput.value.trim()
+  if (!url || isFetchingRemote.value) return
 
-const handleClearHistory = () => {
-  if (confirm('确定要清空所有更新历史记录吗？')) {
-    scheduleSettings.clearHistory()
+  isFetchingRemote.value = true
+  remoteProgressPercent.value = 0
+  importResult.value = null
+
+  try {
+    // 模拟进度
+    const progressInterval = setInterval(() => {
+      if (remoteProgressPercent.value < 90) {
+        remoteProgressPercent.value += 10
+      }
+    }, 200)
+
+    // 使用 addSourceFromUrl 直接添加源（内部会处理下载、缓存、解析）
+    const sourceName = url.includes('/') ? url.split('/').pop()?.split('?')[0] || 'remote-source' : 'remote-source'
+    const newSource = await addSourceFromUrl(sourceName, url)
+
+    clearInterval(progressInterval)
+    remoteProgressPercent.value = 100
+
+    if (newSource) {
+      importResult.value = {
+        success: true,
+        message: `成功导入 ${newSource.channelCount} 个频道`
+      }
+      remoteUrlInput.value = ''
+      // 刷新源列表
+      await loadSources()
+    } else {
+      importResult.value = {
+        success: false,
+        message: '导入失败，请检查URL是否正确'
+      }
+    }
+  } catch (error) {
+    console.error('远程导入失败:', error)
+    importResult.value = {
+      success: false,
+      message: '导入失败: ' + (error instanceof Error ? error.message : '未知错误')
+    }
+  } finally {
+    // 3秒后清除结果提示
+    setTimeout(() => {
+      importResult.value = null
+    }, 5000)
+    isFetchingRemote.value = false
   }
 }
 
-const handleViewLog = (_recordId: string) => {
-  alert('日志详情功能开发中...')
+// 定时管理处理函数
+const handleSourceUpdate = async (sourceId: string) => {
+  console.log('立即更新源:', sourceId)
+  await executeSourceUpdate(sourceId)
 }
 
 // Player Settings 已从 playerSettings Store 管理
@@ -226,31 +207,6 @@ const handleViewLog = (_recordId: string) => {
 // 辅助函数：处理 checkbox 变化
 const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
   setter((e.target as HTMLInputElement).checked)
-}
-
-// 辅助函数：频率标签映射
-function frequencyLabel(freq: string): string {
-  const map: Record<string, string> = { '1h': '每小时', '6h': '每6小时', '12h': '每12小时', '24h': '每天', '7d': '每周' }
-  return map[freq] || freq
-}
-
-// 辅助函数：频率转毫秒
-function frequencyToMsMap(freq: string): number {
-  const map: Record<string, number> = { '1h': 3600000, '6h': 21600000, '12h': 43200000, '24h': 86400000, '7d': 604800000 }
-  return map[freq] || 21600000
-}
-
-// 辅助函数：格式化下次更新时间
-function formatNextUpdate(lastUpdate: Date | null, frequency: string): string {
-  if (!lastUpdate) return '未更新'
-  const next = new Date(new Date(lastUpdate).getTime() + frequencyToMsMap(frequency))
-  return `下次: ${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`
-}
-
-// 辅助函数：格式化历史时间
-function formatHistoryTime(timestamp: string): string {
-  const d = new Date(timestamp)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`
 }
 </script>
 
@@ -275,58 +231,75 @@ function formatHistoryTime(timestamp: string): string {
     <main class="settings-content">
       <!-- 源管理模块 -->
       <div v-if="activeTab === 'source'" class="source-management">
-        <!-- 模块标题 -->
         <div class="module-header">
           <h2 class="module-title">源管理</h2>
           <p class="module-desc">添加和管理你的直播源地址</p>
         </div>
-        <!-- 添加源区域 -->
-        <div class="add-source-section">
-          <h3 class="section-title">添加直播源</h3>
-          <p class="section-desc">支持 m3u/m3u8 格式的直播源文件</p>
-          <!-- 添加方式选择 -->
-          <div class="add-method-tabs">
-            <button class="method-tab" :class="{ active: addMethod === 'url' }" @click="addMethod = 'url'">
-              <RiLink class="method-icon" />
-              <span class="method-label">URL 地址添加</span>
-              <span class="method-desc">输入直播源的网络地址</span>
-            </button>
-            <button class="method-tab" :class="{ active: addMethod === 'file' }" @click="addMethod = 'file'">
-              <RiFolderLine class="method-icon" />
-              <span class="method-label">本地文件导入</span>
-              <span class="method-desc">从本地选择 m3u 文件</span>
-            </button>
-          </div>
-          <!-- URL 输入表单 -->
-          <div v-if="addMethod === 'url'" class="url-form">
-            <div class="form-group">
-              <label class="form-label">源名称</label>
-              <input v-model="sourceName" type="text" class="form-input" placeholder="自定义源名称（可选）" />
+
+        <div class="settings-form-grid">
+          <!-- 远程导入卡片 -->
+          <div class="settings-card source-remote-card">
+            <div class="card-header">
+              <div class="card-icon remote-icon">
+                <RiCloudLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">远程导入</h3>
             </div>
-            <div class="form-group">
-              <label class="form-label">直播源地址</label>
-              <input v-model="sourceUrl" type="text" class="form-input" placeholder="请输入 m3u/m3u8 直播源地址" />
+            <div class="card-content">
+              <div class="setting-row remote-input-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">直播源地址</label>
+                  <p class="setting-desc">输入 m3u/m3u8 远程直播源地址，自动抓取并添加到源列表</p>
+                </div>
+                <div class="remote-input-actions">
+                  <input
+                    v-model="remoteUrlInput"
+                    type="text"
+                    class="remote-url-input"
+                    placeholder="请输入 m3u/m3u8 地址"
+                    @keyup.enter="handleRemoteImportFromUrl"
+                  />
+                  <button class="btn-add-url" @click="handleRemoteImportFromUrl" :disabled="!remoteUrlInput.trim() || isFetchingRemote">
+                    {{ isFetchingRemote ? '导入中...' : '导入' }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="isFetchingRemote" class="progress-container">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: remoteProgressPercent + '%' }"></div>
+                </div>
+                <span class="progress-text">{{ remoteProgressPercent }}%</span>
+              </div>
+
+              <div v-if="importResult" class="import-result" :class="{ success: importResult.success, error: !importResult.success }">
+                <span class="result-icon">{{ importResult.success ? '✓' : '✗' }}</span>
+                <span class="result-text">{{ importResult.message }}</span>
+              </div>
             </div>
-            <button class="btn-add-source" @click="showImportModal = true">添加源</button>
           </div>
-          <div v-else class="file-upload-area" @click="onUploadAreaClick" @dragover="onDragOver" @drop="onDrop">
-            <input
-              ref="fileInputRef"
-              type="file"
-              accept=".m3u,.m3u8"
-              class="file-input-hidden"
-              @change="onFileInputChange"
-            />
-            <div class="upload-placeholder">
-              <RiUploadCloud2Line class="upload-icon" />
-              <span class="upload-text">点击或拖拽 m3u/m3u8 文件到此处</span>
+
+          <!-- 添加源区域 - 2个卡片并排 -->
+          <div class="settings-card source-url-card">
+            <div class="card-header">
+              <div class="card-icon url-icon">
+                <RiLink class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">添加URL地址</h3>
+            </div>
+            <div class="card-content">
+              <button class="add-url-btn" @click="showImportModal = true">
+                <RiLink class="add-btn-icon" />
+                <span>输入直播源的网络地址</span>
+              </button>
             </div>
           </div>
         </div>
-        <!-- 已添加源列表 -->
+
+        <!-- 源列表管理 -->
         <div class="source-list-section">
           <div class="source-list-header">
-            <h3 class="source-list-title">已添加的源</h3>
+            <h3 class="source-list-title">源列表管理</h3>
             <span class="source-count">共 {{ sources.length }} 个</span>
           </div>
           <div class="source-table">
@@ -335,6 +308,7 @@ function formatHistoryTime(timestamp: string): string {
               <span class="col-name">源名称</span>
               <span class="col-url">源地址</span>
               <span class="col-channels">频道数</span>
+              <span class="col-schedule">更新设置</span>
               <span class="col-update">更新时间</span>
               <span class="col-actions">操作</span>
             </div>
@@ -347,200 +321,119 @@ function formatHistoryTime(timestamp: string): string {
                 @delete="handleDelete"
                 @switch="handleSwitchSource"
                 @edit="handleEditSource"
+                @update="handleSourceUpdate"
               />
             </div>
           </div>
         </div>
       </div>
-      <!-- 数据管理模块 -->
-      <div v-else-if="activeTab === 'management'" class="management-tab">
-        <ManagementView />
-      </div>
       <!-- 定时管理模块 -->
       <div v-else-if="activeTab === 'schedule'" class="schedule-management">
-        <!-- 模块标题 -->
-        <div class="schedule-module-header">
-          <h2 class="schedule-module-title">定时管理</h2>
-          <p class="schedule-module-desc">配置直播源自动更新规则，确保频道列表始终保持最新状态</p>
+        <div class="module-header">
+          <h2 class="module-title">定时管理</h2>
+          <p class="module-desc">配置直播源自动更新规则，确保频道列表始终保持最新状态</p>
         </div>
 
-        <!-- 全局定时设置卡片 -->
-        <div class="schedule-card">
-          <!-- 全局自动更新行 -->
-          <div class="schedule-card-header">
-            <div class="schedule-card-title-group">
-              <h3 class="schedule-card-title-text">全局自动更新</h3>
-              <p class="schedule-card-title-desc">开启后所有直播源将按照统一设置的周期自动更新</p>
+        <div class="settings-form-grid">
+          <!-- 更新控制卡片 -->
+          <div class="settings-card schedule-control-card">
+            <div class="card-header">
+              <div class="card-icon schedule-icon">
+                <RiTimerLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">更新控制</h3>
             </div>
-            <label class="schedule-toggle">
-              <input type="checkbox" :checked="scheduleSettings.globalEnabled" @change="onCheckboxChange((v) => { scheduleSettings.setGlobalEnabled(v); rescheduleTimer() })" />
-              <span class="schedule-toggle-slider"></span>
-            </label>
-          </div>
-
-          <!-- 更新频率 -->
-          <div class="schedule-setting-block">
-            <span class="schedule-block-label">更新频率</span>
-            <div class="schedule-frequency-row">
-              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '1h' }" @click="scheduleSettings.setFrequency('1h'); rescheduleTimer()">每小时</button>
-              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '6h' }" @click="scheduleSettings.setFrequency('6h'); rescheduleTimer()">每6小时</button>
-              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '24h' }" @click="scheduleSettings.setFrequency('24h'); rescheduleTimer()">每天</button>
-              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '7d' }" @click="scheduleSettings.setFrequency('7d'); rescheduleTimer()">每周</button>
-              <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '12h' }" @click="scheduleSettings.setFrequency('12h'); rescheduleTimer()">每12小时</button>
-            </div>
-          </div>
-
-          <!-- 更新时间 和 重试次数 -->
-          <div class="schedule-inline-row">
-            <div class="schedule-inline-col">
-              <span class="schedule-block-label">更新时间</span>
-              <input type="time" :value="scheduleSettings.time" @change="scheduleSettings.setTime(($event.target as HTMLInputElement).value)" class="schedule-input" />
-              <span class="schedule-input-hint">设置每天自动更新的具体时间</span>
-            </div>
-            <div class="schedule-inline-col">
-              <span class="schedule-block-label">重试次数</span>
-              <input type="number" :value="scheduleSettings.retries" @change="scheduleSettings.setRetries(parseInt(($event.target as HTMLInputElement).value))" class="schedule-input" min="0" max="10" />
-              <span class="schedule-input-hint">更新失败时的自动重试次数</span>
-            </div>
-          </div>
-
-          <!-- 更新通知开关行 -->
-          <div class="schedule-toggle-row-new">
-            <label class="schedule-toggle-mini">
-              <input type="checkbox" :checked="scheduleSettings.notification" @change="onCheckboxChange(scheduleSettings.setNotification)" />
-              <span class="schedule-toggle-mini-slider"></span>
-            </label>
-            <div class="schedule-toggle-info-new">
-              <span class="schedule-toggle-label-new">更新完成后发送通知</span>
-              <span class="schedule-toggle-desc-new">直播源更新完成后在屏幕右上角显示通知提示</span>
-            </div>
-          </div>
-
-          <!-- 仅在WiFi环境下更新开关行 -->
-          <div class="schedule-toggle-row-new">
-            <label class="schedule-toggle-mini">
-              <input type="checkbox" :checked="scheduleSettings.wifiOnly" @change="onCheckboxChange(scheduleSettings.setWifiOnly)" />
-              <span class="schedule-toggle-mini-slider"></span>
-            </label>
-            <div class="schedule-toggle-info-new" :class="{ disabled: !scheduleSettings.wifiOnly }">
-              <span class="schedule-toggle-label-new">仅在WiFi环境下更新</span>
-              <span class="schedule-toggle-desc-new">开启后将避免使用移动数据流量进行更新</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 间隔 spacer -->
-        <div class="schedule-spacer"></div>
-
-        <!-- 单独源定时设置 -->
-        <div class="schedule-source-section">
-          <div class="schedule-source-header">
-            <div class="schedule-source-title-group">
-              <h3 class="schedule-source-title">单独源更新设置</h3>
-              <p class="schedule-source-desc">为不同直播源设置独立的更新规则，优先级高于全局设置</p>
-            </div>
-            <button class="schedule-batch-btn" @click="handleBatchOperation">批量操作</button>
-          </div>
-
-          <!-- 源定时设置列表 -->
-          <div class="schedule-source-list">
-            <!-- 表头 -->
-            <div class="schedule-source-table-header">
-              <span class="ss-col-enable">启用</span>
-              <span class="ss-col-name">源名称</span>
-              <span class="ss-col-freq">更新频率</span>
-              <span class="ss-col-time">更新时间</span>
-              <span class="ss-col-result">上次更新结果</span>
-              <span class="ss-col-next">下次更新时间</span>
-              <span class="ss-col-action">操作</span>
-            </div>
-            <!-- 列表内容 -->
-            <div class="schedule-source-list-body">
-              <div
-                v-for="source in sources"
-                :key="source.id"
-                class="schedule-source-row"
-              >
-                <div class="ss-col-enable">
-                  <label class="ss-toggle">
-                    <input
-                      type="checkbox"
-                      :checked="scheduleSettings.perSource[source.id]?.enabled ?? false"
-                      @change="scheduleSettings.setSourceSchedule(source.id, {
-                        enabled: ($event.target as HTMLInputElement).checked,
-                        frequency: scheduleSettings.perSource[source.id]?.frequency ?? scheduleSettings.frequency,
-                        time: scheduleSettings.perSource[source.id]?.time ?? scheduleSettings.time
-                      }); rescheduleTimer()"
-                    />
-                    <span class="ss-toggle-slider"></span>
-                  </label>
+            <div class="card-content">
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">全局自动更新</label>
+                  <p class="setting-desc">开启后所有直播源将按照统一设置的周期自动更新</p>
                 </div>
-                <span class="ss-source-name" :class="{ 'ss-source-disabled': !(scheduleSettings.perSource[source.id]?.enabled ?? false) }">{{ source.name }}</span>
-                <div class="ss-col-freq">
-                  <span class="ss-freq-tag" :class="{ active: scheduleSettings.perSource[source.id]?.enabled }">
-                    {{ frequencyLabel(scheduleSettings.perSource[source.id]?.frequency ?? scheduleSettings.frequency) }}
-                  </span>
-                </div>
-                <span class="ss-time-text" :class="{ 'ss-time-disabled': !(scheduleSettings.perSource[source.id]?.enabled ?? false) }">
-                  {{ scheduleSettings.perSource[source.id]?.time ?? scheduleSettings.time }}
-                </span>
-                <div class="ss-result-success" :class="{ 'ss-result-warning': source.status !== 'active' }">
-                  <span class="ss-status-dot" :class="source.status === 'active' ? 'ss-dot-success' : 'ss-dot-warning'"></span>
-                  <span>{{ source.status === 'active' ? `正常 (${source.channelCount}个频道)` : source.status }}</span>
-                </div>
-                <span class="ss-next-time">{{ formatNextUpdate(source.lastUpdateAt, scheduleSettings.perSource[source.id]?.frequency ?? scheduleSettings.frequency) }}</span>
-                <div class="ss-col-action">
-                  <button class="ss-update-btn" @click="handleSourceUpdate(source.id)">立即更新</button>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="scheduleSettings.globalEnabled" @change="onCheckboxChange((v) => { scheduleSettings.setGlobalEnabled(v); rescheduleTimer() })" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">更新频率</label>
+                  <p class="setting-desc">设置自动更新的时间间隔</p>
                 </div>
               </div>
-              <div v-if="sources.length === 0" class="empty-schedule-hint">
-                <span>暂无直播源，请先在源管理页面添加直播源</span>
+              <div class="schedule-frequency-row">
+                <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '1h' }" @click="scheduleSettings.setFrequency('1h'); rescheduleTimer()">
+                  <span class="freq-label">每小时</span>
+                </button>
+                <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '6h' }" @click="scheduleSettings.setFrequency('6h'); rescheduleTimer()">
+                  <span class="freq-label">每6小时</span>
+                </button>
+                <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '12h' }" @click="scheduleSettings.setFrequency('12h'); rescheduleTimer()">
+                  <span class="freq-label">每12小时</span>
+                </button>
+                <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '24h' }" @click="scheduleSettings.setFrequency('24h'); rescheduleTimer()">
+                  <span class="freq-label">每天</span>
+                </button>
+                <button class="schedule-freq-btn" :class="{ active: scheduleSettings.frequency === '7d' }" @click="scheduleSettings.setFrequency('7d'); rescheduleTimer()">
+                  <span class="freq-label">每周</span>
+                </button>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- 间隔 spacer -->
-        <div class="schedule-spacer"></div>
-
-        <!-- 更新历史记录 -->
-        <div class="schedule-history-section">
-          <div class="schedule-history-header">
-            <div class="schedule-history-title-group">
-              <h3 class="schedule-history-title">更新历史记录</h3>
-              <p class="schedule-history-desc">查看最近的更新记录和详细日志</p>
+          <!-- 更新设置卡片 -->
+          <div class="settings-card schedule-settings-card">
+            <div class="card-header">
+              <div class="card-icon settings-icon">
+                <RiSettings3Line class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">更新设置</h3>
             </div>
-            <button class="schedule-clear-btn" @click="handleClearHistory">清空记录</button>
+            <div class="card-content">
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">更新时间</label>
+                  <p class="setting-desc">设置每天自动更新的具体时间</p>
+                </div>
+                <input type="time" :value="scheduleSettings.time" @change="scheduleSettings.setTime(($event.target as HTMLInputElement).value)" class="schedule-input-time" />
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">重试次数</label>
+                  <p class="setting-desc">更新失败时的自动重试次数</p>
+                </div>
+                <input type="number" :value="scheduleSettings.retries" @change="scheduleSettings.setRetries(parseInt(($event.target as HTMLInputElement).value))" class="schedule-input-number" min="0" max="10" />
+              </div>
+            </div>
           </div>
 
-          <!-- 历史记录列表 -->
-          <div class="schedule-history-list">
-            <!-- 表头 -->
-            <div class="schedule-history-table-header">
-              <span class="sh-col-time">更新时间</span>
-              <span class="sh-col-source">源名称</span>
-              <span class="sh-col-status">状态</span>
-              <span class="sh-col-channels">频道数量</span>
-              <span class="sh-col-detail">备注</span>
-              <span class="sh-col-action">操作</span>
-            </div>
-            <!-- 列表内容 -->
-            <div class="schedule-history-list-body">
-              <div v-for="entry in scheduleSettings.history" :key="entry.id" class="schedule-history-row">
-                <span class="sh-time-text">{{ formatHistoryTime(entry.timestamp) }}</span>
-                <span class="sh-source-name">{{ entry.sourceName }}</span>
-                <div :class="entry.status === 'success' ? 'sh-status-success' : 'sh-status-failed'">
-                  <span :class="entry.status === 'success' ? 'sh-status-dot sh-dot-success' : 'sh-status-dot sh-dot-failed'"></span>
-                  <span>{{ entry.status === 'success' ? '成功' : '失败' }}</span>
-                </div>
-                <span class="sh-channels-count" :class="{ 'sh-channels-empty': entry.channelCount === 0 }">{{ entry.channelCount || '-' }}</span>
-                <span class="sh-detail-text">{{ entry.message }}</span>
-                <div class="sh-col-action">
-                  <button class="sh-log-btn" @click="handleViewLog(entry.id)">查看日志</button>
-                </div>
+          <!-- 高级选项卡片 -->
+          <div class="settings-card schedule-advanced-card">
+            <div class="card-header">
+              <div class="card-icon advanced-icon">
+                <RiShieldCheckLine class="card-icon-svg" />
               </div>
-              <div v-if="scheduleSettings.history.length === 0" class="empty-history-hint">
-                <span>暂无更新历史记录</span>
+              <h3 class="card-title">高级选项</h3>
+            </div>
+            <div class="card-content">
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">更新通知</label>
+                  <p class="setting-desc">直播源更新完成后在屏幕右上角显示通知提示</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="scheduleSettings.notification" @change="onCheckboxChange(scheduleSettings.setNotification)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">仅在WiFi环境下更新</label>
+                  <p class="setting-desc">开启后将避免使用移动数据流量进行更新</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="scheduleSettings.wifiOnly" @change="onCheckboxChange(scheduleSettings.setWifiOnly)" />
+                  <span class="toggle-slider"></span>
+                </label>
               </div>
             </div>
           </div>
@@ -553,149 +446,145 @@ function formatHistoryTime(timestamp: string): string {
           <p class="module-desc">自定义界面外观和交互体验</p>
         </div>
 
-        <!-- 主题设置卡片 -->
-        <div class="theme-settings-card">
-          <h3 class="theme-settings-title">主题设置</h3>
-
-          <!-- 主题选择区域 -->
-          <div class="theme-section">
-            <h4 class="theme-section-title">颜色主题</h4>
-            <div class="theme-options-row">
-              <!-- 深色主题 - 选中 -->
-              <button class="theme-option-card" :class="{ active: theme === 'dark' }" @click="handleThemeChange('dark')">
-                <div class="theme-preview-box dark-preview">
-                  <div class="preview-top-bar"></div>
-                  <div class="preview-sidebar-block"></div>
-                  <div class="preview-main-block">
-                    <div class="preview-player-block"></div>
-                  </div>
-                </div>
-                <div class="theme-option-info">
-                  <span class="theme-option-name">深色主题</span>
-                  <span class="theme-check-icon" v-if="theme === 'dark'">
-                    <RiCheckLine class="check-icon" />
-                  </span>
-                  <span class="theme-check-unselected" v-if="theme !== 'dark'"></span>
-                </div>
-                <span class="theme-option-desc">护眼模式，适合长时间观看</span>
-              </button>
-
-              <!-- 蓝色主题 -->
-              <button class="theme-option-card" :class="{ active: theme === 'blue' }" @click="handleThemeChange('blue')">
-                <div class="theme-preview-box blue-preview">
-                  <div class="preview-top-bar"></div>
-                  <div class="preview-sidebar-block"></div>
-                  <div class="preview-main-block">
-                    <div class="preview-player-block"></div>
-                  </div>
-                </div>
-                <div class="theme-option-info">
-                  <span class="theme-option-name">蓝色主题</span>
-                  <span class="theme-check-unselected" v-if="theme !== 'blue'"></span>
-                </div>
-                <span class="theme-option-desc">清爽蓝色，视觉效果更佳</span>
-              </button>
-
-              <!-- 纯黑主题 -->
-              <button class="theme-option-card" :class="{ active: theme === 'black' }" @click="handleThemeChange('black')">
-                <div class="theme-preview-box black-preview">
-                  <div class="preview-top-bar"></div>
-                  <div class="preview-sidebar-block"></div>
-                  <div class="preview-main-block">
-                    <div class="preview-player-block"></div>
-                  </div>
-                </div>
-                <div class="theme-option-info">
-                  <span class="theme-option-name">纯黑主题</span>
-                  <span class="theme-check-unselected" v-if="theme !== 'black'"></span>
-                </div>
-                <span class="theme-option-desc">OLED屏幕专用，更省电</span>
-              </button>
-
-              <!-- 浅色主题 -->
-              <button class="theme-option-card" :class="{ active: theme === 'light' }" @click="handleThemeChange('light')">
-                <div class="theme-preview-box light-preview">
-                  <div class="preview-top-bar"></div>
-                  <div class="preview-sidebar-block"></div>
-                  <div class="preview-main-block">
-                    <div class="preview-player-block"></div>
-                  </div>
-                </div>
-                <div class="theme-option-info">
-                  <span class="theme-option-name">浅色主题</span>
-                  <span class="theme-check-unselected" v-if="theme !== 'light'"></span>
-                </div>
-                <span class="theme-option-desc">明亮清晰，适合白天使用</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- 主题色选择和字体大小并排 -->
-          <div class="theme-row-inline">
-            <div class="accent-color-section">
-              <h4 class="theme-section-title">主题色</h4>
-              <div class="accent-color-container">
-                <div class="accent-color-row">
-                  <button class="accent-color-dot" :class="{ active: accentColor === 'blue' }" style="background-color: #3b82f6;" @click="handleAccentColorChange('#3b82f6')">
-                    <RiCheckLine v-if="accentColor === 'blue'" class="color-check-icon" />
-                  </button>
-                  <button class="accent-color-dot" :class="{ active: accentColor === 'red' }" style="background-color: #ef4444;" @click="handleAccentColorChange('#ef4444')"></button>
-                  <button class="accent-color-dot" :class="{ active: accentColor === 'green' }" style="background-color: #22c55e;" @click="handleAccentColorChange('#22c55e')"></button>
-                  <button class="accent-color-dot" :class="{ active: accentColor === 'purple' }" style="background-color: #a855f7;" @click="handleAccentColorChange('#a855f7')"></button>
-                  <button class="accent-color-dot" :class="{ active: accentColor === 'orange' }" style="background-color: #f97316;" @click="handleAccentColorChange('#f97316')"></button>
-                  <button class="accent-color-dot" :class="{ active: accentColor === 'cyan' }" style="background-color: #06b6d4;" @click="handleAccentColorChange('#06b6d4')"></button>
-                  <button class="accent-color-dot" :class="{ active: accentColor === 'pink' }" style="background-color: #ec4899;" @click="handleAccentColorChange('#ec4899')"></button>
-                </div>
+        <div class="settings-form-grid">
+          <!-- 颜色主题卡片 -->
+          <div class="settings-card ui-theme-card">
+            <div class="card-header">
+              <div class="card-icon theme-icon">
+                <RiPaletteLine class="card-icon-svg" />
               </div>
+              <h3 class="card-title">颜色主题</h3>
             </div>
-
-            <!-- 字体大小 -->
-            <div class="font-size-section">
-              <h4 class="theme-section-title">字体大小</h4>
-              <div class="font-size-container">
-                <div class="option-grid-3">
-                <button class="option-card-small" :class="{ active: fontSize === 'small' }" @click="handleFontSizeChange('small')">
-                  <span class="option-label">小</span>
-                </button>
-                <button class="option-card-small" :class="{ active: fontSize === 'medium' }" @click="handleFontSizeChange('medium')">
-                  <span class="option-label">中</span>
-                </button>
-                <button class="option-card-small" :class="{ active: fontSize === 'large' }" @click="handleFontSizeChange('large')">
-                  <span class="option-label">大</span>
-                </button>
-              </div>
+            <div class="card-content">
+              <div class="theme-options-grid">
+                <label class="theme-option" :class="{ active: theme === 'dark' }">
+                  <input type="radio" name="theme" :checked="theme === 'dark'" @change="handleThemeChange('dark')" />
+                  <div class="theme-preview-box dark-preview">
+                    <div class="preview-top-bar"></div>
+                    <div class="preview-sidebar-block"></div>
+                    <div class="preview-main-block"></div>
+                  </div>
+                  <div class="theme-option-info">
+                    <span class="theme-option-name">深色主题</span>
+                    <span class="theme-radio-indicator"><span class="radio-box-inner"></span></span>
+                  </div>
+                </label>
+                <label class="theme-option" :class="{ active: theme === 'blue' }">
+                  <input type="radio" name="theme" :checked="theme === 'blue'" @change="handleThemeChange('blue')" />
+                  <div class="theme-preview-box blue-preview">
+                    <div class="preview-top-bar"></div>
+                    <div class="preview-sidebar-block"></div>
+                    <div class="preview-main-block"></div>
+                  </div>
+                  <div class="theme-option-info">
+                    <span class="theme-option-name">蓝色主题</span>
+                    <span class="theme-radio-indicator"><span class="radio-box-inner"></span></span>
+                  </div>
+                </label>
+                <label class="theme-option" :class="{ active: theme === 'black' }">
+                  <input type="radio" name="theme" :checked="theme === 'black'" @change="handleThemeChange('black')" />
+                  <div class="theme-preview-box black-preview">
+                    <div class="preview-top-bar"></div>
+                    <div class="preview-sidebar-block"></div>
+                    <div class="preview-main-block"></div>
+                  </div>
+                  <div class="theme-option-info">
+                    <span class="theme-option-name">纯黑主题</span>
+                    <span class="theme-radio-indicator"><span class="radio-box-inner"></span></span>
+                  </div>
+                </label>
+                <label class="theme-option" :class="{ active: theme === 'light' }">
+                  <input type="radio" name="theme" :checked="theme === 'light'" @change="handleThemeChange('light')" />
+                  <div class="theme-preview-box light-preview">
+                    <div class="preview-top-bar"></div>
+                    <div class="preview-sidebar-block"></div>
+                    <div class="preview-main-block"></div>
+                  </div>
+                  <div class="theme-option-info">
+                    <span class="theme-option-name">浅色主题</span>
+                    <span class="theme-radio-indicator"><span class="radio-box-inner"></span></span>
+                  </div>
+                </label>
               </div>
             </div>
           </div>
 
-          <!-- 透明效果开关 -->
-          <div class="setting-toggle-row">
-            <div class="setting-toggle-info">
-              <span class="setting-toggle-label">透明效果</span>
-              <span class="setting-toggle-desc">开启界面元素半透明毛玻璃效果</span>
+          <!-- 界面样式卡片 -->
+          <div class="settings-card ui-style-card">
+            <div class="card-header">
+              <div class="card-icon style-icon">
+                <RiBrushLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">界面样式</h3>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" v-model="transparentEffect" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <!-- 圆角大小设置 -->
-          <div class="setting-slider-row">
-            <div class="setting-slider-info">
-              <span class="setting-toggle-label">界面圆角大小</span>
-              <span class="setting-toggle-desc">调整界面元素的圆角弧度</span>
+            <div class="card-content">
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">主题色</label>
+                  <p class="setting-desc">选择应用的主题强调色</p>
+                </div>
+                <div class="accent-color-container">
+                  <div class="accent-color-row">
+                    <button class="accent-color-dot" :class="{ active: accentColor === 'blue' }" style="background-color: #3b82f6;" @click="handleAccentColorChange('#3b82f6')">
+                      <RiCheckLine v-if="accentColor === 'blue'" class="color-check-icon" />
+                    </button>
+                    <button class="accent-color-dot" :class="{ active: accentColor === 'red' }" style="background-color: #ef4444;" @click="handleAccentColorChange('#ef4444')"></button>
+                    <button class="accent-color-dot" :class="{ active: accentColor === 'green' }" style="background-color: #22c55e;" @click="handleAccentColorChange('#22c55e')"></button>
+                    <button class="accent-color-dot" :class="{ active: accentColor === 'purple' }" style="background-color: #a855f7;" @click="handleAccentColorChange('#a855f7')"></button>
+                    <button class="accent-color-dot" :class="{ active: accentColor === 'orange' }" style="background-color: #f97316;" @click="handleAccentColorChange('#f97316')"></button>
+                    <button class="accent-color-dot" :class="{ active: accentColor === 'cyan' }" style="background-color: #06b6d4;" @click="handleAccentColorChange('#06b6d4')"></button>
+                    <button class="accent-color-dot" :class="{ active: accentColor === 'pink' }" style="background-color: #ec4899;" @click="handleAccentColorChange('#ec4899')"></button>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-row font-size-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">字体大小</label>
+                  <p class="setting-desc">选择应用的字体大小</p>
+                </div>
+                <div class="font-size-options">
+                  <div class="radio-group radio-group-horizontal">
+                    <label class="radio-box-item" :class="{ active: fontSize === 'small' }">
+                      <input type="radio" name="font-size" :checked="fontSize === 'small'" @change="handleFontSizeChange('small')" />
+                      <span class="radio-box"><span class="radio-box-inner"></span></span>
+                      <span class="radio-box-label">小</span>
+                    </label>
+                    <label class="radio-box-item" :class="{ active: fontSize === 'medium' }">
+                      <input type="radio" name="font-size" :checked="fontSize === 'medium'" @change="handleFontSizeChange('medium')" />
+                      <span class="radio-box"><span class="radio-box-inner"></span></span>
+                      <span class="radio-box-label">中</span>
+                    </label>
+                    <label class="radio-box-item" :class="{ active: fontSize === 'large' }">
+                      <input type="radio" name="font-size" :checked="fontSize === 'large'" @change="handleFontSizeChange('large')" />
+                      <span class="radio-box"><span class="radio-box-inner"></span></span>
+                      <span class="radio-box-label">大</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">透明效果</label>
+                  <p class="setting-desc">开启界面元素半透明毛玻璃效果</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="transparentEffect" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">圆角弧度</label>
+                  <p class="setting-desc">调整界面元素的圆角弧度</p>
+                </div>
+                <div class="slider-control">
+                  <span class="slider-value">{{ borderRadius }}px</span>
+                  <div class="slider-container">
+                    <input type="range" v-model.number="borderRadius" min="0" max="24" class="custom-range" />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="setting-slider-value">{{ borderRadius }}px</div>
-          </div>
-          <div class="slider-container">
-            <input type="range" v-model.number="borderRadius" min="0" max="24" class="custom-range" />
-          </div>
-          <div class="slider-labels">
-            <span class="slider-label">0px (直角)</span>
-            <span class="slider-label">8px</span>
-            <span class="slider-label">16px</span>
-            <span class="slider-label">24px (大圆角)</span>
           </div>
         </div>
       </div>
@@ -706,127 +595,163 @@ function formatHistoryTime(timestamp: string): string {
           <p class="module-desc">配置播放器内核、解码方式及播放行为</p>
         </div>
 
-        <!-- 基础播放设置卡片 -->
-        <div class="player-settings-card">
-          <h3 class="player-settings-title">基础播放设置</h3>
-
-          <!-- 启动时自动播放 -->
-          <div class="setting-toggle-row">
-            <div class="setting-toggle-info">
-              <span class="setting-toggle-label">启动时自动播放</span>
-              <span class="setting-toggle-desc">软件启动后自动播放上次观看的频道</span>
+        <div class="settings-form-grid">
+          <!-- 播放行为设置卡片 -->
+          <div class="settings-card">
+            <div class="card-header">
+              <div class="card-icon play-icon">
+                <RiPlayCircleLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">播放行为</h3>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" :checked="playerSettings.autoplay" @change="onCheckboxChange(playerSettings.setAutoplay)" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <!-- 切换频道时自动全屏 -->
-          <div class="setting-toggle-row">
-            <div class="setting-toggle-info">
-              <span class="setting-toggle-label">切换频道时自动全屏</span>
-              <span class="setting-toggle-desc">点击频道后自动进入全屏播放模式</span>
+            <div class="card-content">
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">启动时自动播放</label>
+                  <p class="setting-desc">软件启动后自动播放上次观看的频道</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="playerSettings.autoplay" @change="onCheckboxChange(playerSettings.setAutoplay)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">切换频道时自动全屏</label>
+                  <p class="setting-desc">点击频道后自动进入全屏播放模式</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="playerSettings.autoFullscreen" @change="onCheckboxChange(playerSettings.setAutoFullscreen)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">播放时隐藏鼠标</label>
+                  <p class="setting-desc">播放状态下5秒无操作自动隐藏鼠标指针</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="playerSettings.hideMouse" @change="onCheckboxChange(playerSettings.setHideMouse)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="setting-label-group">
+                  <label class="setting-label">记住音量</label>
+                  <p class="setting-desc">下次打开时恢复上次音量设置</p>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" :checked="playerSettings.rememberVolume" @change="onCheckboxChange(playerSettings.setRememberVolume)" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" :checked="playerSettings.autoFullscreen" @change="onCheckboxChange(playerSettings.setAutoFullscreen)" />
-              <span class="toggle-slider"></span>
-            </label>
           </div>
 
-          <!-- 播放时隐藏鼠标 -->
-          <div class="setting-toggle-row">
-            <div class="setting-toggle-info">
-              <span class="setting-toggle-label">播放时隐藏鼠标</span>
-              <span class="setting-toggle-desc">播放状态下5秒无操作自动隐藏鼠标指针</span>
+          <!-- 播放器内核卡片 -->
+          <div class="settings-card">
+            <div class="card-header">
+              <div class="card-icon core-icon">
+                <RiFilmLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">播放器内核</h3>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" :checked="playerSettings.hideMouse" @change="onCheckboxChange(playerSettings.setHideMouse)" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <!-- 硬件加速（开发中） -->
-          <div class="setting-toggle-row" style="opacity: 0.5;">
-            <div class="setting-toggle-info">
-              <span class="setting-toggle-label">硬件加速</span>
-              <span class="setting-toggle-desc">使用GPU加速解码，降低CPU占用率（开发中）</span>
+            <div class="card-content">
+              <div class="radio-group">
+                <label class="radio-box-item" :class="{ active: playerSettings.core === 'hls' }">
+                  <input type="radio" name="player-core" :checked="playerSettings.core === 'hls'" @change="playerSettings.setCore('hls')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <RiFilmLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">HLS.js</span>
+                    <span class="radio-box-desc">推荐，兼容性好</span>
+                  </div>
+                </label>
+                <label class="radio-box-item" :class="{ active: playerSettings.core === 'native' }">
+                  <input type="radio" name="player-core" :checked="playerSettings.core === 'native'" @change="playerSettings.setCore('native')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <RiTv2Line class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">原生 Video</span>
+                    <span class="radio-box-desc">轻量，支持 Safari</span>
+                  </div>
+                </label>
+                <label class="radio-box-item" :class="{ active: playerSettings.core === 'dplayer' }">
+                  <input type="radio" name="player-core" :checked="playerSettings.core === 'dplayer'" @change="playerSettings.setCore('dplayer')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <RiPlayCircleLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">DPlayer</span>
+                    <span class="radio-box-desc">功能丰富，体验佳</span>
+                  </div>
+                </label>
+              </div>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" disabled />
-              <span class="toggle-slider"></span>
-            </label>
           </div>
 
-          <!-- 记住音量 -->
-          <div class="setting-toggle-row">
-            <div class="setting-toggle-info">
-              <span class="setting-toggle-label">记住音量</span>
-              <span class="setting-toggle-desc">下次打开时恢复上次音量设置</span>
+          <!-- 画质设置卡片 -->
+          <div class="settings-card">
+            <div class="card-header">
+              <div class="card-icon quality-icon">
+                <RiTvLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">默认播放画质</h3>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" :checked="playerSettings.rememberVolume" @change="onCheckboxChange(playerSettings.setRememberVolume)" />
-              <span class="toggle-slider"></span>
-            </label>
+            <div class="card-content">
+              <div class="radio-group radio-group-2col">
+                <label class="radio-box-item" :class="{ active: playerSettings.quality === 'auto' }">
+                  <input type="radio" name="player-quality" :checked="playerSettings.quality === 'auto'" @change="playerSettings.setQuality('auto')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <span class="radio-box-label">自动</span>
+                </label>
+                <label class="radio-box-item" :class="{ active: playerSettings.quality === '1080p' }">
+                  <input type="radio" name="player-quality" :checked="playerSettings.quality === '1080p'" @change="playerSettings.setQuality('1080p')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <span class="radio-box-label">高清 (1080P)</span>
+                </label>
+                <label class="radio-box-item" :class="{ active: playerSettings.quality === '720p' }">
+                  <input type="radio" name="player-quality" :checked="playerSettings.quality === '720p'" @change="playerSettings.setQuality('720p')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <span class="radio-box-label">标清 (720P)</span>
+                </label>
+                <label class="radio-box-item" :class="{ active: playerSettings.quality === '480p' }">
+                  <input type="radio" name="player-quality" :checked="playerSettings.quality === '480p'" @change="playerSettings.setQuality('480p')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <span class="radio-box-label">流畅 (480P)</span>
+                </label>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <!-- 播放器内核 -->
-        <div class="player-section">
-          <h3 class="player-section-title">播放器内核</h3>
-          <div class="player-options-row">
-            <button class="player-option-card" :class="{ active: playerSettings.core === 'hls' }" @click="playerSettings.setCore('hls')">
-              <RiFilmLine class="player-option-icon" />
-              <span class="player-option-label">HLS.js</span>
-              <span class="player-option-desc">推荐，兼容性好</span>
-            </button>
-            <button class="player-option-card" :class="{ active: playerSettings.core === 'native' }" @click="playerSettings.setCore('native')">
-              <RiTv2Line class="player-option-icon" />
-              <span class="player-option-label">原生 Video</span>
-              <span class="player-option-desc">轻量，支持 Safari</span>
-            </button>
-            <button class="player-option-card" :class="{ active: playerSettings.core === 'dplayer' }" @click="playerSettings.setCore('dplayer')">
-              <RiPlayCircleLine class="player-option-icon" />
-              <span class="player-option-label">DPlayer</span>
-              <span class="player-option-desc">功能丰富，体验佳</span>
-            </button>
+          <!-- 解码方式卡片 -->
+          <div class="settings-card">
+            <div class="card-header">
+              <div class="card-icon decode-icon">
+                <RiCpuLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">解码方式</h3>
+            </div>
+            <div class="card-content">
+              <div class="radio-group">
+                <label class="radio-box-item" :class="{ active: playerSettings.decodeMode === 'hard' }">
+                  <input type="radio" name="player-decode" :checked="playerSettings.decodeMode === 'hard'" @change="playerSettings.setDecodeMode('hard')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <span class="radio-box-label">硬解码</span>
+                </label>
+                <label class="radio-box-item" :class="{ active: playerSettings.decodeMode === 'soft' }">
+                  <input type="radio" name="player-decode" :checked="playerSettings.decodeMode === 'soft'" @change="playerSettings.setDecodeMode('soft')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <span class="radio-box-label">软解码</span>
+                </label>
+                <label class="radio-box-item" :class="{ active: playerSettings.decodeMode === 'auto' }">
+                  <input type="radio" name="player-decode" :checked="playerSettings.decodeMode === 'auto'" @change="playerSettings.setDecodeMode('auto')" />
+                  <span class="radio-box"><span class="radio-box-inner"></span></span>
+                  <span class="radio-box-label">自动选择</span>
+                </label>
+              </div>
+              <p class="card-hint">如果播放出现卡顿或花屏，请尝试切换到软解码模式</p>
+            </div>
           </div>
-        </div>
-
-        <!-- 默认播放画质 -->
-        <div class="player-section">
-          <h3 class="player-section-title">默认播放画质</h3>
-          <div class="quality-options-row">
-            <button class="quality-option" :class="{ active: playerSettings.quality === 'auto' }" @click="playerSettings.setQuality('auto')">
-              <span class="quality-option-label">自动</span>
-            </button>
-            <button class="quality-option" :class="{ active: playerSettings.quality === '1080p' }" @click="playerSettings.setQuality('1080p')">
-              <span class="quality-option-label">高清 (1080P)</span>
-            </button>
-            <button class="quality-option" :class="{ active: playerSettings.quality === '720p' }" @click="playerSettings.setQuality('720p')">
-              <span class="quality-option-label">标清 (720P)</span>
-            </button>
-            <button class="quality-option" :class="{ active: playerSettings.quality === '480p' }" @click="playerSettings.setQuality('480p')">
-              <span class="quality-option-label">流畅 (480P)</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 解码方式 -->
-        <div class="player-section">
-          <h3 class="player-section-title">解码方式</h3>
-          <div class="decode-options-row">
-            <button class="decode-option" :class="{ active: playerSettings.decodeMode === 'hard' }" @click="playerSettings.setDecodeMode('hard')">
-              <span class="decode-option-label">硬解码</span>
-            </button>
-            <button class="decode-option" :class="{ active: playerSettings.decodeMode === 'soft' }" @click="playerSettings.setDecodeMode('soft')">
-              <span class="decode-option-label">软解码</span>
-            </button>
-            <button class="decode-option" :class="{ active: playerSettings.decodeMode === 'auto' }" @click="playerSettings.setDecodeMode('auto')">
-              <span class="decode-option-label">自动选择</span>
-            </button>
-          </div>
-          <p class="decode-hint">如果播放出现卡顿或花屏，请尝试切换到软解码模式</p>
         </div>
       </div>
       <!-- 关于模块 -->
@@ -836,70 +761,68 @@ function formatHistoryTime(timestamp: string): string {
           <p class="module-desc">了解 LPTV 及更多软件信息</p>
         </div>
 
-        <!-- 软件介绍卡片 -->
-        <div class="about-card">
-          <div class="about-header">
-            <div class="app-logo">
-              <img src="/logo.svg" alt="LPTV Logo" />
+        <div class="settings-form-grid">
+          <!-- 软件介绍卡片 -->
+          <div class="settings-card about-intro-card">
+            <div class="card-header">
+              <div class="card-icon about-icon">
+                <RiInformationLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">软件介绍</h3>
             </div>
-            <div class="app-info">
-              <h3 class="app-name">LPTV</h3>
-              <p class="app-slogan">简洁优雅的本地 IPTV 播放器</p>
-            </div>
-          </div>
-
-          <div class="about-divider"></div>
-
-          <div class="about-content">
-            <div class="about-description">
-              <p>LPTV 是一款轻量级本地 IPTV 播放器，支持 M3U/M3U8 直播源导入与播放。</p>
-              <p>提供频道管理、收藏、定时更新等实用功能，界面简洁，操作便捷。</p>
-            </div>
-          </div>
-
-          <div class="about-divider"></div>
-
-          <!-- 版本信息 -->
-          <div class="version-info">
-            <div class="version-row">
-              <span class="version-label">版本号</span>
-              <span class="version-value">v1.0.0</span>
-            </div>
-            <div class="version-row">
-              <span class="version-label">构建日期</span>
-              <span class="version-value">2026-04-13</span>
-            </div>
-            <div class="version-row">
-              <span class="version-label">播放器内核</span>
-              <span class="version-value">HLS.js / DPlayer</span>
-            </div>
-            <div class="version-row">
-              <span class="version-label">数据库引擎</span>
-              <span class="version-value">SQL.js (SQLite)</span>
+            <div class="card-content">
+              <div class="about-header">
+                <div class="app-logo">
+                  <img src="/logo.svg" alt="LPTV Logo" />
+                </div>
+                <div class="app-info">
+                  <h3 class="app-name">LPTV</h3>
+                  <p class="app-slogan">简洁优雅的本地 IPTV 播放器</p>
+                </div>
+              </div>
+              <div class="about-divider"></div>
+              <div class="about-content">
+                <div class="about-description">
+                  <p>LPTV 是一款轻量级本地 IPTV 播放器，支持 M3U/M3U8 直播源导入与播放。</p>
+                  <p>提供频道管理、收藏、定时更新等实用功能，界面简洁，操作便捷。</p>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="about-divider"></div>
-
-          <!-- 版权信息 -->
-          <div class="copyright-section">
-            <p class="copyright-text">© 2026 LPTV. All Rights Reserved.</p>
-            <p class="license-text">基于 MIT 协议开源</p>
-          </div>
-        </div>
-
-        <!-- 相关链接卡片 -->
-        <div class="about-links-card">
-          <h4 class="links-title">相关链接</h4>
-          <div class="links-list">
-            <a href="https://github.com" target="_blank" class="link-item">
-              <span class="link-label">GitHub 仓库</span>
-              <span class="link-url">github.com/lptv</span>
-            </a>
-            <a href="https://github.com/lptv/issues" target="_blank" class="link-item">
-              <span class="link-label">问题反馈</span>
-              <span class="link-url">提交 Bug 或功能建议</span>
-            </a>
+          <!-- 版本信息卡片 -->
+          <div class="settings-card about-version-card">
+            <div class="card-header">
+              <div class="card-icon version-icon">
+                <RiFileCodeLine class="card-icon-svg" />
+              </div>
+              <h3 class="card-title">版本信息</h3>
+            </div>
+            <div class="card-content">
+              <div class="version-info">
+                <div class="version-row">
+                  <span class="version-label">版本号</span>
+                  <span class="version-value">v1.0.0</span>
+                </div>
+                <div class="version-row">
+                  <span class="version-label">构建日期</span>
+                  <span class="version-value">2026-04-13</span>
+                </div>
+                <div class="version-row">
+                  <span class="version-label">播放器内核</span>
+                  <span class="version-value">HLS.js / DPlayer</span>
+                </div>
+                <div class="version-row">
+                  <span class="version-label">数据库引擎</span>
+                  <span class="version-value">SQL.js (SQLite)</span>
+                </div>
+              </div>
+              <div class="about-divider"></div>
+              <div class="copyright-section">
+                <p class="copyright-text">© 2026 LPTV. All Rights Reserved.</p>
+                <p class="license-text">基于 MIT 协议开源</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -975,6 +898,133 @@ function formatHistoryTime(timestamp: string): string {
 .module-title { font-size: 18px; font-weight: 700; color: var(--text-primary); margin: 0 0 2px; line-height: 1.3; }
 .module-desc { font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5; opacity: 0.7; }
 
+/* 远程导入面板 */
+.remote-import-card {
+  background-color: var(--bg-card);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-color);
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+
+    .card-icon {
+      width: 18px;
+      height: 18px;
+      color: var(--brand-primary);
+    }
+
+    h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+  }
+
+  .card-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin: 0 0 10px;
+    opacity: 0.7;
+  }
+
+  // 手动输入URL区域
+  .remote-url-input-group {
+    display: flex;
+    gap: 8px;
+
+    .remote-url-input {
+      flex: 1;
+      padding: 9px 12px;
+      background-color: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 12px;
+      transition: all var(--transition-fast);
+      &:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); outline: none; }
+      &::placeholder { color: var(--text-disabled); }
+      &:hover:not(:focus) { border-color: #3d3d50; }
+    }
+
+    .btn-add-url {
+      padding: 9px 14px;
+      background-color: var(--brand-primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      &:hover:not(:disabled) { background-color: var(--brand-hover); }
+      &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+  }
+
+  /* 导入结果提示 */
+  .import-result {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+
+    &.success {
+      background-color: rgba(34, 197, 94, 0.1);
+      color: var(--success);
+
+      .result-icon {
+        color: var(--success);
+      }
+    }
+
+    &.error {
+      background-color: rgba(239, 68, 68, 0.1);
+      color: var(--error);
+
+      .result-icon {
+        color: var(--error);
+      }
+    }
+  }
+}
+
+.progress-container {
+  margin: 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .progress-bar {
+    flex: 1;
+    height: 6px;
+    background-color: var(--bg-secondary);
+    border-radius: 3px;
+    overflow: hidden;
+
+    .progress-fill {
+      height: 100%;
+      background-color: var(--brand-primary);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+  }
+
+  .progress-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 35px;
+  }
+}
+
 /* 添加源区域 */
 .add-source-section {
   background-color: var(--bg-card);
@@ -988,25 +1038,40 @@ function formatHistoryTime(timestamp: string): string {
 .section-desc { font-size: 12px; color: var(--text-secondary); margin: 0 0 12px; opacity: 0.7; }
 
 /* 添加方式选择 */
-.add-method-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.add-method-tabs { display: flex; gap: 12px; margin-bottom: 16px; }
 .method-tab {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 14px;
-  border-radius: 8px;
+  justify-content: center;
+  gap: 6px;
+  padding: 24px 16px;
+  border-radius: 10px;
   background-color: var(--bg-secondary);
   border: 1.5px solid transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
+  min-height: 100px;
   &.active { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.05); color: var(--brand-primary); }
   &:hover:not(.active) { border-color: var(--border-color); color: var(--text-primary); background-color: var(--bg-card); }
-  .method-icon { width: 18px; height: 18px; color: inherit; }
+  .method-icon { width: 24px; height: 24px; color: inherit; }
   .method-label { font-size: 13px; font-weight: 600; }
   .method-desc { font-size: 11px; opacity: 0.6; }
+}
+
+/* URL 按钮特殊样式 */
+.method-tab-url {
+  &:hover { border-color: var(--brand-primary); color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.03); }
+}
+
+/* 文件导入按钮样式 - 类似拖拽区域 */
+.method-tab-file {
+  border: 2px dashed var(--border-color);
+  background-color: var(--bg-secondary);
+  &:hover { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.03); color: var(--brand-primary); }
+  &.dragging { border-color: var(--brand-primary); background-color: rgba(59, 130, 246, 0.08); color: var(--brand-primary); }
 }
 
 /* URL 表单 */
@@ -1058,17 +1123,191 @@ function formatHistoryTime(timestamp: string): string {
   display: none;
 }
 
-/* 已添加源列表 */
+/* 源列表管理 */
 .source-list-section {
   background-color: var(--bg-card);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 16px;
   border: 1px solid var(--border-color);
+  margin-top: 16px;
+  grid-column: 1 / -1;
 }
 
 .source-list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .source-list-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0; }
 .source-count { font-size: 11px; color: var(--text-secondary); background: var(--bg-secondary); padding: 2px 8px; border-radius: 10px; }
+
+/* 全宽卡片 */
+.full-width-card {
+  grid-column: 1 / -1;
+}
+
+/* 远程导入输入行 */
+.remote-input-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.remote-input-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.remote-url-input {
+  flex: 1;
+  padding: 12px 14px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all var(--transition-fast);
+
+  &:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    outline: none;
+  }
+
+  &::placeholder {
+    color: var(--text-disabled);
+  }
+}
+
+.btn-add-url {
+  padding: 12px 20px;
+  background-color: var(--brand-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    background-color: var(--brand-hover);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+/* 进度条 */
+.progress-container {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .progress-bar {
+    flex: 1;
+    height: 6px;
+    background-color: var(--bg-secondary);
+    border-radius: 3px;
+    overflow: hidden;
+
+    .progress-fill {
+      height: 100%;
+      background-color: var(--brand-primary);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+  }
+
+  .progress-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 36px;
+    text-align: right;
+  }
+}
+
+/* 导入结果 */
+.import-result {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+
+  &.success {
+    background-color: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+  }
+
+  &.error {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: var(--error);
+  }
+}
+
+.schedule-icon {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
+/* 源管理卡片图标 */
+.remote-icon {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--brand-primary);
+}
+
+.url-icon {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--brand-primary);
+}
+
+.file-icon {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
+/* 添加URL按钮 */
+.add-url-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1.5px dashed var(--border-color);
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+
+  &:hover {
+    border-color: var(--brand-primary);
+    color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.03);
+  }
+}
+
+.add-btn-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.settings-icon {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--brand-primary);
+}
+
+.advanced-icon {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
 
 .source-table { display: flex; flex-direction: column; gap: 4px; }
 .table-header {
@@ -1090,317 +1329,78 @@ function formatHistoryTime(timestamp: string): string {
 /* 定时管理 */
 .schedule-management { }
 
-/* 模块标题 */
-.schedule-module-header {
-  margin-bottom: 14px;
-}
-
-.schedule-module-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0 0 2px;
-  line-height: 1.3;
-}
-
-.schedule-module-desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.5;
-  opacity: 0.7;
-}
-
-/* 全局定时设置卡片 */
-.schedule-card {
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-}
-
-/* 全局自动更新行 */
-.schedule-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.schedule-card-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.schedule-card-title-text {
-  font-size: var(--font-size-subtitle);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-  line-height: 1.3;
-}
-
-.schedule-card-title-desc {
-  font-size: var(--font-size-caption);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.4;
-}
-
-/* 定时开关 - 56x28px */
-.schedule-toggle {
-  position: relative;
-  display: inline-block;
-  width: 56px;
-  height: 28px;
-  input { opacity: 0; width: 0; height: 0; }
-  .schedule-toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: var(--bg-card);
-    transition: all var(--transition-fast);
-    border-radius: 28px;
-    &:before {
-      position: absolute;
-      content: "";
-      height: 20px; width: 20px;
-      left: 4px; bottom: 4px;
-      background-color: rgba(255, 255, 255, 1);
-      transition: all var(--transition-fast);
-      border-radius: 9999px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    }
-  }
-  input:checked + .schedule-toggle-slider { background-color: var(--brand-primary); }
-  input:checked + .schedule-toggle-slider:before { transform: translateX(28px); }
-}
-
-/* 设置块 */
-.schedule-setting-block {
-  margin-bottom: 20px;
-}
-
-.schedule-block-label {
-  display: block;
-  font-size: var(--font-size-subtitle);
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-}
-
-/* 更新频率行 */
+/* 更新频率按钮行 */
 .schedule-frequency-row {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .schedule-freq-btn {
-  padding: 12px 20px;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 6px;
   background-color: var(--bg-secondary);
-  border: none;
-  color: var(--text-primary);
-  font-size: var(--font-size-body);
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  cursor: pointer;
+  border: 1.5px solid transparent;
+  color: var(--text-secondary);
   transition: all var(--transition-fast);
-  line-height: 1.2;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
 
   &:hover {
-    background-color: var(--bg-card);
+    border-color: var(--border-color);
   }
 
   &.active {
-    background-color: var(--brand-primary);
-    color: rgba(255, 255, 255, 1);
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.06);
+    color: var(--brand-primary);
   }
 }
 
-/* 更新时间 和 重试次数 - 并排两列 */
-.schedule-inline-row {
-  display: flex;
-  gap: 24px;
-  margin-bottom: 20px;
-}
-
-.schedule-inline-col {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.schedule-input {
-  background-color: var(--bg-card);
+/* 时间输入框 */
+.schedule-input-time {
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 0 16px;
-  height: 52px;
+  border-radius: 6px;
   color: var(--text-primary);
-  font-size: var(--font-size-body);
+  font-size: 13px;
   transition: all var(--transition-fast);
-  outline: none;
+  min-width: 120px;
 
   &:focus {
     border-color: var(--brand-primary);
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-  }
-
-  &:hover:not(:focus) {
-    border-color: var(--border-color);
+    outline: none;
   }
 }
 
-.schedule-input-hint {
-  font-size: var(--font-size-caption);
-  color: var(--text-disabled);
-  line-height: 1.3;
-}
-
-/* 更新通知 / WiFi 开关行 */
-.schedule-toggle-row-new {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-}
-
-.schedule-toggle-mini {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 24px;
-  flex-shrink: 0;
-  input { opacity: 0; width: 0; height: 0; }
-  .schedule-toggle-mini-slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: var(--bg-card);
-    transition: all var(--transition-fast);
-    border-radius: 24px;
-    &:before {
-      position: absolute;
-      content: "";
-      height: 20px; width: 20px;
-      left: 2px; bottom: 2px;
-      background-color: rgba(255, 255, 255, 1);
-      transition: all var(--transition-fast);
-      border-radius: 9999px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    }
-  }
-  input:checked + .schedule-toggle-mini-slider { background-color: var(--brand-primary); }
-  input:checked + .schedule-toggle-mini-slider:before { transform: translateX(24px); }
-}
-
-.schedule-toggle-info-new {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-
-  &.disabled {
-    .schedule-toggle-label-new {
-      color: var(--text-secondary);
-    }
-  }
-}
-
-.schedule-toggle-label-new {
-  font-size: var(--font-size-body);
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-primary);
-}
-
-.schedule-toggle-desc-new {
-  font-size: var(--font-size-caption);
-  color: var(--text-disabled);
-  line-height: 1.3;
-}
-
-/* 间隔 spacer */
-.schedule-spacer {
-  height: 24px;
-}
-
-/* 单独源定时设置 */
-.schedule-source-section {
-  background-color: transparent;
-  border-radius: 0;
-  border: none;
-  overflow: visible;
-}
-
-.schedule-source-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 0 0 16px;
-}
-
-.schedule-source-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.schedule-source-title {
-  font-size: 20px;
-  font-weight: 600;
-  font-family: 'SourceHanSans-SemiBold', sans-serif;
-  color: var(--text-primary);
-  margin: 0;
-  line-height: 1.3;
-}
-
-.schedule-source-desc {
-  font-size: 14px;
-  font-family: 'SourceHanSans-Regular', sans-serif;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.4;
-}
-
-.schedule-batch-btn {
-  padding: 8px 16px;
-  border-radius: 8px;
+/* 数字输入框 */
+.schedule-input-number {
+  padding: 8px 12px;
   background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
   color: var(--text-primary);
-  border: none;
-  font-size: 14px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  cursor: pointer;
+  font-size: 13px;
   transition: all var(--transition-fast);
-  line-height: 1.2;
+  width: 80px;
+  text-align: center;
 
-  &:hover {
-    background-color: var(--bg-card);
+  &:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    outline: none;
   }
 }
 
-/* 源定时设置列表 */
-.schedule-source-list {
-  border-top: none;
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.schedule-source-table-header {
-  display: flex;
-  align-items: center;
-  padding: 16px 24px;
-  font-size: var(--font-size-body);
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-secondary);
-  background-color: var(--bg-card);
-}
-
-.schedule-source-list-body {
-  border-top: 1px solid var(--border-color);
-}
+/* 关于模块 */
+.about-module { }
 
 /* 源列表列宽 */
 .ss-col-enable {
@@ -1780,30 +1780,31 @@ function formatHistoryTime(timestamp: string): string {
 .toggle-switch {
   position: relative;
   display: inline-block;
-  width: 48px;
-  height: 26px;
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
   input { opacity: 0; width: 0; height: 0; }
   .toggle-slider {
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background-color: #4a4a5a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     transition: all var(--transition-fast);
-    border-radius: 26px;
+    border-radius: 24px;
     &:before {
       position: absolute;
       content: "";
-      height: 20px; width: 20px;
+      height: 18px; width: 18px;
       left: 2px; bottom: 2px;
       background-color: #fff;
       transition: all var(--transition-fast);
       border-radius: 50%;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
     }
   }
   input:checked + .toggle-slider { background-color: var(--brand-primary); border-color: var(--brand-primary); }
-  input:checked + .toggle-slider:before { transform: translateX(22px); }
+  input:checked + .toggle-slider:before { transform: translateX(18px); }
 }
 
 .shortcuts-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1837,216 +1838,35 @@ function formatHistoryTime(timestamp: string): string {
 /* 界面设置 */
 .ui-management { }
 
-/* 主题设置卡片 */
-.theme-settings-card {
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-}
-
-.theme-settings-title {
-  font-size: 20px;
-  font-weight: 600;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-primary);
-  margin: 0 0 24px;
-}
-
-.theme-section {
-  margin-bottom: 24px;
-}
-
-.theme-section-title {
-  font-size: 16px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-secondary);
-  margin: 0 0 16px;
-}
-
-.theme-options-row {
+/* 颜色主题选项网格 */
+.theme-options-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
-.theme-option-card {
+.theme-option {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 12px;
-  background-color: transparent;
-  border: 0.7px solid rgba(71, 85, 105, 1);
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1.5px solid transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
 
+  input[type="radio"] {
+    display: none;
+  }
+
   &:hover {
-    border-color: var(--text-disabled);
+    border-color: var(--border-color);
   }
 
   &.active {
-    border: 2px solid rgba(59, 130, 246, 1);
-  }
-}
-
-.theme-preview-box {
-  width: 100%;
-  height: 120px;
-  border-radius: 8px;
-  overflow: hidden;
-  position: relative;
-}
-
-/* 深色主题预览 - 选中状态 */
-.dark-preview {
-  background-color: rgba(15, 23, 42, 1);
-
-  .preview-top-bar {
-    position: absolute;
-    left: -0.5px;
-    top: 0;
-    width: 165px;
-    height: 40px;
-    background-color: rgba(30, 41, 59, 1);
-  }
-
-  .preview-sidebar-block {
-    position: absolute;
-    left: 9.5px;
-    top: 50px;
-    width: 71px;
-    height: 60px;
-    background-color: rgba(30, 41, 59, 1);
-    border-radius: 4px;
-  }
-
-  .preview-main-block {
-    position: absolute;
-    left: 67.5px;
-    top: 50px;
-    width: 91px;
-    height: 60px;
-    background-color: rgba(30, 41, 59, 0.5);
-    border-radius: 4px;
-  }
-
-  .preview-player-block {
-    display: none;
-  }
-}
-
-/* 蓝色主题预览 - 未选中状态 */
-.blue-preview {
-  background-color: rgba(30, 58, 138, 1);
-
-  .preview-top-bar {
-    position: absolute;
-    left: -0.67px;
-    top: 0;
-    width: 168px;
-    height: 40px;
-    background-color: rgba(30, 64, 175, 1);
-  }
-
-  .preview-sidebar-block {
-    position: absolute;
-    left: 9.5px;
-    top: 50px;
-    width: 71px;
-    height: 60px;
-    background-color: rgba(30, 64, 175, 1);
-    border-radius: 4px;
-  }
-
-  .preview-main-block {
-    position: absolute;
-    left: 67.5px;
-    top: 50px;
-    width: 91px;
-    height: 60px;
-    background-color: rgba(30, 64, 175, 0.5);
-    border-radius: 4px;
-  }
-
-  .preview-player-block {
-    display: none;
-  }
-}
-
-/* 纯黑主题预览 - 未选中状态 */
-.black-preview {
-  background-color: rgba(0, 0, 0, 1);
-
-  .preview-top-bar {
-    position: absolute;
-    left: -0.67px;
-    top: 0;
-    width: 168px;
-    height: 40px;
-    background-color: rgba(15, 23, 42, 1);
-  }
-
-  .preview-sidebar-block {
-    position: absolute;
-    left: 9.5px;
-    top: 50px;
-    width: 71px;
-    height: 60px;
-    background-color: rgba(15, 23, 42, 1);
-    border-radius: 4px;
-  }
-
-  .preview-main-block {
-    position: absolute;
-    left: 67.5px;
-    top: 50px;
-    width: 91px;
-    height: 60px;
-    background-color: rgba(15, 23, 42, 0.5);
-    border-radius: 4px;
-  }
-
-  .preview-player-block {
-    display: none;
-  }
-}
-
-/* 浅色主题预览 - 未选中状态 */
-.light-preview {
-  background-color: rgba(255, 255, 255, 1);
-
-  .preview-top-bar {
-    position: absolute;
-    left: -0.67px;
-    top: 0;
-    width: 168px;
-    height: 40px;
-    background-color: var(--text-primary);
-  }
-
-  .preview-sidebar-block {
-    position: absolute;
-    left: 9.5px;
-    top: 50px;
-    width: 71px;
-    height: 60px;
-    background-color: var(--text-primary);
-    border-radius: 4px;
-  }
-
-  .preview-main-block {
-    position: absolute;
-    left: 67.5px;
-    top: 50px;
-    width: 91px;
-    height: 60px;
-    background-color: rgba(241, 245, 249, 0.5);
-    border-radius: 4px;
-  }
-
-  .preview-player-block {
-    display: none;
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.06);
   }
 }
 
@@ -2058,77 +1878,245 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .theme-option-name {
-  font-size: 16px;
+  font-size: 12px;
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-primary);
 }
 
-.theme-check-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 9999px;
-  background-color: rgba(59, 130, 246, 1);
+/* 卡片图标颜色 */
+.theme-icon {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
+.style-icon {
+  background-color: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+}
+
+/* 字体大小3列 */
+.radio-group-3col {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+/* 字体大小水平排列 */
+.font-size-row {
+  align-items: center;
+}
+
+.font-size-options {
+  display: flex;
+}
+
+.radio-group-horizontal {
+  display: flex;
+  gap: 10px;
+}
+
+.radio-group-horizontal .radio-box-item {
+  min-width: 60px;
+  justify-content: center;
+}
+
+/* 滑块控件 */
+.slider-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 120px;
+}
+
+.slider-value {
+  font-size: 13px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--brand-primary);
+}
+
+/* 主题预览框 */
+.theme-preview-box {
+  width: 100%;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 深色主题预览 */
+.dark-preview {
+  background-color: rgba(15, 23, 42, 1);
+  .preview-top-bar {
+    position: absolute;
+    left: -0.5px;
+    top: 0;
+    width: 82px;
+    height: 20px;
+    background-color: rgba(30, 41, 59, 1);
+  }
+  .preview-sidebar-block {
+    position: absolute;
+    left: 5px;
+    top: 25px;
+    width: 35px;
+    height: 30px;
+    background-color: rgba(30, 41, 59, 1);
+    border-radius: 2px;
+  }
+  .preview-main-block {
+    position: absolute;
+    left: 34px;
+    top: 25px;
+    width: 45px;
+    height: 30px;
+    background-color: rgba(30, 41, 59, 0.5);
+    border-radius: 2px;
+  }
+}
+
+/* 蓝色主题预览 */
+.blue-preview {
+  background-color: rgba(30, 58, 138, 1);
+  .preview-top-bar {
+    position: absolute;
+    left: -0.67px;
+    top: 0;
+    width: 84px;
+    height: 20px;
+    background-color: rgba(30, 64, 175, 1);
+  }
+  .preview-sidebar-block {
+    position: absolute;
+    left: 5px;
+    top: 25px;
+    width: 35px;
+    height: 30px;
+    background-color: rgba(30, 64, 175, 1);
+    border-radius: 2px;
+  }
+  .preview-main-block {
+    position: absolute;
+    left: 34px;
+    top: 25px;
+    width: 45px;
+    height: 30px;
+    background-color: rgba(30, 64, 175, 0.5);
+    border-radius: 2px;
+  }
+}
+
+/* 纯黑主题预览 */
+.black-preview {
+  background-color: rgba(0, 0, 0, 1);
+  .preview-top-bar {
+    position: absolute;
+    left: -0.67px;
+    top: 0;
+    width: 84px;
+    height: 20px;
+    background-color: rgba(15, 23, 42, 1);
+  }
+  .preview-sidebar-block {
+    position: absolute;
+    left: 5px;
+    top: 25px;
+    width: 35px;
+    height: 30px;
+    background-color: rgba(15, 23, 42, 1);
+    border-radius: 2px;
+  }
+  .preview-main-block {
+    position: absolute;
+    left: 34px;
+    top: 25px;
+    width: 45px;
+    height: 30px;
+    background-color: rgba(15, 23, 42, 0.5);
+    border-radius: 2px;
+  }
+}
+
+/* 浅色主题预览 */
+.light-preview {
+  background-color: rgba(255, 255, 255, 1);
+  .preview-top-bar {
+    position: absolute;
+    left: -0.67px;
+    top: 0;
+    width: 84px;
+    height: 20px;
+    background-color: var(--text-primary);
+  }
+  .preview-sidebar-block {
+    position: absolute;
+    left: 5px;
+    top: 25px;
+    width: 35px;
+    height: 30px;
+    background-color: var(--text-primary);
+    border-radius: 2px;
+  }
+  .preview-main-block {
+    position: absolute;
+    left: 34px;
+    top: 25px;
+    width: 45px;
+    height: 30px;
+    background-color: rgba(241, 245, 249, 0.5);
+    border-radius: 2px;
+  }
+}
+
+/* 主题单选指示器 */
+.theme-radio-indicator {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: all var(--transition-fast);
 
-  .check-icon {
-    width: 16px;
-    height: 16px;
-    color: rgba(255, 255, 255, 1);
+  .radio-box-inner {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: transparent;
+    transition: all var(--transition-fast);
   }
-}
 
-.theme-check-unselected {
-  width: 21px;
-  height: 21px;
-  border-radius: 9999px;
-  border: 2px solid rgba(100, 116, 139, 1);
-  flex-shrink: 0;
-}
+  .theme-option.active & {
+    border-color: var(--brand-primary);
+    background-color: var(--brand-primary);
 
-.theme-option-desc {
-  font-size: 13px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-secondary);
-  line-height: 1.2;
-}
-
-/* 主题色选择 */
-.accent-color-section {
-  flex: 1;
-}
-
-.font-size-section {
-  flex: 1;
-}
-
-.theme-row-inline {
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-  margin-bottom: 24px;
+    .radio-box-inner {
+      background-color: white;
+    }
+  }
 }
 
 /* 主题色容器 */
 .accent-color-container {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  display: flex;
 }
 
 .accent-color-row {
   display: flex;
-  gap: 16px;
+  gap: 10px;
   align-items: center;
   justify-content: space-between;
 }
 
 .accent-color-dot {
-  width: 48px;
-  height: 48px;
+  width: 28px;
+  height: 28px;
   border-radius: 9999px;
   border: none;
   cursor: pointer;
@@ -2148,35 +2136,81 @@ function formatHistoryTime(timestamp: string): string {
   }
 
   .color-check-icon {
-    width: 20px;
-    height: 20px;
+    width: 12px;
+    height: 12px;
     color: rgba(255, 255, 255, 1);
   }
 }
 
+/* 并排设置行 */
+.inline-settings-row {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.inline-setting {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 紧凑设置行 */
+.compact-settings-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 0;
+  min-height: 40px;
+}
+
+.compact-setting {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.compact-divider {
+  width: 1px;
+  height: 24px;
+  background-color: var(--border-color);
+  flex-shrink: 0;
+}
+
+.compact-title {
+  font-size: 11px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  margin: 0 !important;
+  line-height: 1;
+  font-weight: 500;
+}
+
 /* 字体大小容器 */
 .font-size-container {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  display: flex;
 }
 
 .option-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: 8px;
 }
 
 .option-card-small {
-  padding: 10px 16px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
   background-color: var(--bg-secondary);
   border: 1.5px solid transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
 
   &:hover {
     border-color: var(--border-color);
@@ -2194,26 +2228,27 @@ function formatHistoryTime(timestamp: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 0;
-  gap: 16px;
+  padding: 8px 0;
+  gap: 12px;
+  min-height: 40px;
 }
 
 .setting-toggle-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .setting-toggle-label {
-  font-size: 16px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .setting-toggle-desc {
-  font-size: 14px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
+  font-size: 11px;
   color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 /* 滑块行 */
@@ -2221,23 +2256,24 @@ function formatHistoryTime(timestamp: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 0;
-  gap: 16px;
+  padding: 8px 0;
+  gap: 12px;
+  min-height: 40px;
 }
 
 .setting-slider-value {
-  font-size: 18px;
+  font-size: 15px;
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: rgba(96, 165, 250, 1);
 }
 
 .slider-container {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .custom-range {
   width: 100%;
-  height: 8px;
+  height: 6px;
   border-radius: 9999px;
   background-color: var(--bg-secondary);
   outline: none;
@@ -2248,19 +2284,19 @@ function formatHistoryTime(timestamp: string): string {
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     border-radius: 9999px;
     background-color: var(--brand-primary);
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    margin-top: -6px;
+    margin-top: -5px;
     border: 2px solid #fff;
   }
 
   &::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     border-radius: 9999px;
     background-color: var(--brand-primary);
     cursor: pointer;
@@ -2269,19 +2305,19 @@ function formatHistoryTime(timestamp: string): string {
   }
 
   &::-webkit-slider-runnable-track {
-    height: 8px;
+    height: 6px;
     border-radius: 9999px;
     background: linear-gradient(to right, var(--brand-primary) var(--slider-progress, 50%), var(--bg-secondary) var(--slider-progress, 50%));
   }
 
   &::-moz-range-track {
-    height: 8px;
+    height: 6px;
     border-radius: 9999px;
     background-color: var(--bg-secondary);
   }
 
   &::-moz-range-progress {
-    height: 8px;
+    height: 6px;
     border-radius: 9999px;
     background-color: var(--brand-primary);
   }
@@ -2294,7 +2330,7 @@ function formatHistoryTime(timestamp: string): string {
 }
 
 .slider-label {
-  font-size: 12px;
+  font-size: 10px;
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-disabled);
 }
@@ -2302,176 +2338,251 @@ function formatHistoryTime(timestamp: string): string {
 /* 播放设置 */
 .player-management { }
 
-/* 播放设置卡片 */
-.player-settings-card {
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-}
-
-.player-settings-title {
-  font-size: 20px;
-  font-weight: 600;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-primary);
-  margin: 0 0 24px;
-}
-
-.player-section {
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-  margin-top: 20px;
-}
-
-.player-section-title {
-  font-size: 16px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-secondary);
-  margin: 0 0 16px;
-}
-
-/* 播放器内核选项 */
-.player-options-row {
+/* 设置表单网格布局 */
+.settings-form-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-.player-option-card {
+/* 设置卡片 */
+.settings-card {
+  background-color: var(--bg-card);
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 卡片头部 */
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.card-icon-svg {
+  width: 18px;
+  height: 18px;
+}
+
+.play-icon {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--brand-primary);
+}
+
+.core-icon {
+  background-color: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+
+.quality-icon {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
+.decode-icon {
+  background-color: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+}
+
+.card-title {
+  font-size: 14px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-primary);
+  margin: 0;
+  font-weight: 600;
+}
+
+/* 卡片内容 */
+.card-content {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+
+/* 设置行 */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  gap: 12px;
+  min-height: 40px;
+}
+
+.setting-label-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.setting-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setting-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  line-height: 1.3;
+}
+
+/* 单选按钮组 */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-group-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.radio-box-item {
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 20px 16px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
   background-color: var(--bg-secondary);
   border: 1.5px solid transparent;
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   cursor: pointer;
 
+  input[type="radio"] {
+    display: none;
+  }
+
   &:hover {
     border-color: var(--border-color);
+    background-color: rgba(255, 255, 255, 0.02);
   }
 
   &.active {
     border-color: var(--brand-primary);
-    background-color: rgba(59, 130, 246, 0.08);
-    color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.06);
+    color: var(--text-primary);
   }
 }
 
-.player-option-icon {
-  width: 28px;
-  height: 28px;
+.radio-box {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+
+  .radio-box-inner {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: transparent;
+    transition: all var(--transition-fast);
+  }
+
+  .radio-box-item.active & {
+    border-color: var(--brand-primary);
+    background-color: var(--brand-primary);
+
+    .radio-box-inner {
+      background-color: white;
+    }
+  }
+}
+
+.radio-box-icon {
+  width: 16px;
+  height: 16px;
   color: inherit;
+  flex-shrink: 0;
 }
 
-.player-option-label {
-  font-size: 15px;
+.radio-box-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.radio-box-label {
+  font-size: 13px;
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.player-option-desc {
-  font-size: 12px;
+.radio-box-desc {
+  font-size: 11px;
   color: var(--text-secondary);
-  text-align: center;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* 画质选项 */
-.quality-options-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-
-.quality-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 20px;
-  border-radius: 8px;
-  background-color: var(--bg-secondary);
-  border: none;
-  color: var(--text-primary);
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  min-height: 46px;
-
-  &:hover {
-    background-color: rgba(71, 85, 105, 1);
-  }
-
-  &.active {
-    background-color: rgba(59, 130, 246, 1);
-    color: rgba(255, 255, 255, 1);
-  }
-}
-
-.quality-option-label {
-  font-size: 15px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  line-height: 1.2;
-}
-
-/* 解码方式选项 */
-.decode-options-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-.decode-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 20px;
-  border-radius: 8px;
-  background-color: var(--bg-secondary);
-  border: none;
-  color: var(--text-primary);
-  transition: all var(--transition-fast);
-  cursor: pointer;
-  min-height: 46px;
-
-  &:hover {
-    background-color: rgba(71, 85, 105, 1);
-  }
-
-  &.active {
-    background-color: rgba(59, 130, 246, 1);
-    color: rgba(255, 255, 255, 1);
-  }
-}
-
-.decode-option-label {
-  font-size: 15px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  line-height: 1.2;
-}
-
-.decode-hint {
-  font-size: 12px;
+/* 卡片提示 */
+.card-hint {
+  font-size: 11px;
   font-family: 'SourceHanSans-Medium', sans-serif;
   color: var(--text-disabled);
-  margin: 12px 0 0;
-  line-height: 1.2;
+  margin: 8px 0 0;
+  line-height: 1.3;
+}
+
+.player-section {
+  background-color: var(--bg-card);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  margin-top: 14px;
+}
+
+.player-section-title {
+  font-size: 13px;
+  font-family: 'SourceHanSans-Medium', sans-serif;
+  color: var(--text-secondary);
+  margin: 0 0 10px;
 }
 
 /* 关于模块 */
 .about-module { }
 
-.about-card {
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  padding: 24px;
-  border: 1px solid var(--border-color);
+/* 关于模块卡片图标 */
+.about-icon {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: var(--brand-primary);
+}
+
+.version-icon {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
 }
 
 .about-header {
@@ -2582,60 +2693,6 @@ function formatHistoryTime(timestamp: string): string {
     color: var(--text-disabled);
     margin: 0;
   }
-}
-
-/* 相关链接卡片 */
-.about-links-card {
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-  margin-top: 20px;
-}
-
-.links-title {
-  font-size: 16px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-secondary);
-  margin: 0 0 16px;
-}
-
-.links-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.link-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-radius: 8px;
-  background-color: var(--bg-secondary);
-  text-decoration: none;
-  transition: all var(--transition-fast);
-
-  &:hover {
-    background-color: rgba(59, 130, 246, 0.08);
-
-    .link-label {
-      color: var(--brand-primary);
-    }
-  }
-}
-
-.link-label {
-  font-size: 14px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-primary);
-  transition: color var(--transition-fast);
-}
-
-.link-url {
-  font-size: 12px;
-  font-family: 'SourceHanSans-Medium', sans-serif;
-  color: var(--text-disabled);
 }
 
 /* 界面预览 */
@@ -3064,4 +3121,60 @@ function formatHistoryTime(timestamp: string): string {
 .placeholder-icon { width: 56px; height: 56px; opacity: 0.4; color: var(--text-secondary); }
 .placeholder-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0; }
 .placeholder-desc { font-size: 14px; color: var(--text-secondary); margin: 0; }
+
+/* 移动端响应式 */
+@media (max-width: 768px) {
+  .settings-view {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    position: sticky;
+    top: 56px;
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px 0;
+    flex-shrink: 0;
+  }
+
+  .settings-menu {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 4px;
+    padding: 0 8px;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .menu-item {
+    white-space: nowrap;
+    padding: 8px 14px;
+    min-width: fit-content;
+    flex-shrink: 0;
+  }
+
+  .settings-content {
+    padding: 16px;
+  }
+
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* 源管理表格允许横向滚动 */
+  .source-table {
+    overflow-x: auto;
+  }
+
+  /* 更新频率按钮在窄屏下换行 */
+  .schedule-frequency-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 </style>
