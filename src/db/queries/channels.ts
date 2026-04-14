@@ -69,6 +69,17 @@ export function deleteChannelsBySourceId(sourceId: string): void {
   db.run('DELETE FROM channels WHERE source_id = ?', [sourceId])
 }
 
+export function getAllChannels(): Channel[] {
+  const db = getDatabase()
+  const result = db.exec('SELECT * FROM channels ORDER BY group_id, name')
+
+  if (result.length === 0 || result[0].values.length === 0) {
+    return []
+  }
+
+  return mapResultToChannels(result[0])
+}
+
 function mapResultToChannels(result: { columns: string[]; values: unknown[][] }): Channel[] {
   return result.values.map(row => mapResultToChannel(result.columns, row))
 }
