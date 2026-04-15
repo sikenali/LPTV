@@ -151,13 +151,64 @@ export function applyFontSize(size: 'small' | 'medium' | 'large'): void {
  */
 export function applyTransparentEffect(enabled: boolean): void {
   const root = document.documentElement
+  const settings = getThemeSettings()
+  
   if (enabled) {
-    // 移除之前的硬编码值，让主题设置生效
-    root.style.removeProperty('--bg-card')
-    root.style.removeProperty('--bg-secondary')
     document.body.classList.add('transparent-effect')
+    
+    // 根据当前主题设置透明效果的颜色
+    let bgColor: string
+    let cardBgColor: string
+    let sidebarBgColor: string
+    let borderColor: string
+    let menuHoverBgColor: string
+    
+    switch (settings.theme) {
+      case 'light':
+        bgColor = 'rgba(240, 242, 245, 0.85)'
+        cardBgColor = 'rgba(255, 255, 255, 0.8)'
+        sidebarBgColor = 'rgba(255, 255, 255, 0.8)'
+        borderColor = 'rgba(201, 205, 212, 0.5)'
+        menuHoverBgColor = 'rgba(240, 242, 245, 0.6)'
+        break
+      case 'blue':
+        bgColor = 'rgba(15, 26, 46, 0.85)'
+        cardBgColor = 'rgba(30, 42, 79, 0.8)'
+        sidebarBgColor = 'rgba(26, 42, 74, 0.8)'
+        borderColor = 'rgba(42, 74, 106, 0.5)'
+        menuHoverBgColor = 'rgba(30, 42, 79, 0.6)'
+        break
+      case 'black':
+        bgColor = 'rgba(0, 0, 0, 0.85)'
+        cardBgColor = 'rgba(17, 17, 17, 0.8)'
+        sidebarBgColor = 'rgba(10, 10, 10, 0.8)'
+        borderColor = 'rgba(26, 26, 26, 0.5)'
+        menuHoverBgColor = 'rgba(17, 17, 17, 0.6)'
+        break
+      default: // dark
+        bgColor = 'rgba(15, 15, 20, 0.85)'
+        cardBgColor = 'rgba(34, 34, 46, 0.8)'
+        sidebarBgColor = 'rgba(26, 26, 36, 0.8)'
+        borderColor = 'rgba(45, 45, 61, 0.5)'
+        menuHoverBgColor = 'rgba(34, 34, 46, 0.6)'
+        break
+    }
+    
+    // 设置透明效果的颜色变量
+    root.style.setProperty('--transparent-bg', bgColor)
+    root.style.setProperty('--transparent-card-bg', cardBgColor)
+    root.style.setProperty('--transparent-sidebar-bg', sidebarBgColor)
+    root.style.setProperty('--transparent-border', borderColor)
+    root.style.setProperty('--transparent-menu-hover', menuHoverBgColor)
   } else {
     document.body.classList.remove('transparent-effect')
+    
+    // 移除透明效果的颜色变量
+    root.style.removeProperty('--transparent-bg')
+    root.style.removeProperty('--transparent-card-bg')
+    root.style.removeProperty('--transparent-sidebar-bg')
+    root.style.removeProperty('--transparent-border')
+    root.style.removeProperty('--transparent-menu-hover')
   }
 }
 
@@ -190,6 +241,10 @@ export function initTheme(): void {
 export function switchTheme(theme: ThemeType): void {
   applyTheme(theme)
   saveThemeSettings({ theme })
+  
+  // 切换主题后，重新应用透明效果，确保颜色与当前主题匹配
+  const settings = getThemeSettings()
+  applyTransparentEffect(settings.transparentEffect)
 }
 
 /**
