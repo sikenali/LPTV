@@ -60,12 +60,16 @@ interface ThemeSettings {
   theme: ThemeType
   accentColor: string
   fontSize: 'small' | 'medium' | 'large'
+  transparentEffect: boolean
+  borderRadius: number
 }
 
 const DEFAULT_SETTINGS: ThemeSettings = {
   theme: 'dark',
   accentColor: '#3b82f6',
-  fontSize: 'medium'
+  fontSize: 'medium',
+  transparentEffect: true,
+  borderRadius: 12
 }
 
 /**
@@ -143,6 +147,32 @@ export function applyFontSize(size: 'small' | 'medium' | 'large'): void {
 }
 
 /**
+ * 应用透明效果
+ */
+export function applyTransparentEffect(enabled: boolean): void {
+  const root = document.documentElement
+  if (enabled) {
+    // 移除之前的硬编码值，让主题设置生效
+    root.style.removeProperty('--bg-card')
+    root.style.removeProperty('--bg-secondary')
+    document.body.classList.add('transparent-effect')
+  } else {
+    document.body.classList.remove('transparent-effect')
+  }
+}
+
+/**
+ * 应用圆角弧度
+ */
+export function applyBorderRadius(radius: number): void {
+  const root = document.documentElement
+  root.style.setProperty('--border-radius-sm', `${Math.max(2, Math.floor(radius * 0.5))}px`)
+  root.style.setProperty('--border-radius-md', `${radius}px`)
+  root.style.setProperty('--border-radius-lg', `${Math.min(24, Math.ceil(radius * 1.5))}px`)
+  root.style.setProperty('--border-radius-xl', `${Math.min(32, radius * 2)}px`)
+}
+
+/**
  * 初始化主题（应用保存的设置）
  */
 export function initTheme(): void {
@@ -150,6 +180,8 @@ export function initTheme(): void {
   applyTheme(settings.theme)
   applyAccentColor(settings.accentColor)
   applyFontSize(settings.fontSize)
+  applyTransparentEffect(settings.transparentEffect)
+  applyBorderRadius(settings.borderRadius)
 }
 
 /**
@@ -174,6 +206,22 @@ export function switchAccentColor(color: string): void {
 export function switchFontSize(size: 'small' | 'medium' | 'large'): void {
   applyFontSize(size)
   saveThemeSettings({ fontSize: size })
+}
+
+/**
+ * 切换透明效果
+ */
+export function switchTransparentEffect(enabled: boolean): void {
+  applyTransparentEffect(enabled)
+  saveThemeSettings({ transparentEffect: enabled })
+}
+
+/**
+ * 切换圆角弧度
+ */
+export function switchBorderRadius(radius: number): void {
+  applyBorderRadius(radius)
+  saveThemeSettings({ borderRadius: radius })
 }
 
 /**

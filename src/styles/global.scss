@@ -129,6 +129,35 @@ a {
   transform: translateY(10px);
 }
 
+/* 透明效果 */
+body.transparent-effect {
+  background-color: rgba(15, 15, 20, 0.85);
+  
+  .settings-card,
+  .source-list-section,
+  .remote-import-card,
+  .add-source-section {
+    background-color: rgba(34, 34, 46, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(45, 45, 61, 0.5);
+  }
+  
+  .settings-sidebar {
+    background-color: rgba(26, 26, 36, 0.8);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid rgba(45, 45, 61, 0.5);
+  }
+  
+  .menu-item {
+    &:hover {
+      background-color: rgba(34, 34, 46, 0.6);
+    }
+    &.active {
+      background-color: rgba(59, 130, 246, 0.2);
+    }
+  }
+}
+
 /* 移动端触摸优化 */
 @media (max-width: 768px) {
   button, a, [role="button"] {

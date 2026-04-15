@@ -13,7 +13,7 @@ import {
   RiSettings3Line, RiShieldCheckLine, RiFileCodeLine,
   RiCheckLine
 } from '@remixicon/vue'
-import { switchTheme, switchAccentColor, switchFontSize, getThemeSettings } from '@/services/theme'
+import { switchTheme, switchAccentColor, switchFontSize, switchTransparentEffect, switchBorderRadius, getThemeSettings } from '@/services/theme'
 import { importSourceFromFile, addSourceFromUrl } from '@/services/source-loader'
 import { executeSourceUpdate, rescheduleTimer } from '@/services/schedule-manager'
 
@@ -22,15 +22,14 @@ const playerSettings = usePlayerSettingsStore()
 const scheduleSettings = useScheduleSettingsStore()
 
 const activeTab = ref<'source' | 'schedule' | 'player' | 'ui' | 'about'>('source')
-const sourceName = ref('')
-const sourceUrl = ref('')
 const showImportModal = ref(false)
+const editingSource = ref<any>(null)
 
 // UI Settings State - 从 localStorage 加载
-const settings = getThemeSettings()
-const theme = ref(settings.theme)
-const fontSize = ref(settings.fontSize)
-const accentColor = ref(settings.accentColor)
+const themeSettings = getThemeSettings()
+const theme = ref(themeSettings.theme)
+const fontSize = ref(themeSettings.fontSize)
+const accentColor = ref(themeSettings.accentColor)
 
 const sources = ref<Source[]>([])
 const activeSourceId = ref('')
@@ -59,6 +58,11 @@ const handleDelete = async (sourceId: string) => {
   if (activeSourceId.value === sourceId) {
     activeSourceId.value = sources.value.length > 0 ? sources.value[0].id : ''
   }
+  
+  // 模拟异步操作
+  return new Promise(resolve => {
+    setTimeout(resolve, 100)
+  })
 }
 
 const handleSwitchSource = (sourceId: string) => {
@@ -68,35 +72,66 @@ const handleSwitchSource = (sourceId: string) => {
 
 const handleEditSource = (source: Source) => {
   // 打开导入模态框并预填数据
-  sourceName.value = source.name
-  sourceUrl.value = source.url
+  editingSource.value = source
   showImportModal.value = true
 }
 
 const handleImport = async (data: { name: string; url: string; type: 'url' | 'file' }) => {
   try {
-    if (data.type === 'file') {
-      // 文件导入：url 字段实际上是文件内容
-      console.log(`导入本地文件: ${data.name}`)
-      const success = await importSourceFromFile(data.name, data.url)
-
-      if (success) {
-        console.log('文件导入成功:', data.name)
-        await loadSources()
+    if (editingSource.value) {
+      // 编辑模式：更新现有源
+      console.log(`更新源: ${editingSource.value.id} -> ${data.name}`)
+      // 这里应该调用更新源的方法
+      // 由于没有现成的更新方法，我们先删除旧源再添加新源
+      await handleDelete(editingSource.value.id)
+      
+      // 然后添加新源
+      if (data.type === 'file') {
+        const success = await importSourceFromFile(data.name, data.url)
+        if (success) {
+          console.log('文件源更新成功:', data.name)
+          await loadSources()
+        } else {
+          alert('文件源更新失败，请检查文件格式')
+        }
       } else {
-        alert('文件导入失败，请检查文件格式')
+        const newSource = await addSourceFromUrl(data.name, data.url)
+        if (newSource) {
+          console.log('URL 源更新成功:', newSource)
+          await loadSources()
+          activeSourceId.value = newSource.id
+        } else {
+          alert('URL 源更新失败，请检查网络或链接')
+        }
       }
+      
+      // 清空编辑状态
+      editingSource.value = null
     } else {
-      // URL 导入：下载 -> 缓存 -> 解析
-      console.log(`添加 URL 源: ${data.name} -> ${data.url}`)
-      const newSource = await addSourceFromUrl(data.name, data.url)
+      // 新增模式：添加新源
+      if (data.type === 'file') {
+        // 文件导入：url 字段实际上是文件内容
+        console.log(`导入本地文件: ${data.name}`)
+        const success = await importSourceFromFile(data.name, data.url)
 
-      if (newSource) {
-        console.log('源添加成功:', newSource)
-        await loadSources()
-        activeSourceId.value = newSource.id
+        if (success) {
+          console.log('文件导入成功:', data.name)
+          await loadSources()
+        } else {
+          alert('文件导入失败，请检查文件格式')
+        }
       } else {
-        alert('添加源失败，请检查网络或链接')
+        // URL 导入：下载 -> 缓存 -> 解析
+        console.log(`添加 URL 源: ${data.name} -> ${data.url}`)
+        const newSource = await addSourceFromUrl(data.name, data.url)
+
+        if (newSource) {
+          console.log('源添加成功:', newSource)
+          await loadSources()
+          activeSourceId.value = newSource.id
+        } else {
+          alert('添加源失败，请检查网络或链接')
+        }
       }
     }
   } catch (error) {
@@ -118,8 +153,8 @@ const menuItems = [
 ]
 
 // UI Settings State - 从 localStorage 加载
-const transparentEffect = ref(true)
-const borderRadius = ref(12)
+const transparentEffect = ref(themeSettings.transparentEffect)
+const borderRadius = ref(themeSettings.borderRadius)
 
 // 主题切换处理函数
 const handleThemeChange = (newTheme: 'dark' | 'light' | 'blue' | 'black') => {
@@ -137,11 +172,22 @@ const handleFontSizeChange = (size: 'small' | 'medium' | 'large') => {
   switchFontSize(size)
 }
 
+const handleTransparentEffectChange = (enabled: boolean) => {
+  transparentEffect.value = enabled
+  switchTransparentEffect(enabled)
+}
+
+const handleBorderRadiusChange = (radius: number) => {
+  borderRadius.value = radius
+  switchBorderRadius(radius)
+}
+
 // 远程导入状态
 const isFetchingRemote = ref(false)
 const remoteProgressPercent = ref(0)
 const remoteUrlInput = ref('')
 const importResult = ref<{ success: boolean; message: string } | null>(null)
+const selectedCategory = ref('all')
 
 // 从 URL 远程导入并添加到源列表
 async function handleRemoteImportFromUrl() {
@@ -248,20 +294,46 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
             <div class="card-content">
               <div class="setting-row remote-input-row">
                 <div class="setting-label-group">
-                  <label class="setting-label">直播源地址</label>
-                  <p class="setting-desc">输入 m3u/m3u8 远程直播源地址，自动抓取并添加到源列表</p>
+                  <label class="setting-label">频道分类</label>
+                  <p class="setting-desc">选择要导入的频道分类</p>
                 </div>
+                <div class="channel-category-selector">
+                  <label class="radio-box-item" :class="{ active: selectedCategory === 'all' }">
+                    <input type="radio" name="category" :checked="selectedCategory === 'all'" @change="selectedCategory = 'all'" />
+                    <span class="radio-box"><span class="radio-box-inner"></span></span>
+                    <span class="radio-box-label">全部</span>
+                  </label>
+                  <label class="radio-box-item" :class="{ active: selectedCategory === 'cctv' }">
+                    <input type="radio" name="category" :checked="selectedCategory === 'cctv'" @change="selectedCategory = 'cctv'" />
+                    <span class="radio-box"><span class="radio-box-inner"></span></span>
+                    <span class="radio-box-label">央视频道</span>
+                  </label>
+                  <label class="radio-box-item" :class="{ active: selectedCategory === 'satellite' }">
+                    <input type="radio" name="category" :checked="selectedCategory === 'satellite'" @change="selectedCategory = 'satellite'" />
+                    <span class="radio-box"><span class="radio-box-inner"></span></span>
+                    <span class="radio-box-label">卫视频道</span>
+                  </label>
+                  <label class="radio-box-item" :class="{ active: selectedCategory === 'other' }">
+                    <input type="radio" name="category" :checked="selectedCategory === 'other'" @change="selectedCategory = 'other'" />
+                    <span class="radio-box"><span class="radio-box-inner"></span></span>
+                    <span class="radio-box-label">其他频道</span>
+                  </label>
+                </div>
+              </div>
+              <div class="setting-row remote-input-row" v-if="selectedCategory">
                 <div class="remote-input-actions">
-                  <input
-                    v-model="remoteUrlInput"
-                    type="text"
-                    class="remote-url-input"
-                    placeholder="请输入 m3u/m3u8 地址"
-                    @keyup.enter="handleRemoteImportFromUrl"
-                  />
-                  <button class="btn-add-url" @click="handleRemoteImportFromUrl" :disabled="!remoteUrlInput.trim() || isFetchingRemote">
-                    {{ isFetchingRemote ? '导入中...' : '导入' }}
-                  </button>
+                  <div class="input-with-icon">
+                    <input
+                      v-model="remoteUrlInput"
+                      type="text"
+                      class="remote-url-input"
+                      placeholder="请输入 m3u/m3u8 地址"
+                      @keyup.enter="handleRemoteImportFromUrl"
+                    />
+                    <button class="input-icon-btn" @click="handleRemoteImportFromUrl" :disabled="!remoteUrlInput.trim() || isFetchingRemote" title="导入地址">
+                      <RiLink class="icon-svg" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -543,23 +615,21 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
                   <p class="setting-desc">选择应用的字体大小</p>
                 </div>
                 <div class="font-size-options">
-                  <div class="radio-group radio-group-horizontal">
-                    <label class="radio-box-item" :class="{ active: fontSize === 'small' }">
-                      <input type="radio" name="font-size" :checked="fontSize === 'small'" @change="handleFontSizeChange('small')" />
-                      <span class="radio-box"><span class="radio-box-inner"></span></span>
-                      <span class="radio-box-label">小</span>
-                    </label>
-                    <label class="radio-box-item" :class="{ active: fontSize === 'medium' }">
-                      <input type="radio" name="font-size" :checked="fontSize === 'medium'" @change="handleFontSizeChange('medium')" />
-                      <span class="radio-box"><span class="radio-box-inner"></span></span>
-                      <span class="radio-box-label">中</span>
-                    </label>
-                    <label class="radio-box-item" :class="{ active: fontSize === 'large' }">
-                      <input type="radio" name="font-size" :checked="fontSize === 'large'" @change="handleFontSizeChange('large')" />
-                      <span class="radio-box"><span class="radio-box-inner"></span></span>
-                      <span class="radio-box-label">大</span>
-                    </label>
-                  </div>
+                  <label class="radio-box-item" :class="{ active: fontSize === 'small' }">
+                    <input type="radio" name="font-size" :checked="fontSize === 'small'" @change="handleFontSizeChange('small')" />
+                    <span class="radio-box"><span class="radio-box-inner"></span></span>
+                    <span class="radio-box-label">小</span>
+                  </label>
+                  <label class="radio-box-item" :class="{ active: fontSize === 'medium' }">
+                    <input type="radio" name="font-size" :checked="fontSize === 'medium'" @change="handleFontSizeChange('medium')" />
+                    <span class="radio-box"><span class="radio-box-inner"></span></span>
+                    <span class="radio-box-label">中</span>
+                  </label>
+                  <label class="radio-box-item" :class="{ active: fontSize === 'large' }">
+                    <input type="radio" name="font-size" :checked="fontSize === 'large'" @change="handleFontSizeChange('large')" />
+                    <span class="radio-box"><span class="radio-box-inner"></span></span>
+                    <span class="radio-box-label">大</span>
+                  </label>
                 </div>
               </div>
               <div class="setting-row">
@@ -568,7 +638,7 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
                   <p class="setting-desc">开启界面元素半透明毛玻璃效果</p>
                 </div>
                 <label class="toggle-switch">
-                  <input type="checkbox" v-model="transparentEffect" />
+                  <input type="checkbox" :checked="transparentEffect" @change="handleTransparentEffectChange(($event.target as HTMLInputElement).checked)" />
                   <span class="toggle-slider"></span>
                 </label>
               </div>
@@ -580,7 +650,7 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
                 <div class="slider-control">
                   <span class="slider-value">{{ borderRadius }}px</span>
                   <div class="slider-container">
-                    <input type="range" v-model.number="borderRadius" min="0" max="24" class="custom-range" />
+                    <input type="range" :value="borderRadius" @input="handleBorderRadiusChange(($event.target as HTMLInputElement).valueAsNumber)" min="0" max="24" class="custom-range" />
                   </div>
                 </div>
               </div>
@@ -698,26 +768,42 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
               <h3 class="card-title">默认播放画质</h3>
             </div>
             <div class="card-content">
-              <div class="radio-group radio-group-2col">
+              <div class="radio-group">
                 <label class="radio-box-item" :class="{ active: playerSettings.quality === 'auto' }">
                   <input type="radio" name="player-quality" :checked="playerSettings.quality === 'auto'" @change="playerSettings.setQuality('auto')" />
                   <span class="radio-box"><span class="radio-box-inner"></span></span>
-                  <span class="radio-box-label">自动</span>
+                  <RiTvLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">自动</span>
+                    <span class="radio-box-desc">根据网络自动选择</span>
+                  </div>
                 </label>
                 <label class="radio-box-item" :class="{ active: playerSettings.quality === '1080p' }">
                   <input type="radio" name="player-quality" :checked="playerSettings.quality === '1080p'" @change="playerSettings.setQuality('1080p')" />
                   <span class="radio-box"><span class="radio-box-inner"></span></span>
-                  <span class="radio-box-label">高清 (1080P)</span>
+                  <RiTvLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">1080P</span>
+                    <span class="radio-box-desc">高清画质</span>
+                  </div>
                 </label>
                 <label class="radio-box-item" :class="{ active: playerSettings.quality === '720p' }">
                   <input type="radio" name="player-quality" :checked="playerSettings.quality === '720p'" @change="playerSettings.setQuality('720p')" />
                   <span class="radio-box"><span class="radio-box-inner"></span></span>
-                  <span class="radio-box-label">标清 (720P)</span>
+                  <RiTvLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">720P</span>
+                    <span class="radio-box-desc">标清画质</span>
+                  </div>
                 </label>
                 <label class="radio-box-item" :class="{ active: playerSettings.quality === '480p' }">
                   <input type="radio" name="player-quality" :checked="playerSettings.quality === '480p'" @change="playerSettings.setQuality('480p')" />
                   <span class="radio-box"><span class="radio-box-inner"></span></span>
-                  <span class="radio-box-label">流畅 (480P)</span>
+                  <RiTvLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">480P</span>
+                    <span class="radio-box-desc">流畅画质</span>
+                  </div>
                 </label>
               </div>
             </div>
@@ -736,17 +822,29 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
                 <label class="radio-box-item" :class="{ active: playerSettings.decodeMode === 'hard' }">
                   <input type="radio" name="player-decode" :checked="playerSettings.decodeMode === 'hard'" @change="playerSettings.setDecodeMode('hard')" />
                   <span class="radio-box"><span class="radio-box-inner"></span></span>
-                  <span class="radio-box-label">硬解码</span>
+                  <RiCpuLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">硬解码</span>
+                    <span class="radio-box-desc">使用硬件加速，性能好</span>
+                  </div>
                 </label>
                 <label class="radio-box-item" :class="{ active: playerSettings.decodeMode === 'soft' }">
                   <input type="radio" name="player-decode" :checked="playerSettings.decodeMode === 'soft'" @change="playerSettings.setDecodeMode('soft')" />
                   <span class="radio-box"><span class="radio-box-inner"></span></span>
-                  <span class="radio-box-label">软解码</span>
+                  <RiCpuLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">软解码</span>
+                    <span class="radio-box-desc">兼容性好，稳定</span>
+                  </div>
                 </label>
                 <label class="radio-box-item" :class="{ active: playerSettings.decodeMode === 'auto' }">
                   <input type="radio" name="player-decode" :checked="playerSettings.decodeMode === 'auto'" @change="playerSettings.setDecodeMode('auto')" />
                   <span class="radio-box"><span class="radio-box-inner"></span></span>
-                  <span class="radio-box-label">自动选择</span>
+                  <RiCpuLine class="radio-box-icon" />
+                  <div class="radio-box-text">
+                    <span class="radio-box-label">自动</span>
+                    <span class="radio-box-desc">根据设备自动选择</span>
+                  </div>
                 </label>
               </div>
               <p class="card-hint">如果播放出现卡顿或花屏，请尝试切换到软解码模式</p>
@@ -827,7 +925,7 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
         </div>
       </div>
     </main>
-    <ImportSourceModal :visible="showImportModal" @close="showImportModal = false" @import="handleImport" />
+    <ImportSourceModal :visible="showImportModal" :source="editingSource" @close="showImportModal = false" @import="handleImport" />
   </div>
 </template>
 
@@ -1149,9 +1247,176 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
   gap: 10px;
 }
 
+.channel-category-selector {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
 .remote-input-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.input-with-icon {
+  position: relative;
+  flex: 1;
+  
+  .remote-url-input {
+    padding-right: 48px;
+  }
+  
+  .input-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    .icon-svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+  
+  .input-icon-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    transition: all var(--transition-fast);
+    cursor: pointer;
+    
+    &:hover:not(:disabled) {
+      border-color: var(--brand-primary);
+      color: var(--brand-primary);
+      background-color: rgba(59, 130, 246, 0.05);
+    }
+    
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .icon-svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
+}
+
+.font-size-row {
+  .font-size-options {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    
+    .radio-box-item {
+      white-space: nowrap;
+    }
+  }
+}
+
+.radio-group-horizontal {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+  
+  .radio-box-item {
+    white-space: nowrap;
+  }
+}
+
+.radio-box-item.small {
+  padding: 6px 10px;
+  font-size: 12px;
+  
+  .radio-box {
+    width: 14px;
+    height: 14px;
+    
+    .radio-box-inner {
+      width: 8px;
+      height: 8px;
+    }
+  }
+  
+  .radio-box-label {
+    font-size: 12px;
+  }
+}
+
+.radio-box-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  font-size: 13px;
+  white-space: nowrap;
+  
+  &:hover {
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.05);
+  }
+  
+  &.active {
+    border-color: var(--brand-primary);
+    background-color: rgba(59, 130, 246, 0.12);
+    color: var(--brand-primary);
+  }
+  
+  .radio-box {
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    
+    &-inner {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--brand-primary);
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+    }
+  }
+  
+  input[type="radio"] {
+    display: none;
+  }
+  
+  &.active .radio-box-inner {
+    opacity: 1;
+  }
+  
+  .radio-box-label {
+    font-weight: 500;
+  }
 }
 
 .remote-url-input {
@@ -2105,13 +2370,16 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
   border-radius: 0;
   padding: 0;
   display: flex;
+  flex: 1;
 }
 
 .accent-color-row {
   display: flex;
   gap: 10px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  flex: 1;
 }
 
 .accent-color-dot {
@@ -2132,13 +2400,115 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
 
   &.active {
     border: 2px solid rgba(255, 255, 255, 1);
-    transform: scale(1.1);
+  }
+}
+
+.color-check-icon {
+  color: white;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.accent-color-dot.active .color-check-icon {
+  opacity: 1;
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .setting-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    text-align: left;
   }
 
-  .color-check-icon {
-    width: 12px;
-    height: 12px;
-    color: rgba(255, 255, 255, 1);
+  .setting-label-group {
+    width: 100%;
+  }
+
+  .accent-color-container {
+    width: 100%;
+  }
+
+  .accent-color-row {
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  .accent-color-dot {
+    width: 24px;
+    height: 24px;
+  }
+
+  .radio-group-horizontal {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .radio-group-horizontal .radio-box-item {
+    min-width: auto;
+  }
+
+  .font-size-options {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .slider-control {
+    width: 100%;
+    align-items: flex-start;
+  }
+
+  .slider-container {
+    width: 100%;
+  }
+
+  .custom-range {
+    width: 100%;
+  }
+}
+
+/* 自定义滑块样式 */
+.custom-range {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  outline: none;
+  transition: background var(--transition-fast);
+
+  &:hover {
+    background: #3d3d50;
+  }
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--brand-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+
+    &:hover {
+      transform: scale(1.1);
+    }
+  }
+
+  &::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--brand-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+
+    &:hover {
+      transform: scale(1.1);
+    }
   }
 }
 
@@ -2483,6 +2853,27 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
     border-color: var(--brand-primary);
     background-color: rgba(59, 130, 246, 0.06);
     color: var(--text-primary);
+  }
+
+  &.small {
+    padding: 6px 10px;
+    gap: 6px;
+    font-size: 12px;
+    min-width: 50px;
+  }
+
+  &.small .radio-box {
+    width: 14px;
+    height: 14px;
+  }
+
+  &.small .radio-box .radio-box-inner {
+    width: 7px;
+    height: 7px;
+  }
+
+  &.small .radio-box-label {
+    font-size: 12px;
   }
 }
 

@@ -1,18 +1,41 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { RiFolderLine } from '@remixicon/vue'
 
-const props = defineProps<{ visible: boolean }>()
-const emit = defineEmits<{ close: []; import: [data: { name: string; url: string; type: 'url' | 'file' }] }>()
+const props = defineProps<{ 
+  visible: boolean 
+  source?: any // 用于编辑模式
+}>()
+const emit = defineEmits<{ 
+  close: []; 
+  import: [data: { name: string; url: string; type: 'url' | 'file' }] 
+}>()
 const activeTab = ref<'url' | 'file'>('url')
 const sourceName = ref('')
 const sourceUrl = ref('')
 const selectedFile = ref<File | null>(null)
 const isVisible = computed(() => props.visible)
-const handleClose = () => { emit('close'); resetForm() }
+
+// 监听 visible 变化，当打开模态框时预填数据
+watch(() => props.visible, (newVisible) => {
+  if (newVisible && props.source) {
+    sourceName.value = props.source.name || ''
+    sourceUrl.value = props.source.url || ''
+    activeTab.value = props.source.type === 'file' ? 'file' : 'url'
+  }
+})
+
+const handleClose = () => { 
+  emit('close'); 
+  resetForm() 
+}
 const handleImport = () => {
   if (activeTab.value === 'url' && sourceUrl.value) {
-    emit('import', { name: sourceName.value || sourceUrl.value.split('/').pop() || '未命名', url: sourceUrl.value, type: 'url' })
+    emit('import', { 
+      name: sourceName.value || sourceUrl.value.split('/').pop() || '未命名', 
+      url: sourceUrl.value, 
+      type: 'url' 
+    })
     handleClose()
   } else if (activeTab.value === 'file' && selectedFile.value) {
     // 读取本地文件内容并传递给父组件
@@ -34,9 +57,19 @@ const handleImport = () => {
 }
 const handleFileSelect = (event: Event) => {
   const target = event.target as HTMLInputElement
-  if (target.files && target.files[0]) { selectedFile.value = target.files[0]; sourceName.value = selectedFile.value.name.replace(/\.(m3u|m3u8)$/, '') }
+  if (target.files && target.files[0]) { 
+    selectedFile.value = target.files[0]; 
+    if (!sourceName.value) {
+      sourceName.value = selectedFile.value.name.replace(/\.(m3u|m3u8)$/, '')
+    }
+  }
 }
-const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedFile.value = null; activeTab.value = 'url' }
+const resetForm = () => { 
+  sourceName.value = ''; 
+  sourceUrl.value = ''; 
+  selectedFile.value = null; 
+  activeTab.value = 'url' 
+}
 </script>
 
 <template>
@@ -44,7 +77,7 @@ const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedF
     <div v-if="isVisible" class="modal-overlay" @click.self="handleClose">
       <div class="modal">
         <div class="modal-header">
-          <h3 class="modal-title">导入直播源</h3>
+          <h3 class="modal-title">添加源</h3>
           <button class="modal-close" @click="handleClose">×</button>
         </div>
         <div class="modal-tabs">
@@ -53,8 +86,8 @@ const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedF
         </div>
         <div class="modal-body">
           <div v-if="activeTab === 'url'" class="tab-content">
-            <div class="form-group"><label>源名称（可选）</label><input v-model="sourceName" type="text" placeholder="请输入源名称，默认使用文件名" /></div>
-            <div class="form-group"><label>直播源地址</label><input v-model="sourceUrl" type="text" placeholder="请输入 m3u/m3u8 地址" /></div>
+            <div class="form-group"><label>源名称</label><input v-model="sourceName" type="text" placeholder="请输入源名称" /></div>
+            <div class="form-group"><label>源地址</label><input v-model="sourceUrl" type="text" placeholder="请输入 m3u/m3u8 地址" /></div>
           </div>
           <div v-else class="tab-content">
             <div class="file-drop">
@@ -70,7 +103,7 @@ const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedF
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="handleClose">取消</button>
-          <button class="btn btn-primary" @click="handleImport">导入</button>
+          <button class="btn btn-primary" @click="handleImport">确定</button>
         </div>
       </div>
     </div>
@@ -141,7 +174,13 @@ const resetForm = () => { sourceName.value = ''; sourceUrl.value = ''; selectedF
   }
 }
 
-.modal-body { padding: 24px; }
+.modal-body { padding: 24px; min-height: 220px; }
+
+.tab-content {
+  min-height: 170px;
+  display: flex;
+  flex-direction: column;
+}
 
 .form-group {
   margin-bottom: 16px;
