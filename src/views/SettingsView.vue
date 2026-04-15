@@ -298,26 +298,18 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
                   <p class="setting-desc">选择要导入的频道分类</p>
                 </div>
                 <div class="channel-category-selector">
-                  <label class="radio-box-item" :class="{ active: selectedCategory === 'all' }">
-                    <input type="radio" name="category" :checked="selectedCategory === 'all'" @change="selectedCategory = 'all'" />
-                    <span class="radio-box"><span class="radio-box-inner"></span></span>
-                    <span class="radio-box-label">全部</span>
-                  </label>
-                  <label class="radio-box-item" :class="{ active: selectedCategory === 'cctv' }">
-                    <input type="radio" name="category" :checked="selectedCategory === 'cctv'" @change="selectedCategory = 'cctv'" />
-                    <span class="radio-box"><span class="radio-box-inner"></span></span>
-                    <span class="radio-box-label">央视频道</span>
-                  </label>
-                  <label class="radio-box-item" :class="{ active: selectedCategory === 'satellite' }">
-                    <input type="radio" name="category" :checked="selectedCategory === 'satellite'" @change="selectedCategory = 'satellite'" />
-                    <span class="radio-box"><span class="radio-box-inner"></span></span>
-                    <span class="radio-box-label">卫视频道</span>
-                  </label>
-                  <label class="radio-box-item" :class="{ active: selectedCategory === 'other' }">
-                    <input type="radio" name="category" :checked="selectedCategory === 'other'" @change="selectedCategory = 'other'" />
-                    <span class="radio-box"><span class="radio-box-inner"></span></span>
-                    <span class="radio-box-label">其他频道</span>
-                  </label>
+                  <button class="schedule-freq-btn" :class="{ active: selectedCategory === 'all' }" @click="selectedCategory = 'all'">
+                    <span class="freq-label">全部</span>
+                  </button>
+                  <button class="schedule-freq-btn" :class="{ active: selectedCategory === 'cctv' }" @click="selectedCategory = 'cctv'">
+                    <span class="freq-label">央视频道</span>
+                  </button>
+                  <button class="schedule-freq-btn" :class="{ active: selectedCategory === 'satellite' }" @click="selectedCategory = 'satellite'">
+                    <span class="freq-label">卫视频道</span>
+                  </button>
+                  <button class="schedule-freq-btn" :class="{ active: selectedCategory === 'other' }" @click="selectedCategory = 'other'">
+                    <span class="freq-label">其他频道</span>
+                  </button>
                 </div>
               </div>
               <div class="setting-row remote-input-row" v-if="selectedCategory">
@@ -1248,10 +1240,11 @@ const onCheckboxChange = (setter: (val: boolean) => void) => (e: Event) => {
 }
 
 .channel-category-selector {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
   margin-top: 8px;
+  margin-bottom: 4px;
 }
 
 .remote-input-actions {
