@@ -19,7 +19,6 @@ const ChannelPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [lines, setLines] = useState<ChannelLine[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<{ cctv: boolean; ws: boolean }>({
     cctv: true,  // 央视频道默认展开
@@ -30,64 +29,23 @@ const ChannelPage: React.FC = () => {
     setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
   };
 
-  const handleChannelClick = async (channel: Channel) => {
+  const handleChannelClick = (channel: Channel) => {
     setSelectedChannel(channel);
-    setIsLoading(true);
-    setVideoUrl('');
-    setLines([]);
     
-    try {
-      // 使用Vite代理解决CORS问题
-      const apiUrl = `/api/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${channel.tid}&id=${channel.id}`;
-      
-      const response = await fetch(apiUrl);
-      const html = await response.text();
-      
-      // 解析线路列表
-      const selectMatch = html.match(/<select[^>]*id="playURL"[^>]*>[\s\S]*?<\/select>/);
-      if (selectMatch) {
-        const optionPattern = /<option[^>]*value="([^"]*)"[^>]*>([^<]+)<\/option>/g;
-        const parsedLines: ChannelLine[] = [];
-        let match;
-        let index = 0;
-        while ((match = optionPattern.exec(selectMatch[0])) !== null) {
-          parsedLines.push({
-            id: match[1],
-            name: match[2].replace('線路', '线路'),
-            url: match[1],
-            quality: index === 0 ? '高清' : '标清',
-            isActive: index === 0,
-          });
-          index++;
-        }
-        setLines(parsedLines);
-      } else {
-        // 如果没有找到线路，使用默认线路
-        setLines([{ id: '1', name: '默认线路', url: '', quality: '高清', isActive: true }]);
-      }
-      
-      // 设置iframe URL
-      setVideoUrl(apiUrl);
-    } catch (error) {
-      console.error('获取频道信息失败:', error);
-      // 使用默认数据
-      setVideoUrl('');
-      setLines([
-        { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
-        { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
-      ]);
-    } finally {
-      setIsLoading(false);
-    }
+    // 直接设置iframe URL
+    const playUrl = `https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${channel.tid}&id=${channel.id}`;
+    setVideoUrl(playUrl);
+    
+    // 设置模拟线路
+    setLines([
+      { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
+      { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
+      { id: '3', name: '线路3', url: '', quality: '标清', isActive: false },
+    ]);
   };
 
   const handleLineSwitch = (line: ChannelLine) => {
     setLines(lines.map(l => ({ ...l, isActive: l.id === line.id })));
-    // 切换线路时重新加载iframe
-    if (selectedChannel) {
-      const apiUrl = `/api/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${selectedChannel.tid}&id=${selectedChannel.id}&line=${line.id}`;
-      setVideoUrl(apiUrl);
-    }
   };
 
   const filteredChannels = (category: 'cctv' | 'ws') => {
@@ -270,14 +228,7 @@ const ChannelPage: React.FC = () => {
       <div className="flex-1 flex flex-col bg-black">
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="w-full h-full max-w-[1318.67px] max-h-[741.75px] bg-black rounded-lg overflow-hidden shadow-lg relative">
-            {isLoading ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                  <p className="text-white/60">加载中...</p>
-                </div>
-              </div>
-            ) : videoUrl ? (
+            {videoUrl ? (
               <>
                 {/* 使用iframe嵌入IPTV播放页面 */}
                 <iframe
