@@ -17,13 +17,27 @@ interface ChannelLine {
 const ChannelPage: React.FC = () => {
   const { favorites, toggleFavorite } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(cctvChannels[0] || null);
   const [lines, setLines] = useState<ChannelLine[]>([]);
   const [videoUrl, setVideoUrl] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<{ cctv: boolean; ws: boolean }>({
     cctv: true,  // 央视频道默认展开
     ws: false,   // 卫视频道默认折叠
   });
+
+  // 初始化时播放CCTV-1
+  React.useEffect(() => {
+    if (cctvChannels[0]) {
+      const firstChannel = cctvChannels[0];
+      const playUrl = `https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${firstChannel.tid}&id=${firstChannel.id}`;
+      setVideoUrl(playUrl);
+      setLines([
+        { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
+        { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
+        { id: '3', name: '线路3', url: '', quality: '标清', isActive: false },
+      ]);
+    }
+  }, []);
 
   const toggleCategory = (category: 'cctv' | 'ws') => {
     setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
