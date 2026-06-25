@@ -11,7 +11,7 @@ type Action =
 
 const initialState: AppState = {
   favorites: [],
-  settings: { theme: 'black', autoPlay: false, quality: 'high', tvMode: false, showLines: false },
+  settings: { theme: 'white', autoPlay: false, quality: 'high', tvMode: false, showLines: true },
   currentCategory: '全部',
 };
 

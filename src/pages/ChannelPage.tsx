@@ -281,7 +281,7 @@ const ChannelPage: React.FC = () => {
             />
           )}
 
-          {settings.showLines !== false && showPlayer && (
+          {settings.showLines && showPlayer && (
             <div className="p-4 bg-gray-900 border-t border-gray-800">
               {!loading && selectedChannel && lines.length > 0 && (
                 <div>

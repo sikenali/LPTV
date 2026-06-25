@@ -4,9 +4,9 @@ import LiquidGlass from '@m0x3mkx/liquid-glass-react';
 import { useApp } from '../../context/AppContext';
 
 const themes = [
-  { id: 'glass' as const, name: '液态玻璃', subtitle: 'Glass', previewColor: 'bg-blue-500/10' },
   { id: 'white' as const, name: '白色主题', subtitle: '#FFFFFF', previewColor: 'bg-white' },
   { id: 'black' as const, name: '黑色主题', subtitle: '#4A4A4A', previewColor: 'bg-gray-800' },
+  { id: 'glass' as const, name: '液态玻璃', subtitle: 'Glass', previewColor: 'bg-blue-500/10' },
 ];
 
 const ThemeSetting: React.FC = () => {
