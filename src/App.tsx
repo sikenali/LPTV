@@ -6,6 +6,8 @@ import ChannelPage from './pages/ChannelPage';
 import PlayerPage from './pages/PlayerPage';
 import FavoritePage from './pages/FavoritePage';
 import SettingsPage from './pages/SettingsPage';
+import TvModePage from './pages/TvModePage';
+import { getBgClass } from './utils/theme';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <>
@@ -16,22 +18,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const ThemedApp: React.FC = () => {
   const { settings } = useApp();
-  
-  const getThemeClass = () => {
-    switch (settings.theme) {
-      case 'white':
-        return 'bg-gray-50';
-      case 'black':
-        return 'bg-gray-900';
-      case 'glass':
-        return 'bg-gradient-to-br from-gray-100 via-blue-50 to-purple-50';
-      default:
-        return 'bg-gray-50';
-    }
-  };
 
   return (
-    <div className={`min-h-screen ${getThemeClass()} transition-colors duration-300`}>
+    <div className={`min-h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
       <Routes>
         <Route 
           path="/" 
@@ -62,6 +51,10 @@ const ThemedApp: React.FC = () => {
               <SettingsPage />
             </Layout>
           } 
+        />
+        <Route 
+          path="/tv-mode" 
+          element={<TvModePage />} 
         />
       </Routes>
     </div>

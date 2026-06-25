@@ -20,6 +20,8 @@ export interface UserSettings {
   theme: 'glass' | 'white' | 'black';
   autoPlay: boolean;
   quality: 'high' | 'medium' | 'low';
+  tvMode: boolean;
+  showLines: boolean;
 }
 
 export interface AppState {

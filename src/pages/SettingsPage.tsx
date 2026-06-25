@@ -1,281 +1,259 @@
 import React, { useState, useEffect } from 'react';
-import { RiPaletteLine, RiFullscreenLine, RiTvLine, RiRefreshLine, RiRouteLine, RiRepeatLine } from '@remixicon/react';
+import { useNavigate } from 'react-router-dom';
+import { RiPaletteLine, RiLayoutGridLine, RiTvLine, RiRefreshLine, RiRouteLine, RiCheckLine, RiHistoryLine } from '@remixicon/react';
 import { useApp } from '../context/AppContext';
+import { getBgClass, getSidebarMenuItemClass } from '../utils/theme';
 
 type TabType = 'theme' | 'mode';
 
+const themes = [
+  {
+    id: 'glass' as const,
+    name: '液态玻璃',
+    label: 'Glass',
+    previewBg: 'bg-blue-50',
+    navLogo: 'bg-blue-600',
+    navText: 'bg-slate-300',
+    sideBg: 'bg-white/55',
+    mainBg: 'bg-white/30',
+  },
+  {
+    id: 'white' as const,
+    name: '白色主题',
+    label: '#FFFFFF',
+    previewBg: 'bg-white',
+    navLogo: 'bg-blue-600',
+    navText: 'bg-slate-300',
+    sideBg: 'bg-[#F8F8F8]',
+    mainBg: 'bg-[#EEEEEE]',
+  },
+  {
+    id: 'black' as const,
+    name: '黑色主题',
+    label: '#0A0A0A',
+    previewBg: 'bg-[#0A0A0A]',
+    navLogo: 'bg-blue-500',
+    navText: 'bg-zinc-600',
+    sideBg: 'bg-[#1A1A1A]',
+    mainBg: 'bg-[#1A1A1A]',
+  },
+];
+
+interface SettingToggleProps {
+  icon: React.ReactNode;
+  iconBg: string;
+  iconColor: string;
+  title: string;
+  description: string;
+  toggled: boolean;
+  onToggle: () => void;
+  theme: string;
+}
+
+const SettingToggle: React.FC<SettingToggleProps> = ({ icon, iconBg, iconColor, title, description, toggled, onToggle, theme }) => {
+  const cardBg = theme === 'black' ? 'bg-gray-800' : theme === 'glass' ? 'bg-white/80 backdrop-blur-lg' : 'bg-white';
+  const titleClass = theme === 'black' ? 'text-gray-100' : 'text-slate-800';
+  const descClass = theme === 'black' ? 'text-gray-400' : 'text-slate-400';
+  return (
+    <div className={`w-full ${cardBg} rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.04)] px-6 py-5 flex items-center justify-between`}>
+      <div className="flex items-center gap-4">
+        <div className={`w-11 h-11 ${iconBg} rounded-xl flex items-center justify-center`}>
+          <div className={iconColor}>{icon}</div>
+        </div>
+        <div>
+          <div className={`text-[15px] font-semibold ${titleClass}`}>{title}</div>
+          <div className={`text-xs ${descClass} mt-1`}>{description}</div>
+        </div>
+      </div>
+      <button
+        onClick={onToggle}
+        className={`relative w-[52px] h-7 rounded-full transition-colors shrink-0 ${toggled ? 'bg-blue-600' : 'bg-slate-300'}`}
+      >
+        <span
+          className={`absolute left-0.5 top-0.5 w-6 h-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-transform ${
+            toggled ? 'translate-x-6' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    </div>
+  );
+};
+
+const ThemeCard: React.FC<{
+  theme: typeof themes[0];
+  isSelected: boolean;
+  onClick: () => void;
+}> = ({ theme, isSelected, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`w-[220px] shrink-0 rounded-2xl overflow-hidden bg-white transition-all ${
+      isSelected
+        ? 'border-2 border-blue-600 shadow-[0_4px_16px_rgba(37,99,235,0.15)]'
+        : 'border-2 border-[#E8E8E8] hover:border-gray-300'
+    }`}
+  >
+    <div className={`h-[140px] ${theme.previewBg} p-3`}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`w-[15px] h-[14px] ${theme.navLogo} rounded-[4px]`} />
+        <div className={`w-[41px] h-2 ${theme.navText} rounded-[4px]`} />
+      </div>
+      <div className="flex gap-2">
+        <div className={`w-[51px] h-[92px] ${theme.sideBg} rounded-[6px]`} />
+        <div className={`flex-1 h-[92px] ${theme.mainBg} rounded-[6px]`} />
+      </div>
+    </div>
+    <div className="flex items-center justify-between px-4 py-4">
+      <div className="text-left">
+        <div className="text-sm font-semibold text-slate-800">{theme.name}</div>
+        <div className="text-[11px] text-slate-400 mt-1">{theme.label}</div>
+      </div>
+      {isSelected ? (
+        <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center">
+          <RiCheckLine className="w-4 h-4 text-white" />
+        </div>
+      ) : (
+        <div className="w-6 h-6 rounded-full border-2 border-slate-200" />
+      )}
+    </div>
+  </button>
+);
+
 const SettingsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { settings, updateSettings } = useApp();
   const [activeTab, setActiveTab] = useState<TabType>('theme');
   const [selectedTheme, setSelectedTheme] = useState(settings.theme);
-  const [tvMode, setTvMode] = useState(true);
+  const [tvMode, setTvMode] = useState(settings.tvMode);
   const [playbackMode, setPlaybackMode] = useState(false);
   const [autoUpdate, setAutoUpdate] = useState(true);
+  const [showLines, setShowLines] = useState(settings.showLines);
 
   useEffect(() => {
     setSelectedTheme(settings.theme);
   }, [settings.theme]);
 
-  const themes = [
-    { id: 'glass' as const, name: '液态玻璃', color: '#E3F2FD', preview: 'bg-blue-50', borderColor: 'border-blue-400' },
-    { id: 'white' as const, name: '白色主题', color: '#FFFFFF', preview: 'bg-white', borderColor: 'border-blue-500' },
-    { id: 'black' as const, name: '黑色主题', color: '#4A4A4A', preview: 'bg-gray-800', borderColor: 'border-gray-600' },
-  ];
+  useEffect(() => {
+    setTvMode(settings.tvMode);
+  }, [settings.tvMode]);
+
+  useEffect(() => {
+    setShowLines(settings.showLines);
+  }, [settings.showLines]);
 
   const handleApplyTheme = () => {
     updateSettings({ theme: selectedTheme });
   };
 
-  const getBgClass = () => {
-    switch (settings.theme) {
-      case 'white':
-        return 'bg-gray-50';
-      case 'black':
-        return 'bg-gray-900';
-      case 'glass':
-        return 'bg-gradient-to-br from-gray-100 via-blue-50 to-purple-50';
-      default:
-        return 'bg-gray-50';
-    }
-  };
-
-  const getSidebarClass = () => {
-    switch (settings.theme) {
-      case 'white':
-        return 'bg-white border-gray-200';
-      case 'black':
-        return 'bg-gray-800 border-gray-700';
-      case 'glass':
-        return 'bg-white/80 backdrop-blur-lg border-gray-200/50';
-      default:
-        return 'bg-white border-gray-200';
-    }
-  };
-
-  const getTextClass = () => {
-    switch (settings.theme) {
-      case 'white':
-      case 'glass':
-        return 'text-gray-800';
-      case 'black':
-        return 'text-white';
-      default:
-        return 'text-gray-800';
-    }
-  };
-
-  const getTextGrayClass = () => {
-    switch (settings.theme) {
-      case 'white':
-      case 'glass':
-        return 'text-gray-500';
-      case 'black':
-        return 'text-gray-400';
-      default:
-        return 'text-gray-500';
-    }
-  };
-
-  const getCardClass = () => {
-    switch (settings.theme) {
-      case 'white':
-        return 'bg-white border-gray-200';
-      case 'black':
-        return 'bg-gray-800 border-gray-700';
-      case 'glass':
-        return 'bg-white/60 backdrop-blur-lg border-gray-200/50';
-      default:
-        return 'bg-white border-gray-200';
-    }
-  };
-
   return (
-    <div className={`min-h-screen ${getBgClass()} transition-colors duration-300`}>
-      <div className="flex h-[calc(100vh-80px)]">
-        <div className={`w-64 ${getSidebarClass()} border-r flex flex-col transition-colors duration-300`}>
-          <div className="p-4 border-b border-gray-100">
-            <span className={`text-sm font-medium ${getTextGrayClass()}`}>设置</span>
+    <div className={`min-h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
+      <div className="flex h-[calc(100vh-64px)]">
+        <aside className={`w-[260px] ${settings.theme === 'black' ? 'bg-gray-800' : 'bg-white'} border-r ${settings.theme === 'black' ? 'border-gray-700' : 'border-gray-200'} flex flex-col shrink-0`}>
+          <div className="px-5 pt-5 pb-3">
+            <span className={`text-xs font-semibold ${settings.theme === 'black' ? 'text-gray-400' : 'text-slate-400'}`}>设置</span>
           </div>
-          <nav className="flex-1 p-2">
+          <div className="flex-1 px-0">
             <button
               onClick={() => setActiveTab('theme')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${
-                activeTab === 'theme'
-                  ? 'bg-blue-500 text-white'
-                  : `${getTextClass()} hover:bg-gray-100`
-              }`}
+              className={`w-full flex items-center gap-3 px-5 py-3 text-sm transition-colors ${getSidebarMenuItemClass(settings.theme, activeTab === 'theme')}`}
             >
-              <RiPaletteLine className="w-5 h-5" />
-              <span className="text-sm font-medium">主题管理</span>
+              <RiPaletteLine className="w-5 h-5 shrink-0" />
+              <span className={activeTab === 'theme' ? 'font-semibold' : ''}>主题管理</span>
             </button>
             <button
               onClick={() => setActiveTab('mode')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                activeTab === 'mode'
-                  ? 'bg-blue-500 text-white'
-                  : `${getTextClass()} hover:bg-gray-100`
-              }`}
+              className={`w-full flex items-center gap-3 px-5 py-3 text-sm transition-colors ${getSidebarMenuItemClass(settings.theme, activeTab === 'mode')}`}
             >
-              <RiFullscreenLine className="w-5 h-5" />
-              <span className="text-sm font-medium">模式管理</span>
+              <RiLayoutGridLine className="w-5 h-5 shrink-0" />
+              <span className={activeTab === 'mode' ? 'font-semibold' : ''}>模式管理</span>
             </button>
-          </nav>
-        </div>
+          </div>
+        </aside>
 
-        <div className={`flex-1 p-8 overflow-y-auto ${getBgClass()} transition-colors duration-300`}>
+        <main className="flex-1 overflow-y-auto p-8">
           {activeTab === 'theme' ? (
-            <div>
-              <h2 className={`text-xl font-bold ${getTextClass()} mb-2`}>主题管理</h2>
-              <p className={`text-sm mb-8 ${getTextGrayClass()}`}>选择你喜欢的界面主题配色方案</p>
+            <div className="max-w-[800px]">
+              <h1 className={`text-xl font-bold ${settings.theme === 'black' ? 'text-gray-100' : 'text-slate-800'}`}>主题管理</h1>
+              <p className={`text-sm ${settings.theme === 'black' ? 'text-gray-400' : 'text-slate-400'} mt-1 mb-6`}>选择你喜欢的界面主题配色方案</p>
 
-              <div className="grid grid-cols-3 gap-6 mb-8">
+              <div className="flex gap-5 mb-8">
                 {themes.map((theme) => (
-                  <button
+                  <ThemeCard
                     key={theme.id}
+                    theme={theme}
+                    isSelected={selectedTheme === theme.id}
                     onClick={() => setSelectedTheme(theme.id)}
-                    className={`relative rounded-xl p-4 border-2 transition-all ${
-                      selectedTheme === theme.id
-                        ? `${theme.borderColor} shadow-lg`
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className={`h-32 rounded-lg mb-4 ${theme.preview} border border-gray-200`}>
-                      <div className="flex flex-col p-3 gap-2">
-                        <div className="flex gap-2">
-                          <div className={`h-6 rounded ${theme.id === 'black' ? 'bg-gray-700' : 'bg-blue-500'}`} style={{ width: '30%' }} />
-                          <div className={`h-6 rounded ${theme.id === 'black' ? 'bg-gray-600' : 'bg-gray-200'}`} style={{ width: '50%' }} />
-                        </div>
-                        <div className={`h-20 rounded ${theme.id === 'black' ? 'bg-gray-700' : 'bg-gray-100'}`} />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className={`font-medium ${getTextClass()}`}>{theme.name}</div>
-                        <div className={`text-xs ${getTextGrayClass()}`}>{theme.id === 'glass' ? 'Glass' : theme.id === 'white' ? '#FFFFFF' : '#4A4A4A'}</div>
-                      </div>
-                      {selectedTheme === theme.id && (
-                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                  </button>
+                  />
                 ))}
               </div>
 
-              <button 
+              <button
                 onClick={handleApplyTheme}
-                className="px-6 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+                className="w-[160px] py-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
               >
                 应用主题
               </button>
             </div>
           ) : (
-            <div>
-              <h2 className={`text-xl font-bold ${getTextClass()} mb-2`}>模式管理</h2>
-              <p className={`text-sm mb-8 ${getTextGrayClass()}`}>配置播放模式与功能选项</p>
+            <div className="max-w-[800px]">
+              <h1 className={`text-xl font-bold ${settings.theme === 'black' ? 'text-gray-100' : 'text-slate-800'}`}>模式管理</h1>
+              <p className={`text-sm ${settings.theme === 'black' ? 'text-gray-400' : 'text-slate-400'} mt-1 mb-6`}>配置播放模式与功能选项</p>
 
               <div className="space-y-4">
-                <div className={`rounded-xl p-4 shadow-sm border ${getCardClass()} transition-colors duration-300`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-                        <RiTvLine className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <div className={`font-medium ${getTextClass()}`}>TV模式</div>
-                        <div className={`text-sm ${getTextGrayClass()}`}>启用后自动适配大屏电视显示比例与遥控操作</div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setTvMode(!tvMode)}
-                      className={`relative w-14 h-7 rounded-full transition-colors ${
-                        tvMode ? 'bg-blue-500' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                          tvMode ? 'translate-x-8' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                <div className={`rounded-xl p-4 shadow-sm border ${getCardClass()} transition-colors duration-300`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center">
-                        <RiRefreshLine className="w-6 h-6 text-yellow-600" />
-                      </div>
-                      <div>
-                        <div className={`font-medium ${getTextClass()}`}>回看功能</div>
-                        <div className={`text-sm ${getTextGrayClass()}`}>支持回看过去7天内的节目内容</div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setPlaybackMode(!playbackMode)}
-                      className={`relative w-14 h-7 rounded-full transition-colors ${
-                        playbackMode ? 'bg-blue-500' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                          playbackMode ? 'translate-x-8' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                <div className={`rounded-xl p-4 shadow-sm border ${getCardClass()} transition-colors duration-300`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                        <RiRouteLine className="w-6 h-6 text-green-600" />
-                      </div>
-                      <div>
-                        <div className={`font-medium ${getTextClass()}`}>线路设置</div>
-                        <div className={`text-sm ${getTextGrayClass()}`}>管理播放地址，配置自动切换优先级</div>
-                      </div>
-                    </div>
-                    <svg className={`w-5 h-5 ${getTextGrayClass()}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className={`rounded-xl p-4 shadow-sm border ${getCardClass()} transition-colors duration-300`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                        <RiRepeatLine className="w-6 h-6 text-purple-600" />
-                      </div>
-                      <div>
-                        <div className={`font-medium ${getTextClass()}`}>自动更新频道</div>
-                        <div className={`text-sm ${getTextGrayClass()}`}>后台自动更新频道数据，保持频道最新</div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setAutoUpdate(!autoUpdate)}
-                      className={`relative w-14 h-7 rounded-full transition-colors ${
-                        autoUpdate ? 'bg-blue-500' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                          autoUpdate ? 'translate-x-8' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
+                <SettingToggle
+                  icon={<RiTvLine className="w-[22px] h-[22px]" />}
+                  iconBg="bg-blue-50"
+                  iconColor="text-blue-600"
+                  title="TV 模式"
+                  description="启用后自动适配大屏电视显示比例与遥控操作"
+                  toggled={tvMode}
+                  theme={settings.theme}
+                  onToggle={() => {
+                    const next = !tvMode;
+                    setTvMode(next);
+                    updateSettings({ tvMode: next });
+                    if (next) {
+                      navigate('/tv-mode');
+                    }
+                  }}
+                />
+                <SettingToggle
+                  icon={<RiHistoryLine className="w-[22px] h-[22px]" />}
+                  iconBg="bg-amber-50"
+                  iconColor="text-amber-500"
+                  title="回看功能"
+                  description="支持回看过去7天内的节目内容"
+                  toggled={playbackMode}
+                  theme={settings.theme}
+                  onToggle={() => setPlaybackMode(!playbackMode)}
+                />
+                <SettingToggle
+                  icon={<RiRouteLine className="w-[22px] h-[22px]" />}
+                  iconBg="bg-green-50"
+                  iconColor="text-emerald-500"
+                  title="线路切换"
+                  description="启用后在播放页面显示线路切换功能"
+                  toggled={showLines}
+                  theme={settings.theme}
+                  onToggle={() => {
+                    const next = !showLines;
+                    setShowLines(next);
+                    updateSettings({ showLines: next });
+                  }}
+                />
+                <SettingToggle
+                  icon={<RiRefreshLine className="w-[22px] h-[22px]" />}
+                  iconBg="bg-purple-50"
+                  iconColor="text-purple-500"
+                  title="自动更新频道"
+                  description="后台自动更新频道列表数据，保持频道最新"
+                  toggled={autoUpdate}
+                  theme={settings.theme}
+                  onToggle={() => setAutoUpdate(!autoUpdate)}
+                />
               </div>
             </div>
           )}
-        </div>
+        </main>
       </div>
     </div>
   );

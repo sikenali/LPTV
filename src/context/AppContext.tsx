@@ -10,7 +10,7 @@ type Action =
 
 const initialState: AppState = {
   favorites: [],
-  settings: { theme: 'white', autoPlay: false, quality: 'high' },
+  settings: { theme: 'black', autoPlay: false, quality: 'high', tvMode: false, showLines: true },
   currentCategory: '全部',
 };
 
@@ -63,6 +63,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     localStorage.setItem('lptv-favorites', JSON.stringify(state.favorites));
   }, [state.favorites]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('lptv-settings');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        dispatch({ type: 'UPDATE_SETTINGS', payload: parsed });
+      } catch {
+        console.error('Failed to parse settings');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('lptv-settings', JSON.stringify(state.settings));
+  }, [state.settings]);
 
   const addFavorite = (id: string) => dispatch({ type: 'ADD_FAVORITE', payload: id });
   const removeFavorite = (id: string) => dispatch({ type: 'REMOVE_FAVORITE', payload: id });
