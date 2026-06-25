@@ -5,6 +5,7 @@ type Action =
   | { type: 'ADD_FAVORITE'; payload: string }
   | { type: 'REMOVE_FAVORITE'; payload: string }
   | { type: 'TOGGLE_FAVORITE'; payload: string }
+  | { type: 'SET_FAVORITES'; payload: string[] }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<UserSettings> }
   | { type: 'SET_CATEGORY'; payload: string };
 
@@ -24,6 +25,8 @@ const reducer = (state: AppState, action: Action): AppState => {
       return state.favorites.includes(action.payload)
         ? { ...state, favorites: state.favorites.filter(id => id !== action.payload) }
         : { ...state, favorites: [...state.favorites, action.payload] };
+    case 'SET_FAVORITES':
+      return { ...state, favorites: action.payload };
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.payload } };
     case 'SET_CATEGORY':
@@ -52,7 +55,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          parsed.forEach(id => dispatch({ type: 'ADD_FAVORITE', payload: id }));
+          dispatch({ type: 'SET_FAVORITES', payload: parsed });
         }
       } catch {
         console.error('Failed to parse favorites');

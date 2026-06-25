@@ -35,11 +35,9 @@ const Header: React.FC = () => {
               className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg transition-colors min-w-[64px] ${
                 isActive
                   ? 'text-blue-600'
-                  : settings.theme === 'glass'
-                    ? 'text-gray-400 hover:text-gray-600'
-                    : settings.theme === 'black'
-                      ? 'text-gray-400 hover:text-gray-200'
-                      : 'text-gray-400 hover:text-gray-600'
+                  : settings.theme === 'black'
+                    ? 'text-gray-400 hover:text-gray-200'
+                    : 'text-gray-500 hover:text-gray-800'
               }`}
             >
               <Icon className="w-[22px] h-[22px]" />

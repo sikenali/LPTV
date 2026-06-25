@@ -68,13 +68,3 @@ const generateRandomColor = (): string => {
   return colors[Math.floor(Math.random() * colors.length)];
 };
 
-export const getAllChannelLogos = (): Record<string, string> => {
-  return Object.keys(channelColors).reduce((acc, name) => {
-    acc[name] = getChannelLogo(name);
-    return acc;
-  }, {} as Record<string, string>);
-};
-
-export const getLogoUrl = (channelName: string): string => {
-  return getChannelLogo(channelName);
-};

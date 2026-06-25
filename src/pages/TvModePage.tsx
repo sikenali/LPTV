@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RiArrowLeftSLine, RiHeartFill, RiHeartLine, RiArrowDownSLine,
@@ -8,6 +8,7 @@ import {
 import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
 import { cctvChannels, wsChannels } from '../data/channels';
+import { getPlayUrl } from '../utils/iptv';
 
 type CategoryKey = 'cctv' | 'ws';
 
@@ -83,23 +84,9 @@ const TvModePage: React.FC = () => {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
   const [currentDate] = useState(formatDate());
-
-  const allChannels = [...cctvChannels, ...wsChannels];
-
-  useEffect(() => {
-    if (!selectedChannel && allChannels.length > 0) {
-      const lastId = localStorage.getItem('lastPlayedChannel');
-      if (lastId) {
-        const [tid, id] = lastId.split('-');
-        const found = allChannels.find(c => c.id === id && c.tid === tid);
-        if (found) {
-          setSelectedChannel(found);
-          return;
-        }
-      }
-      setSelectedChannel(allChannels[0]);
-    }
-  }, []);
+  const [videoUrl, setVideoUrl] = useState('');
+  
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -111,6 +98,7 @@ const TvModePage: React.FC = () => {
   const handleChannelSelect = (channel: Channel) => {
     setSelectedChannel(channel);
     localStorage.setItem('lastPlayedChannel', `${channel.tid}-${channel.id}`);
+    setVideoUrl(getPlayUrl(channel.tid, channel.id));
   };
 
   const activeCategoryConfig = categories.find(c => c.key === activeCategory)!;
@@ -138,6 +126,27 @@ const TvModePage: React.FC = () => {
               <div className="text-lg font-bold text-white tracking-wider">{currentTime}</div>
             </div>
           </div>
+        </div>
+
+        {/* Video Player Area */}
+        <div className="flex-1 relative min-h-[400px]">
+          {videoUrl ? (
+            <iframe
+              ref={iframeRef}
+              src={videoUrl}
+              className="w-full h-full border-0"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+              title={`${selectedChannel?.name} 播放器`}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+              <div className="text-center">
+                <RiTvLine className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                <p className="text-white/40">选择频道开始观看</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Play info area: channel name, program, status badges */}
@@ -192,7 +201,7 @@ const TvModePage: React.FC = () => {
         </div>
 
         {/* Channel content */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent px-8 py-4">
+        <div className="h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent px-8 py-4">
           <div className="flex flex-wrap gap-3">
             {filteredChannels.map((ch) => (
               <ChannelRow

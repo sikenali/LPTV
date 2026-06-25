@@ -33,7 +33,7 @@ const FavoriteCard: React.FC<FavoriteCardProps> = ({ channel, onClick }) => {
           <p className="text-white/50 text-xs truncate">{channel.currentProgram}</p>
         </div>
         <div
-          onClick={(e) => { e.stopPropagation(); toggleFavorite(channel.id); }}
+          onClick={(e) => { e.stopPropagation(); toggleFavorite(`${channel.tid}-${channel.id}`); }}
           className="p-2 text-yellow-400 hover:text-yellow-300 transition-colors cursor-pointer"
         >
           <RiHeartFill className="w-5 h-5" />

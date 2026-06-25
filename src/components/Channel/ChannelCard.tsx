@@ -1,6 +1,6 @@
 import React from 'react';
 import LiquidGlass from '@m0x3mkx/liquid-glass-react';
-import { RiHeartFill } from '@remixicon/react';
+import { RiHeartFill, RiHeartLine } from '@remixicon/react';
 import { Channel } from '../../types';
 import { useApp } from '../../context/AppContext';
 
@@ -11,7 +11,7 @@ interface ChannelCardProps {
 
 const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onClick }) => {
   const { favorites, toggleFavorite } = useApp();
-  const isFavorite = favorites.includes(channel.id);
+  const isFavorite = favorites.includes(`${channel.tid}-${channel.id}`);
 
   return (
     <LiquidGlass
@@ -40,10 +40,10 @@ const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onClick }) => {
             </span>
           )}
           <div
-            onClick={(e) => { e.stopPropagation(); toggleFavorite(channel.id); }}
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(`${channel.tid}-${channel.id}`); }}
             className={`p-2 rounded-lg transition-colors cursor-pointer ${isFavorite ? 'text-yellow-400' : 'text-white/60 hover:text-white'}`}
           >
-            <RiHeartFill className="w-5 h-5" color={isFavorite ? 'currentColor' : 'transparent'} />
+            {isFavorite ? <RiHeartFill className="w-5 h-5" /> : <RiHeartLine className="w-5 h-5" />}
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RiPaletteLine, RiLayoutGridLine, RiTvLine, RiRefreshLine, RiRouteLine, RiCheckLine, RiHistoryLine } from '@remixicon/react';
 import { useApp } from '../context/AppContext';
-import { getBgClass, getSidebarMenuItemClass } from '../utils/theme';
+import { getBgClass, getSidebarMenuItemClass, getPanelClass, getTextClass, getTextSecondaryClass, getBorderClass, getCardClass } from '../utils/theme';
 
 type TabType = 'theme' | 'mode';
 
@@ -39,6 +39,8 @@ const themes = [
   },
 ];
 
+import { Theme } from '../utils/theme';
+
 interface SettingToggleProps {
   icon: React.ReactNode;
   iconBg: string;
@@ -47,22 +49,19 @@ interface SettingToggleProps {
   description: string;
   toggled: boolean;
   onToggle: () => void;
-  theme: string;
+  theme: Theme;
 }
 
 const SettingToggle: React.FC<SettingToggleProps> = ({ icon, iconBg, iconColor, title, description, toggled, onToggle, theme }) => {
-  const cardBg = theme === 'black' ? 'bg-gray-800' : theme === 'glass' ? 'bg-white/80 backdrop-blur-lg' : 'bg-white';
-  const titleClass = theme === 'black' ? 'text-gray-100' : 'text-slate-800';
-  const descClass = theme === 'black' ? 'text-gray-400' : 'text-slate-400';
   return (
-    <div className={`w-full ${cardBg} rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.04)] px-6 py-5 flex items-center justify-between`}>
+    <div className={`w-full ${getCardClass(theme)} rounded-xl shadow-[0_1px_4px_rgba(0,0,0,0.04)] px-6 py-5 flex items-center justify-between`}>
       <div className="flex items-center gap-4">
         <div className={`w-11 h-11 ${iconBg} rounded-xl flex items-center justify-center`}>
           <div className={iconColor}>{icon}</div>
         </div>
         <div>
-          <div className={`text-[15px] font-semibold ${titleClass}`}>{title}</div>
-          <div className={`text-xs ${descClass} mt-1`}>{description}</div>
+          <div className={`text-[15px] font-semibold ${getTextClass(theme)}`}>{title}</div>
+          <div className={`text-xs ${getTextSecondaryClass(theme)} mt-1`}>{description}</div>
         </div>
       </div>
       <button
@@ -147,9 +146,9 @@ const SettingsPage: React.FC = () => {
   return (
     <div className={`min-h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
       <div className="flex h-[calc(100vh-64px)]">
-        <aside className={`w-[260px] ${settings.theme === 'black' ? 'bg-gray-800' : 'bg-white'} border-r ${settings.theme === 'black' ? 'border-gray-700' : 'border-gray-200'} flex flex-col shrink-0`}>
+        <aside className={`w-[260px] ${getPanelClass(settings.theme)} border-r ${getBorderClass(settings.theme)} flex flex-col shrink-0`}>
           <div className="px-5 pt-5 pb-3">
-            <span className={`text-xs font-semibold ${settings.theme === 'black' ? 'text-gray-400' : 'text-slate-400'}`}>设置</span>
+            <span className={`text-xs font-semibold ${getTextSecondaryClass(settings.theme)}`}>设置</span>
           </div>
           <div className="flex-1 px-0">
             <button
@@ -172,8 +171,8 @@ const SettingsPage: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-8">
           {activeTab === 'theme' ? (
             <div className="max-w-[800px]">
-              <h1 className={`text-xl font-bold ${settings.theme === 'black' ? 'text-gray-100' : 'text-slate-800'}`}>主题管理</h1>
-              <p className={`text-sm ${settings.theme === 'black' ? 'text-gray-400' : 'text-slate-400'} mt-1 mb-6`}>选择你喜欢的界面主题配色方案</p>
+              <h1 className={`text-xl font-bold ${getTextClass(settings.theme)}`}>主题管理</h1>
+              <p className={`text-sm ${getTextSecondaryClass(settings.theme)} mt-1 mb-6`}>选择你喜欢的界面主题配色方案</p>
 
               <div className="flex gap-5 mb-8">
                 {themes.map((theme) => (
@@ -195,8 +194,8 @@ const SettingsPage: React.FC = () => {
             </div>
           ) : (
             <div className="max-w-[800px]">
-              <h1 className={`text-xl font-bold ${settings.theme === 'black' ? 'text-gray-100' : 'text-slate-800'}`}>模式管理</h1>
-              <p className={`text-sm ${settings.theme === 'black' ? 'text-gray-400' : 'text-slate-400'} mt-1 mb-6`}>配置播放模式与功能选项</p>
+              <h1 className={`text-xl font-bold ${getTextClass(settings.theme)}`}>模式管理</h1>
+              <p className={`text-sm ${getTextSecondaryClass(settings.theme)} mt-1 mb-6`}>配置播放模式与功能选项</p>
 
               <div className="space-y-4">
                 <SettingToggle

@@ -1,19 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { RiSearchLine, RiHeartFill, RiHeartLine, RiArrowDownSLine, RiArrowUpSLine, RiLoader2Line } from '@remixicon/react';
-import { Channel } from '../types';
+import { Channel, ChannelLine } from '../types';
 import { useApp } from '../context/AppContext';
 import { getChannelLogo } from '../utils/icons';
 import { cctvChannels, wsChannels } from '../data/channels';
 import ChannelLineList from '../components/Player/ChannelLineList';
-import { getBgClass, getPanelClass, getTextSecondaryClass, getSearchContainerClass, getChannelItemSelectedClass } from '../utils/theme';
-
-interface ChannelLine {
-  id: string;
-  name: string;
-  url: string;
-  quality: string;
-  isActive?: boolean;
-}
+import { getBgClass, getPanelClass, getTextSecondaryClass, getSearchContainerClass, getChannelItemSelectedClass, getTextClass, getHoverClass, getLogoBgClass, getHeartIconClass, getBorderClass, getInputTextClass } from '../utils/theme';
 
 type CategoryKey = 'cctv' | 'ws';
 
@@ -33,103 +25,55 @@ const ChannelPage: React.FC = () => {
     ws: false,
   });
   const [loading, setLoading] = useState(true);
-  const [showPlayer, setShowPlayer] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const videoLoadedRef = useRef(false);
-  const loadCheckTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const lastChannelId = useState<string | null>(() => {
-    return localStorage.getItem('lastPlayedChannel');
-  })[0];
 
   useEffect(() => {
-    const loadLastChannel = async () => {
-      if (lastChannelId) {
-        const [tid, id] = lastChannelId.split('-');
-        if (tid && id) {
-          const channel = [...cctvChannels, ...wsChannels].find(c => c.id === id && c.tid === tid);
-          if (channel) {
-            setSelectedChannel(channel);
-            await loadChannel(channel);
-            return;
-          }
-        }
-      }
-      if (cctvChannels[0]) {
-        await loadChannel(cctvChannels[0]);
-      }
-    };
-    loadLastChannel();
+    const lastChannelId = localStorage.getItem('lastPlayedChannel');
     
-    return () => {
-      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (videoUrl) {
-      videoLoadedRef.current = false;
-      setLoading(true);
-      setShowPlayer(false);
-      
-      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-      
-      loadCheckTimer.current = setInterval(() => {
-        try {
-          const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
-          if (iframeDoc) {
-            const videoElement = iframeDoc.getElementById('vstPlayer') as HTMLVideoElement;
-            if (videoElement) {
-              const playURLSelect = iframeDoc.getElementById('playURL') as HTMLSelectElement;
-              if (playURLSelect) {
-                const options = playURLSelect.options;
-                const parsedLines: ChannelLine[] = [];
-                for (let i = 0; i < options.length; i++) {
-                  parsedLines.push({
-                    id: String(i + 1),
-                    name: options[i].text.replace('線路', '线路'),
-                    url: options[i].value,
-                    quality: i === 0 ? '高清' : '标清',
-                    isActive: i === 0,
-                  });
-                }
-                setLines(parsedLines);
-              } else {
-                setLines([
-                  { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
-                  { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
-                  { id: '3', name: '线路3', url: '', quality: '标清', isActive: false },
-                ]);
-              }
-              videoLoadedRef.current = true;
-              setLoading(false);
-              setShowPlayer(true);
-              if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-            }
-          }
-        } catch (e) {
-          console.log('跨域检查失败，等待视频加载');
+    if (lastChannelId) {
+      const [tid, id] = lastChannelId.split('-');
+      if (tid && id) {
+        const channel = [...cctvChannels, ...wsChannels].find(c => c.id === id && c.tid === tid);
+        if (channel) {
+          setSelectedChannel(channel);
+          setVideoUrl(`https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${channel.tid}&id=${channel.id}`);
+          setLines([
+            { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
+            { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
+            { id: '3', name: '线路3', url: '', quality: '标清', isActive: false },
+          ]);
+          setLoading(false);
+          return;
         }
-      }, 300);
+      }
     }
     
-    return () => {
-      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-    };
-  }, [videoUrl]);
+    if (cctvChannels[0]) {
+      const firstChannel = cctvChannels[0];
+      setVideoUrl(`https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${firstChannel.tid}&id=${firstChannel.id}`);
+      setLines([
+        { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
+        { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
+        { id: '3', name: '线路3', url: '', quality: '标清', isActive: false },
+      ]);
+      setLoading(false);
+    }
+  }, []);
 
-  const loadChannel = async (channel: Channel) => {
+  const loadChannel = (channel: Channel) => {
     setSelectedChannel(channel);
     localStorage.setItem('lastPlayedChannel', `${channel.tid}-${channel.id}`);
-    setVideoUrl('');
     setLoading(true);
-    setShowPlayer(false);
-    videoLoadedRef.current = false;
     
     setTimeout(() => {
-      const playUrl = `https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${channel.tid}&id=${channel.id}`;
-      setVideoUrl(playUrl);
-    }, 300);
+      setVideoUrl(`https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${channel.tid}&id=${channel.id}`);
+      setLines([
+        { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
+        { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
+        { id: '3', name: '线路3', url: '', quality: '标清', isActive: false },
+      ]);
+      setLoading(false);
+    }, 800);
   };
 
   const toggleCategory = (category: CategoryKey) => {
@@ -142,19 +86,9 @@ const ChannelPage: React.FC = () => {
 
   const handleLineSwitch = (line: ChannelLine) => {
     setLines(lines.map(l => ({ ...l, isActive: l.id === line.id })));
-    try {
-      const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
-      if (iframeDoc) {
-        const playURLSelect = iframeDoc.getElementById('playURL') as HTMLSelectElement;
-        if (playURLSelect) {
-          playURLSelect.selectedIndex = parseInt(line.id) - 1;
-          const event = new Event('change');
-          playURLSelect.dispatchEvent(event);
-        }
-      }
-    } catch (e) {
-      console.log('跨域切换线路失败');
-    }
+    if (!selectedChannel) return;
+    const playUrl = `https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${selectedChannel.tid}&id=${selectedChannel.id}&line=${line.id}`;
+    setVideoUrl(playUrl);
   };
 
   const filteredChannels = (category: CategoryKey) => {
@@ -175,7 +109,7 @@ const ChannelPage: React.FC = () => {
         className={`w-full flex items-center justify-between px-3 py-[10px] transition-colors ${getChannelItemSelectedClass(isSelected, settings.theme)}`}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-[41px] h-10 rounded-lg overflow-hidden ${settings.theme === 'glass' ? 'bg-white/80' : settings.theme === 'black' ? 'bg-gray-700' : 'bg-gray-100'} flex items-center justify-center shrink-0`}>
+          <div className={`w-[41px] h-10 rounded-lg overflow-hidden ${getLogoBgClass(settings.theme)} flex items-center justify-center shrink-0`}>
             <img
               src={getChannelLogo(channel.name)}
               alt={channel.name}
@@ -186,7 +120,7 @@ const ChannelPage: React.FC = () => {
             />
           </div>
           <div className="text-left min-w-0">
-            <div className={`text-sm font-medium ${settings.theme === 'glass' ? 'text-gray-800' : settings.theme === 'black' ? 'text-gray-200' : 'text-slate-700'} truncate`}>{channel.name}</div>
+            <div className={`text-sm font-medium ${getTextClass(settings.theme)} truncate`}>{channel.name}</div>
             <div className={`text-[11px] ${getTextSecondaryClass(settings.theme)} truncate max-w-[140px] mt-0.5`}>{channel.currentProgram}</div>
           </div>
         </div>
@@ -200,7 +134,7 @@ const ChannelPage: React.FC = () => {
           {isFavorite ? (
             <RiHeartFill className="w-[18px] h-[18px] text-red-500" />
           ) : (
-            <RiHeartLine className="w-[18px] h-[18px] text-slate-300 hover:text-slate-500" />
+            <RiHeartLine className={`w-[18px] h-[18px] ${getHeartIconClass(settings.theme)}`} />
           )}
         </div>
       </button>
@@ -209,16 +143,16 @@ const ChannelPage: React.FC = () => {
 
   return (
     <div className={`flex h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
-      <div className={`w-[340px] ${getPanelClass(settings.theme)} border-r flex flex-col shrink-0 transition-colors duration-300`}>
-        <div className={`px-4 pt-4 pb-3 border-b ${settings.theme === 'black' ? 'border-gray-700' : 'border-gray-200'}`}>
-          <div className={`flex items-center gap-2 ${getSearchContainerClass(settings.theme)} border rounded-lg px-3 h-10`}>
+      <div className={`w-[340px] ${getPanelClass(settings.theme)} border-r ${getBorderClass(settings.theme)} flex flex-col shrink-0 transition-colors duration-300`}>
+        <div className={`px-4 pt-4 pb-3 border-b ${getBorderClass(settings.theme)}`}>
+          <div className={`flex items-center gap-2 ${getSearchContainerClass(settings.theme)} border ${getBorderClass(settings.theme)} rounded-lg px-3 h-10`}>
             <RiSearchLine className={`w-[18px] h-[18px] ${getTextSecondaryClass(settings.theme)} shrink-0`} />
             <input
               type="text"
               placeholder="搜索频道..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className={`flex-1 bg-transparent text-sm ${settings.theme === 'glass' ? 'text-gray-800 placeholder:text-gray-400' : settings.theme === 'black' ? 'text-gray-200 placeholder:text-gray-400' : 'text-slate-700 placeholder:text-slate-400'} focus:outline-none`}
+              className={`flex-1 bg-transparent text-sm ${getInputTextClass(settings.theme)} focus:outline-none`}
             />
           </div>
         </div>
@@ -235,7 +169,7 @@ const ChannelPage: React.FC = () => {
                 <button
                   onClick={() => toggleCategory(key)}
                   className={`w-full flex items-center justify-between px-3 py-3 rounded-lg my-1 transition-colors ${
-                    isActive ? 'bg-blue-50' : settings.theme === 'glass' ? 'hover:bg-white/50' : settings.theme === 'black' ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                    isActive ? 'bg-blue-50' : getHoverClass(settings.theme)
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -244,8 +178,8 @@ const ChannelPage: React.FC = () => {
                     ) : (
                       <RiArrowDownSLine className={`w-[18px] h-[18px] ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
                     )}
-                    <span className={`text-sm font-semibold ${settings.theme === 'glass' ? 'text-gray-800' : settings.theme === 'black' ? 'text-gray-200' : 'text-slate-800'}`}>{label}</span>
-                    <span className="text-xs text-slate-400">（{filtered.length}）</span>
+                    <span className={`text-sm font-semibold ${getTextClass(settings.theme)}`}>{label}</span>
+                    <span className={`text-xs ${getTextSecondaryClass(settings.theme)}`}>（{filtered.length}）</span>
                   </div>
                   {isExpanded ? (
                     <RiArrowUpSLine className={`w-[18px] h-[18px] ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
@@ -273,9 +207,9 @@ const ChannelPage: React.FC = () => {
             {loading ? (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4">
                 <RiLoader2Line className="w-10 h-10 text-blue-500 animate-spin" />
-                <span className="text-sm text-gray-400">正在加载 {selectedChannel?.name}...</span>
+                <span className={`text-sm ${getTextSecondaryClass(settings.theme)}`}>正在加载 {selectedChannel?.name}...</span>
               </div>
-            ) : showPlayer && videoUrl && (
+            ) : videoUrl ? (
               <iframe
                 ref={iframeRef}
                 src={videoUrl}
@@ -284,27 +218,28 @@ const ChannelPage: React.FC = () => {
                 allowFullScreen
                 title={`${selectedChannel?.name} 播放器`}
               />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+                <span className={`text-sm ${getTextSecondaryClass(settings.theme)}`}>选择一个频道开始观看</span>
+              </div>
             )}
           </div>
         </div>
 
-        {settings.showLines !== false && showPlayer && (
-          <div className="p-4 bg-gray-900 border-t border-gray-800">
-            {!loading && selectedChannel && lines.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-blue-400 text-sm font-medium">线路切换</span>
-                  <span className="text-gray-400 text-xs">当前：{lines.find(l => l.isActive)?.name || '未选择'}</span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  <ChannelLineList
-                    lines={lines}
-                    currentLine={lines.find(l => l.isActive) || null}
-                    onLineSwitch={handleLineSwitch}
-                  />
-                </div>
-              </div>
-            )}
+        {settings.showLines !== false && !loading && videoUrl && lines.length > 0 && (
+          <div className={`p-4 ${getPanelClass(settings.theme)} border-t ${getBorderClass(settings.theme)}`}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-blue-400 text-sm font-medium">线路切换</span>
+              <span className={`${getTextSecondaryClass(settings.theme)} text-xs`}>当前：{lines.find(l => l.isActive)?.name || '未选择'}</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              <ChannelLineList
+                lines={lines}
+                currentLine={lines.find(l => l.isActive) || null}
+                onLineSwitch={handleLineSwitch}
+                theme={settings.theme}
+              />
+            </div>
           </div>
         )}
       </div>

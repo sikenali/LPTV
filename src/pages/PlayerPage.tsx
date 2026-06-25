@@ -1,45 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { RiArrowLeftLine, RiHeartFill, RiPlayLine, RiPauseLine, RiVolumeUpLine, RiZoomInLine } from '@remixicon/react';
-import { channels } from '../data/channels';
+import { RiArrowLeftLine, RiHeartFill, RiHeartLine, RiPlayLine, RiPauseLine, RiVolumeUpLine, RiZoomInLine } from '@remixicon/react';
+import { cctvChannels, wsChannels } from '../data/channels';
 import { useApp } from '../context/AppContext';
-import { fetchVideoUrl } from '../utils/iptv';
+import { getPlayUrl } from '../utils/iptv';
 
 const PlayerPage: React.FC = () => {
   const { tid, channelId } = useParams<{ tid: string; channelId: string }>();
   const navigate = useNavigate();
   const { favorites, toggleFavorite } = useApp();
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [showPlayer, setShowPlayer] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoLoadedRef = useRef(false);
+  const loadCheckTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const channel = channels.find(c => c.id === channelId && c.tid === tid);
+  const channel = [...cctvChannels, ...wsChannels].find(c => c.id === channelId && c.tid === tid);
   const isFavorite = channel ? favorites.includes(`${channel.tid}-${channel.id}`) : false;
 
   useEffect(() => {
-    const loadChannel = async () => {
-      if (!channel || !tid || !channelId) return;
+    if (channel && tid && channelId) {
+      videoLoadedRef.current = false;
+      setIsLoading(true);
+      setShowPlayer(false);
       
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const url = await fetchVideoUrl(tid, channelId);
-        setVideoUrl(url);
-        setIsLoading(false);
-      } catch (err) {
-        console.error('加载频道失败:', err);
-        setError('加载失败，请重试');
-        setIsLoading(false);
-      }
+      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
+      
+      const playUrl = getPlayUrl(tid, channelId);
+      setVideoUrl(playUrl);
+      
+      loadCheckTimer.current = setInterval(() => {
+        try {
+          const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
+          if (iframeDoc) {
+            const videoElement = iframeDoc.getElementById('vstPlayer') as HTMLVideoElement;
+            if (videoElement && videoElement.src && videoElement.src.startsWith('blob:')) {
+              videoLoadedRef.current = true;
+              setIsLoading(false);
+              setShowPlayer(true);
+              if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
+            }
+          }
+        } catch (e) {
+          console.log('跨域检查失败，等待视频加载');
+        }
+      }, 500);
+    }
+    
+    return () => {
+      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     };
-
-    loadChannel();
   }, [channel, tid, channelId]);
 
   const handleTouch = () => {
@@ -49,23 +65,24 @@ const PlayerPage: React.FC = () => {
   };
 
   const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-    
-    if (video.paused) {
-      video.play();
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
+    try {
+      const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
+      if (iframeDoc) {
+        const videoElement = iframeDoc.getElementById('vstPlayer') as HTMLVideoElement;
+        if (videoElement) {
+          if (videoElement.paused) {
+            videoElement.play();
+            setIsPlaying(true);
+          } else {
+            videoElement.pause();
+            setIsPlaying(false);
+          }
+        }
+      }
+    } catch (e) {
+      console.log('无法控制视频播放');
     }
   };
-
-  useEffect(() => {
-    return () => {
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, []);
 
   if (!channel) {
     return (
@@ -110,7 +127,7 @@ const PlayerPage: React.FC = () => {
               isFavorite ? 'text-yellow-400' : 'text-white/60 hover:text-white'
             }`}
           >
-            <RiHeartFill className="w-6 h-6" />
+            {isFavorite ? <RiHeartFill className="w-6 h-6" /> : <RiHeartLine className="w-6 h-6" />}
           </button>
         </div>
       </div>
@@ -124,30 +141,19 @@ const PlayerPage: React.FC = () => {
               <p className="text-white/60">加载中...</p>
             </div>
           </div>
-        ) : error ? (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <p className="text-white/60 mb-4">{error}</p>
-              <button 
-                onClick={() => window.location.reload()}
-                className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20"
-              >
-                重试
-              </button>
-            </div>
-          </div>
-        ) : (
-          <video
-            ref={videoRef}
-            className="w-full h-full"
+        ) : showPlayer && videoUrl && (
+          <iframe
+            ref={iframeRef}
             src={videoUrl}
-            autoPlay
-            onClick={togglePlay}
+            className="w-full h-full border-0"
+            allow="autoplay; fullscreen"
+            allowFullScreen
+            title={`${channel.name} 播放器`}
           />
         )}
 
         {/* 播放/暂停指示器 */}
-        {!isLoading && !error && (
+        {!isLoading && showPlayer && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <button
               onClick={togglePlay}

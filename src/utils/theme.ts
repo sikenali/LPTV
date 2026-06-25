@@ -109,3 +109,51 @@ export function getChannelItemSelectedClass(isSelected: boolean, theme: Theme): 
         : 'hover:bg-gray-50 border-l-[3px] border-transparent';
   }
 }
+
+export function getLogoBgClass(theme: Theme): string {
+  switch (theme) {
+    case 'black': return 'bg-gray-700';
+    case 'glass': return 'bg-white/80';
+    case 'white': return 'bg-gray-100';
+  }
+}
+
+export function getHeartIconClass(theme: Theme): string {
+  switch (theme) {
+    case 'black': return 'text-gray-500 hover:text-gray-300';
+    case 'glass':
+    case 'white': return 'text-slate-400 hover:text-slate-600';
+  }
+}
+
+export function getBorderClass(theme: Theme): string {
+  switch (theme) {
+    case 'black': return 'border-gray-700';
+    case 'glass': return 'border-gray-200/50';
+    case 'white': return 'border-gray-200';
+  }
+}
+
+export function getInputTextClass(theme: Theme): string {
+  switch (theme) {
+    case 'black': return 'text-gray-200 placeholder:text-gray-400';
+    case 'glass': return 'text-gray-800 placeholder:text-gray-400';
+    case 'white': return 'text-slate-700 placeholder:text-slate-400';
+  }
+}
+
+export function getCardImageBgClass(theme: Theme): string {
+  switch (theme) {
+    case 'black': return 'bg-gray-700';
+    case 'glass': return 'bg-white/60';
+    case 'white': return 'bg-gray-200';
+  }
+}
+
+export function getEmptyStateIconClass(theme: Theme): string {
+  switch (theme) {
+    case 'black': return 'text-gray-500';
+    case 'glass': return 'text-gray-400';
+    case 'white': return 'text-gray-300';
+  }
+}
