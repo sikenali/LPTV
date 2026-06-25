@@ -262,38 +262,36 @@ const ChannelPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-black">
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="w-full h-full max-w-[1318.67px] max-h-[741.75px] bg-black rounded-lg overflow-hidden shadow-lg relative">
-            {loading ? (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-                <RiLoader2Line className="w-10 h-10 text-blue-500 animate-spin" />
-                <span className="text-sm text-gray-400">正在加载 {selectedChannel?.name}...</span>
-              </div>
-            ) : showPlayer && videoUrl && (
-              <iframe
-                ref={iframeRef}
-                src={videoUrl}
-                className="w-full h-full border-0"
-                allow="autoplay; fullscreen"
-                allowFullScreen
-                title={`${selectedChannel?.name} 播放器`}
-              />
-            )}
-          </div>
-        </div>
+      <div className="flex-1 flex flex-col bg-black relative overflow-hidden">
+          {loading ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10 bg-black">
+              <RiLoader2Line className="w-10 h-10 text-blue-500 animate-spin" />
+              <span className="text-sm text-gray-400">正在加载 {selectedChannel?.name}...</span>
+            </div>
+          ) : null}
+          {showPlayer && videoUrl && (
+            <iframe
+              ref={iframeRef}
+              src={videoUrl}
+              className="flex-1 w-full h-[160%] border-0 transform -translate-y-[28%]"
+              allow="autoplay; fullscreen"
+              allowFullScreen
+              title={`${selectedChannel?.name} 播放器`}
+              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+            />
+          )}
 
-        {settings.showLines !== false && showPlayer && (
-          <div className="p-4 bg-gray-900 border-t border-gray-800">
-            {!loading && selectedChannel && lines.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-blue-400 text-sm font-medium">线路切换</span>
-                  <span className="text-gray-400 text-xs">当前：{lines.find(l => l.isActive)?.name || '未选择'}</span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  <ChannelLineList
-                    lines={lines}
+          {settings.showLines !== false && showPlayer && (
+            <div className="p-4 bg-gray-900 border-t border-gray-800">
+              {!loading && selectedChannel && lines.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-blue-400 text-sm font-medium">线路切换</span>
+                    <span className="text-gray-400 text-xs">当前：{lines.find(l => l.isActive)?.name || '未选择'}</span>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    <ChannelLineList
+                      lines={lines}
                     currentLine={lines.find(l => l.isActive) || null}
                     onLineSwitch={handleLineSwitch}
                     theme={settings.theme}
