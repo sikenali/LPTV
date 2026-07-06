@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { RiSearchLine, RiHeartFill, RiHeartLine, RiArrowDownSLine, RiArrowUpSLine, RiLoader2Line } from '@remixicon/react';
+import React, { useState, useEffect } from 'react';
+import { RiSearchLine, RiHeartFill, RiHeartLine, RiArrowDownSLine, RiArrowUpSLine } from '@remixicon/react';
 import { Channel, ChannelLine } from '../types';
 import { useApp } from '../context/AppContext';
 import { getChannelLogo } from '../utils/icons';
 import { cctvChannels, wsChannels } from '../data/channels';
 import ChannelLineList from '../components/Player/ChannelLineList';
+import { ProxyPlayer } from '../components/Player';
 import { getBgClass, getPanelClass, getTextSecondaryClass, getSearchContainerClass, getChannelItemSelectedClass, getTextClass, getHoverClass, getLogoBgClass, getHeartIconClass, getBorderClass, getInputTextClass } from '../utils/theme';
 
 type CategoryKey = 'cctv' | 'ws';
@@ -19,16 +20,11 @@ const ChannelPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(cctvChannels[0] || null);
   const [lines, setLines] = useState<ChannelLine[]>([]);
-  const [videoUrl, setVideoUrl] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Record<CategoryKey, boolean>>({
     cctv: true,
     ws: false,
   });
-  const [loading, setLoading] = useState(true);
   const [showPlayer, setShowPlayer] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const videoLoadedRef = useRef(false);
-  const loadCheckTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const lastChannelId = localStorage.getItem('lastPlayedChannel');
@@ -39,92 +35,22 @@ const ChannelPage: React.FC = () => {
         const channel = [...cctvChannels, ...wsChannels].find(c => c.id === id && c.tid === tid);
         if (channel) {
           setSelectedChannel(channel);
-          loadChannel(channel);
+          setShowPlayer(true);
           return;
         }
       }
     }
     
     if (cctvChannels[0]) {
-      loadChannel(cctvChannels[0]);
+      setSelectedChannel(cctvChannels[0]);
+      setShowPlayer(true);
     }
   }, []);
-
-  useEffect(() => {
-    if (videoUrl) {
-      videoLoadedRef.current = false;
-      setLoading(true);
-      setShowPlayer(false);
-      
-      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-      
-      const maxCheckCount = 2;
-      let checkCount = 0;
-      
-      loadCheckTimer.current = setInterval(() => {
-        checkCount++;
-        
-        try {
-          const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
-          if (iframeDoc) {
-            const videoElement = iframeDoc.getElementById('vstPlayer') as HTMLVideoElement;
-            if (videoElement && videoElement.src && videoElement.src.startsWith('blob:')) {
-              const playURLSelect = iframeDoc.getElementById('playURL') as HTMLSelectElement;
-              if (playURLSelect) {
-                const options = playURLSelect.options;
-                const parsedLines: ChannelLine[] = [];
-                for (let i = 0; i < options.length; i++) {
-                  parsedLines.push({
-                    id: String(i + 1),
-                    name: options[i].text.replace('線路', '线路'),
-                    url: options[i].value,
-                    quality: i === 0 ? '高清' : '标清',
-                    isActive: i === 0,
-                  });
-                }
-                setLines(parsedLines);
-              }
-              videoLoadedRef.current = true;
-              setLoading(false);
-              setShowPlayer(true);
-              if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-              return;
-            }
-          }
-        } catch (e) {
-          console.log('跨域检查失败');
-        }
-        
-        if (checkCount >= maxCheckCount) {
-          setLoading(false);
-          setShowPlayer(true);
-          setLines([
-            { id: '1', name: '线路1', url: '', quality: '高清', isActive: true },
-            { id: '2', name: '线路2', url: '', quality: '标清', isActive: false },
-            { id: '3', name: '线路3', url: '', quality: '标清', isActive: false },
-          ]);
-          if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-        }
-      }, 500);
-    }
-    
-    return () => {
-      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-    };
-  }, [videoUrl]);
 
   const loadChannel = (channel: Channel) => {
     setSelectedChannel(channel);
     localStorage.setItem('lastPlayedChannel', `${channel.tid}-${channel.id}`);
-    setVideoUrl('');
-    setLoading(true);
-    setShowPlayer(false);
-    videoLoadedRef.current = false;
-
-    setTimeout(() => {
-      const playUrl = `https://iptv345.com/?act=play&token=94102973569333ec596b874e5a401fd0&tid=${channel.tid}&id=${channel.id}`;
-      setVideoUrl(playUrl);
-    }, 300);
+    setShowPlayer(true);
   };
 
   const toggleCategory = (category: CategoryKey) => {
@@ -137,19 +63,6 @@ const ChannelPage: React.FC = () => {
 
   const handleLineSwitch = (line: ChannelLine) => {
     setLines(lines.map(l => ({ ...l, isActive: l.id === line.id })));
-    try {
-      const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
-      if (iframeDoc) {
-        const playURLSelect = iframeDoc.getElementById('playURL') as HTMLSelectElement;
-        if (playURLSelect) {
-          playURLSelect.selectedIndex = parseInt(line.id) - 1;
-          const event = new Event('change');
-          playURLSelect.dispatchEvent(event);
-        }
-      }
-    } catch (e) {
-      console.log('线路切换失败');
-    }
   };
 
   const filteredChannels = (category: CategoryKey) => {
@@ -164,10 +77,10 @@ const ChannelPage: React.FC = () => {
     const isSelected = selectedChannel?.id === channel.id && selectedChannel?.tid === channel.tid;
 
     return (
-      <button
+      <div
         key={`${channel.tid}-${channel.id}`}
         onClick={() => handleChannelClick(channel)}
-        className={`w-full flex items-center justify-between px-3 py-[10px] transition-colors ${getChannelItemSelectedClass(isSelected, settings.theme)}`}
+        className={`w-full flex items-center justify-between px-3 py-[10px] transition-all duration-200 cursor-pointer ${getChannelItemSelectedClass(isSelected, settings.theme)} ${isSelected ? 'ring-2 ring-blue-500/50' : 'hover:bg-white/5'}`}
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className={`w-[41px] h-10 rounded-lg overflow-hidden ${getLogoBgClass(settings.theme)} flex items-center justify-center shrink-0`}>
@@ -198,7 +111,7 @@ const ChannelPage: React.FC = () => {
             <RiHeartLine className={`w-[18px] h-[18px] ${getHeartIconClass(settings.theme)}`} />
           )}
         </div>
-      </button>
+      </div>
     );
   };
 
@@ -263,35 +176,28 @@ const ChannelPage: React.FC = () => {
       </div>
 
       <div className="flex-1 flex flex-col bg-black relative overflow-hidden">
-          {loading ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10 bg-black">
-              <RiLoader2Line className="w-10 h-10 text-blue-500 animate-spin" />
-              <span className="text-sm text-gray-400">正在加载 {selectedChannel?.name}...</span>
+        {showPlayer && selectedChannel && (
+          <ProxyPlayer channel={selectedChannel} onBack={() => setShowPlayer(false)} />
+        )}
+        {!showPlayer && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black">
+            <div className="text-white text-center">
+              <p className="text-lg">请选择一个频道开始观看</p>
             </div>
-          ) : null}
-          {showPlayer && videoUrl && (
-            <iframe
-              ref={iframeRef}
-              src={videoUrl}
-              className="flex-1 w-full h-[160%] border-0 transform -translate-y-[28%]"
-              allow="autoplay; fullscreen"
-              allowFullScreen
-              title={`${selectedChannel?.name} 播放器`}
-              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
-            />
-          )}
+          </div>
+        )}
 
-          {settings.showLines && showPlayer && (
-            <div className="p-4 bg-gray-900 border-t border-gray-800">
-              {!loading && selectedChannel && lines.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-blue-400 text-sm font-medium">线路切换</span>
-                    <span className="text-gray-400 text-xs">当前：{lines.find(l => l.isActive)?.name || '未选择'}</span>
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    <ChannelLineList
-                      lines={lines}
+        {settings.showLines && showPlayer && (
+          <div className="p-4 bg-gray-900 border-t border-gray-800">
+            {selectedChannel && lines.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-blue-400 text-sm font-medium">线路切换</span>
+                  <span className="text-gray-400 text-xs">当前：{lines.find(l => l.isActive)?.name || '未选择'}</span>
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  <ChannelLineList
+                    lines={lines}
                     currentLine={lines.find(l => l.isActive) || null}
                     onLineSwitch={handleLineSwitch}
                     theme={settings.theme}

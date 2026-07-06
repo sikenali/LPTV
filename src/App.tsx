@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import Header from './components/Layout/Header';
 import ChannelPage from './pages/ChannelPage';
-import PlayerPage from './pages/PlayerPage';
 import FavoritePage from './pages/FavoritePage';
 import SettingsPage from './pages/SettingsPage';
 import TvModePage from './pages/TvModePage';
@@ -28,12 +27,6 @@ const ThemedApp: React.FC = () => {
             <Layout>
               <ChannelPage />
             </Layout>
-          } 
-        />
-        <Route 
-          path="/player/:tid/:channelId" 
-          element={
-            <PlayerPage />
           } 
         />
         <Route 

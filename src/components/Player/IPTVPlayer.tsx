@@ -10,45 +10,60 @@ interface IPTVPlayerProps {
 }
 
 const IPTVPlayer: React.FC<IPTVPlayerProps> = ({ channel, onBack }) => {
-  const [videoUrl, setVideoUrl] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [showPlayer, setShowPlayer] = useState(false);
   const [showControls, setShowControls] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const videoLoadedRef = useRef(false);
-  const loadCheckTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    videoLoadedRef.current = false;
     setIsLoading(true);
-    setShowPlayer(false);
+    setShowControls(true);
     
-    if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
-    
-    const playUrl = getPlayUrl(channel.tid, channel.id);
-    setVideoUrl(playUrl);
-    
-    loadCheckTimer.current = setInterval(() => {
+    const loadIframeContent = () => {
       try {
-        const iframeDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
+        const iframeDoc = iframeRef.current?.contentDocument;
         if (iframeDoc) {
           const videoElement = iframeDoc.getElementById('vstPlayer') as HTMLVideoElement;
           if (videoElement && videoElement.src && videoElement.src.startsWith('blob:')) {
-            videoLoadedRef.current = true;
+            videoElement.controls = true;
+            videoElement.playsInline = true;
+            videoElement.autoplay = true;
+            videoElement.muted = false;
+            videoElement.volume = 1.0;
             setIsLoading(false);
-            setShowPlayer(true);
-            if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
+            return;
           }
         }
       } catch (e) {
         console.log('跨域检查失败，等待视频加载');
       }
-    }, 500);
+      setTimeout(loadIframeContent, 100);
+    };
+    
+    const playUrl = getPlayUrl(channel.tid, channel.id);
+    if (iframeRef.current) {
+      iframeRef.current.src = playUrl;
+      loadIframeContent();
+    }
+    
+    const handleTouch = () => {
+      setShowControls(true);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+    };
+    
+    if (containerRef.current) {
+      containerRef.current.addEventListener('touchstart', handleTouch);
+      containerRef.current.addEventListener('mousemove', handleTouch);
+    }
     
     return () => {
-      if (loadCheckTimer.current) clearInterval(loadCheckTimer.current);
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      if (containerRef.current) {
+        containerRef.current.removeEventListener('touchstart', handleTouch);
+        containerRef.current.removeEventListener('mousemove', handleTouch);
+      }
     };
   }, [channel]);
 
@@ -97,11 +112,10 @@ const IPTVPlayer: React.FC<IPTVPlayerProps> = ({ channel, onBack }) => {
         </LiquidGlass>
       </div>
 
-      <div className="flex-1 relative">
-        {showPlayer && videoUrl && (
+      <div className="flex-1 relative" ref={containerRef}>
+        {!isLoading && (
           <iframe
             ref={iframeRef}
-            src={videoUrl}
             className="w-full h-full border-0"
             allow="autoplay; fullscreen"
             allowFullScreen
