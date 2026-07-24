@@ -170,6 +170,22 @@ app.get('/api/proxy/image', async (req, res) => {
   }
 })
 
+app.get('/api/probe', async (req, res) => {
+  const url = req.query.url
+  if (!url) return res.status(400).json({ error: 'Missing url parameter' })
+
+  try {
+    const resp = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000),
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://iptv345.com/' },
+    })
+    res.json({ status: resp.ok ? 'ok' : 'error', code: resp.status })
+  } catch (err) {
+    res.json({ status: 'error', code: 0 })
+  }
+})
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })

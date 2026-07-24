@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
 import { HlsPlayer } from '../components/Player'
 import { RiSearchLine, RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react'
 import type { Channel } from '../types'
+import { probeChannel } from '../services/channelApi'
 
 export default function ChannelPage() {
   const { channels, channelsLoading, channelsError, loadChannels } = useApp()
@@ -13,6 +14,15 @@ export default function ChannelPage() {
     '央视频道': true,
     '卫视频道': true,
   })
+  const [probeStatus, setProbeStatus] = useState<'idle' | 'checking' | 'ok' | 'error'>('idle')
+
+  useEffect(() => {
+    if (!selectedChannel) return
+    setProbeStatus('checking')
+    probeChannel(selectedChannel.url)
+      .then(r => setProbeStatus(r.status === 'ok' ? 'ok' : 'error'))
+      .catch(() => setProbeStatus('error'))
+  }, [selectedChannel])
 
   const filtered = useMemo(() => {
     const allowed = filterChannels(channels)
@@ -123,9 +133,24 @@ export default function ChannelPage() {
                 channelLogo={selectedChannel.logo}
               />
             </div>
-            <div className="px-4 py-2 bg-white/5">
-              <div className="text-white font-semibold">{selectedChannel.name}</div>
-              <div className="text-white/50 text-sm">{selectedChannel.group}</div>
+            <div className="px-4 py-2 bg-white/5 flex items-center justify-between">
+              <div>
+                <div className="text-white font-semibold">{selectedChannel.name}</div>
+                <div className="text-white/50 text-sm">{selectedChannel.group}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${
+                  probeStatus === 'ok' ? 'bg-green-400' :
+                  probeStatus === 'error' ? 'bg-red-400' :
+                  probeStatus === 'checking' ? 'bg-yellow-400 animate-pulse' :
+                  'bg-gray-500'
+                }`} />
+                <span className="text-xs text-white/50">
+                  {probeStatus === 'ok' ? '可播放' :
+                   probeStatus === 'error' ? '不可用' :
+                   probeStatus === 'checking' ? '检测中' : ''}
+                </span>
+              </div>
             </div>
           </div>
         ) : (
