@@ -26,4 +26,7 @@ export interface AppState {
   favorites: string[];
   settings: UserSettings;
   currentCategory: string;
+  channels: Channel[];
+  channelsLoading: boolean;
+  channelsError: string | null;
 }

@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { AppState, UserSettings } from '../types';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, ReactNode } from 'react';
+import { AppState, UserSettings, Channel } from '../types';
+import { fetchChannels } from '../services/channelApi';
 
 type Action =
   | { type: 'ADD_FAVORITE'; payload: string }
@@ -7,12 +8,18 @@ type Action =
   | { type: 'TOGGLE_FAVORITE'; payload: string }
   | { type: 'SET_FAVORITES'; payload: string[] }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<UserSettings> }
-  | { type: 'SET_CATEGORY'; payload: string };
+  | { type: 'SET_CATEGORY'; payload: string }
+  | { type: 'SET_CHANNELS'; payload: Channel[] }
+  | { type: 'SET_CHANNELS_LOADING'; payload: boolean }
+  | { type: 'SET_CHANNELS_ERROR'; payload: string | null };
 
 const initialState: AppState = {
   favorites: [],
   settings: { theme: 'white', autoPlay: false, quality: 'high', tvMode: false, showLines: true },
   currentCategory: '全部',
+  channels: [],
+  channelsLoading: false,
+  channelsError: null,
 };
 
 const reducer = (state: AppState, action: Action): AppState => {
@@ -31,6 +38,12 @@ const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, settings: { ...state.settings, ...action.payload } };
     case 'SET_CATEGORY':
       return { ...state, currentCategory: action.payload };
+    case 'SET_CHANNELS':
+      return { ...state, channels: action.payload, channelsLoading: false, channelsError: null };
+    case 'SET_CHANNELS_LOADING':
+      return { ...state, channelsLoading: action.payload };
+    case 'SET_CHANNELS_ERROR':
+      return { ...state, channelsError: action.payload, channelsLoading: false };
     default:
       return state;
   }
@@ -42,6 +55,7 @@ interface AppContextType extends AppState {
   toggleFavorite: (id: string) => void;
   updateSettings: (settings: Partial<UserSettings>) => void;
   setCategory: (category: string) => void;
+  loadChannels: (refresh?: boolean) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -89,8 +103,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateSettings = (settings: Partial<UserSettings>) => dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
   const setCategory = (category: string) => dispatch({ type: 'SET_CATEGORY', payload: category });
 
+  const loadChannels = useCallback(async (refresh = false) => {
+    dispatch({ type: 'SET_CHANNELS_LOADING', payload: true });
+    try {
+      const data = await fetchChannels(refresh);
+      dispatch({ type: 'SET_CHANNELS', payload: data });
+    } catch (err) {
+      dispatch({ type: 'SET_CHANNELS_ERROR', payload: err instanceof Error ? err.message : '加载失败' });
+    }
+  }, []);
+
   return (
-    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory }}>
+    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels }}>
       {children}
     </AppContext.Provider>
   );

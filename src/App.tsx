@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import Header from './components/Layout/Header';
@@ -16,7 +16,11 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const ThemedApp: React.FC = () => {
-  const { settings } = useApp();
+  const { settings, loadChannels } = useApp();
+
+  useEffect(() => {
+    loadChannels();
+  }, [loadChannels]);
 
   return (
     <div className={`min-h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
