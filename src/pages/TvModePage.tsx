@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RiArrowLeftSLine, RiHeartFill, RiHeartLine, RiArrowDownSLine,
@@ -7,22 +7,8 @@ import {
 } from '@remixicon/react';
 import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
-import { cctvChannels, wsChannels } from '../data/channels';
-import { getPlayUrl } from '../utils/iptv';
-
-type CategoryKey = 'cctv' | 'ws';
-
-interface CategoryItem {
-  key: CategoryKey;
-  label: string;
-  count: number;
-  channels: Channel[];
-}
-
-const categories: CategoryItem[] = [
-  { key: 'cctv', label: '央视频道', count: cctvChannels.length, channels: cctvChannels },
-  { key: 'ws', label: '卫视频道', count: wsChannels.length, channels: wsChannels },
-];
+import { HlsPlayer } from '../components/Player';
+import { filterChannels, getGroupedChannels } from '../utils/channelFilter';
 
 const formatDate = (): string => {
   const now = new Date();
@@ -43,7 +29,7 @@ const ChannelRow: React.FC<{
   onClick?: () => void;
 }> = ({ channel, isSelected, onClick }) => {
   const { favorites, toggleFavorite } = useApp();
-  const isFav = favorites.includes(`${channel.tid}-${channel.id}`);
+  const isFav = favorites.includes(channel.id);
 
   return (
     <button
@@ -60,7 +46,7 @@ const ChannelRow: React.FC<{
           <button
             onClick={(e) => {
               e.stopPropagation();
-              toggleFavorite(`${channel.tid}-${channel.id}`);
+              toggleFavorite(channel.id);
             }}
             className="p-0.5"
           >
@@ -71,7 +57,7 @@ const ChannelRow: React.FC<{
             )}
           </button>
         </div>
-        <div className="text-xs text-white/60 truncate">{channel.currentProgram}</div>
+        <div className="text-xs text-white/60 truncate">{''}</div>
       </div>
     </button>
   );
@@ -79,14 +65,14 @@ const ChannelRow: React.FC<{
 
 const TvModePage: React.FC = () => {
   const navigate = useNavigate();
-  const { favorites } = useApp();
-  const [activeCategory, setActiveCategory] = useState<CategoryKey>('cctv');
+  const { channels, favorites } = useApp();
+  const [activeCategory, setActiveCategory] = useState<string>('央视频道');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
   const [currentDate] = useState(formatDate());
-  const [videoUrl, setVideoUrl] = useState('');
-  
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const allowed = useMemo(() => filterChannels(channels), [channels])
+  const grouped = useMemo(() => getGroupedChannels(allowed), [allowed])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -96,15 +82,14 @@ const TvModePage: React.FC = () => {
   }, []);
 
   const handleChannelSelect = (channel: Channel) => {
-    setSelectedChannel(channel);
-    localStorage.setItem('lastPlayedChannel', `${channel.tid}-${channel.id}`);
-    setVideoUrl(getPlayUrl(channel.tid, channel.id));
+    setSelectedChannel(channel)
+    localStorage.setItem('lastPlayedChannel', channel.id)
   };
 
-  const activeCategoryConfig = categories.find(c => c.key === activeCategory)!;
-  const filteredChannels = activeCategoryConfig.channels;
+  const activeGroup = grouped.find(g => g.group === activeCategory)
+  const filteredChannels = activeGroup?.channels ?? []
 
-  const isFavSelected = selectedChannel ? favorites.includes(`${selectedChannel.tid}-${selectedChannel.id}`) : false;
+  const isFavSelected = selectedChannel ? favorites.includes(selectedChannel.id) : false;
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
@@ -117,7 +102,7 @@ const TvModePage: React.FC = () => {
             </div>
             <div>
               <div className="text-sm font-semibold text-white">{selectedChannel?.name || 'LPTV'}</div>
-              <div className="text-[10px] text-white/40">{selectedChannel?.currentProgram || '选择频道开始观看'}</div>
+              <div className="text-[10px] text-white/40">{''}</div>
             </div>
           </div>
           <div className="flex items-center gap-4 text-right">
@@ -130,14 +115,11 @@ const TvModePage: React.FC = () => {
 
         {/* Video Player Area */}
         <div className="flex-1 relative min-h-[400px]">
-          {videoUrl ? (
-            <iframe
-              ref={iframeRef}
-              src={videoUrl}
-              className="w-full h-full border-0"
-              allow="autoplay; fullscreen"
-              allowFullScreen
-              title={`${selectedChannel?.name} 播放器`}
+          {selectedChannel ? (
+            <HlsPlayer
+              url={selectedChannel.url}
+              channelName={selectedChannel.name}
+              channelLogo={selectedChannel.logo}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
@@ -153,7 +135,7 @@ const TvModePage: React.FC = () => {
         <div className="px-8 py-3 border-b border-white/5">
           <div className="text-2xl font-bold text-white">{selectedChannel?.name || '请选择频道'}</div>
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-sm text-white/60">{selectedChannel?.currentProgram || '暂无节目信息'}</span>
+            <span className="text-sm text-white/60">{''}</span>
             <span className="text-white/20">|</span>
             <span className="text-xs text-white/40">正在播放</span>
           </div>
@@ -180,20 +162,20 @@ const TvModePage: React.FC = () => {
         {/* Category tabs */}
         <div className="px-8 py-3 border-b border-white/5">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-            {categories.map((cat) => {
-              const isActive = activeCategory === cat.key;
+            {grouped.map((g) => {
+              const isActive = activeCategory === g.group;
               return (
                 <button
-                  key={cat.key}
-                  onClick={() => setActiveCategory(cat.key)}
+                  key={g.group}
+                  onClick={() => setActiveCategory(g.group)}
                   className={`shrink-0 px-4 py-1.5 rounded-lg text-sm transition-all ${
                     isActive
                       ? 'bg-blue-600 text-white font-medium shadow-lg shadow-blue-600/20'
                       : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white/80'
                   }`}
                 >
-                  {cat.label}
-                  <span className={`ml-1.5 ${isActive ? 'text-white/70' : 'text-white/40'}`}>({cat.count})</span>
+                  {g.group}
+                  <span className={`ml-1.5 ${isActive ? 'text-white/70' : 'text-white/40'}`}>({g.channels.length})</span>
                 </button>
               );
             })}
@@ -205,9 +187,9 @@ const TvModePage: React.FC = () => {
           <div className="flex flex-wrap gap-3">
             {filteredChannels.map((ch) => (
               <ChannelRow
-                key={`${ch.tid}-${ch.id}`}
+                key={ch.id}
                 channel={ch}
-                isSelected={selectedChannel?.id === ch.id && selectedChannel?.tid === ch.tid}
+                isSelected={selectedChannel?.id === ch.id}
                 onClick={() => handleChannelSelect(ch)}
               />
             ))}
