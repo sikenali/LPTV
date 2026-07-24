@@ -9,10 +9,12 @@ import TvModePage from './pages/TvModePage';
 import { getBgClass } from './utils/theme';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <>
+  <div className="flex flex-col h-screen">
     <Header />
-    {children}
-  </>
+    <div className="flex-1 min-h-0">
+      {children}
+    </div>
+  </div>
 );
 
 const ThemedApp: React.FC = () => {
