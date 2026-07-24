@@ -91,7 +91,7 @@ export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
         ref={videoRef}
         className="w-full h-full object-contain"
         playsInline
-        controls={false}
+        controls
       />
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">

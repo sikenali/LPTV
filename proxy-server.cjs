@@ -107,6 +107,28 @@ app.get('/api/proxy/stream', async (req, res) => {
   }
 })
 
+app.get('/api/proxy/image', async (req, res) => {
+  const imgUrl = req.query.url
+  if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
+
+  try {
+    const response = await fetch(imgUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    })
+    if (!response.ok) return res.status(502).json({ error: 'Image fetch failed' })
+
+    const buffer = await response.arrayBuffer()
+    res.set({
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': response.headers.get('content-type') || 'image/png',
+      'Cache-Control': 'public, max-age=86400',
+    })
+    res.send(Buffer.from(buffer))
+  } catch (err) {
+    res.status(502).json({ error: 'Proxy image error' })
+  }
+})
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
