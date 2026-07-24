@@ -51,9 +51,9 @@ export default function ChannelPage() {
   return (
     <div className="flex gap-4 h-full">
       {/* 左侧频道列表 */}
-      <div className="w-full lg:w-96 xl:w-[420px] flex flex-col gap-3 overflow-hidden min-h-0 h-full">
+      <div className="w-full lg:w-96 xl:w-[420px] flex flex-col gap-3 min-h-0 overflow-hidden">
         {/* 搜索框 */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
           <input
             type="text"
@@ -65,7 +65,7 @@ export default function ChannelPage() {
         </div>
 
         {/* 分组折叠列表 */}
-        <div className="flex-1 overflow-y-auto space-y-2 scrollbar-hide">
+        <div className="flex-1 overflow-y-auto min-h-0 space-y-2 scrollbar-hide">
           {grouped.length === 0 ? (
             <div className="text-center text-white/40 py-8">
               {searchQuery ? '未找到匹配的频道' : '暂无可用频道'}
