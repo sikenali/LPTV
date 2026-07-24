@@ -1,10 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RiHeartFill, RiTvLine } from '@remixicon/react';
+import { RiHeartFill, RiTvLine, RiSearchLine, RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react';
 import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
 import { filterChannels } from '../utils/channelFilter';
-import { getBgClass, getTextClass, getTextSecondaryClass, getCardClass, getLogoBgClass, getCardImageBgClass, getEmptyStateIconClass } from '../utils/theme';
 
 const FavoritePage: React.FC = () => {
   const navigate = useNavigate();
@@ -13,91 +12,162 @@ const FavoritePage: React.FC = () => {
   const allowed = useMemo(() => filterChannels(channels), [channels])
   const favoriteChannels = useMemo(() => allowed.filter(c => favorites.includes(c.id)), [allowed, favorites])
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    const groups = [...new Set(favoriteChannels.map(c => c.group))]
+    const initial: Record<string, boolean> = {}
+    groups.forEach(g => { initial[g] = true })
+    setExpandedCategories(initial)
+  }, [favoriteChannels])
+
+  const filteredFavorites = useMemo(() => {
+    if (!searchQuery.trim()) return favoriteChannels
+    return favoriteChannels.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  }, [favoriteChannels, searchQuery])
+
+  const groupedFavorites = useMemo(() => {
+    const groups: Record<string, Channel[]> = {}
+    filteredFavorites.forEach(ch => {
+      if (!groups[ch.group]) groups[ch.group] = []
+      groups[ch.group].push(ch)
+    })
+    return Object.entries(groups).map(([group, channels]) => ({ group, channels }))
+  }, [filteredFavorites])
+
+  const toggleCategory = (group: string) => {
+    setExpandedCategories(prev => ({ ...prev, [group]: !prev[group] }))
+  }
+
   const handleChannelClick = (channel: Channel) => {
     localStorage.setItem('lastPlayedChannel', channel.id);
     navigate('/');
   };
 
-  return (
-    <div className={`min-h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
-      <div className="container mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <RiHeartFill className="w-6 h-6 text-red-500" />
-          <h1 className={`text-xl font-bold ${getTextClass(settings.theme)}`}>我的收藏</h1>
-          <span className={`px-2 py-0.5 rounded-full text-xs ${settings.theme === 'black' ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-600'}`}>
-            {favorites.length}个频道
-          </span>
+  const bgColor = settings.theme === 'black' ? '#0a0a0a' : settings.theme === 'white' ? '#f8f8f8' : '#fbf7f0'
+  const borderColor = settings.theme === 'black' ? 'rgba(255,255,255,0.1)' : '#e5d9c4'
+  const textPrimary = settings.theme === 'black' ? '#ffffff' : '#3d2b1f'
+  const textSecondary = settings.theme === 'black' ? 'rgba(255,255,255,0.5)' : '#8b7e6a'
+  const cardBg = settings.theme === 'black' ? 'rgba(255,255,255,0.05)' : '#fdfaf4'
+  const inputBg = settings.theme === 'black' ? 'rgba(255,255,255,0.05)' : '#fbf7f0'
+  const subText = settings.theme === 'black' ? 'rgba(255,255,255,0.4)' : '#b8a88a'
+
+  if (favoriteChannels.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: bgColor }}>
+        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6" style={{ background: cardBg }}>
+          <RiHeartFill className="w-10 h-10" style={{ color: subText }} />
         </div>
+        <h3 className="text-lg font-medium mb-2" style={{ color: textPrimary }}>还没有收藏任何频道</h3>
+        <p className="text-sm mb-6" style={{ color: textSecondary }}>前往频道页面，点击爱心图标即可收藏喜欢的频道</p>
+        <button
+          onClick={() => navigate('/')}
+          className="px-6 py-2.5 bg-[#c43d3d] text-white rounded-lg font-medium hover:bg-[#a83232] transition-colors flex items-center gap-2"
+        >
+          <RiTvLine className="w-4 h-4" />
+          前往频道页
+        </button>
       </div>
+    );
+  }
 
-        {favoriteChannels.length === 0 ? (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className={`w-20 h-20 rounded-full ${getCardImageBgClass(settings.theme)} flex items-center justify-center mb-6`}>
-          <RiHeartFill className={`w-10 h-10 ${getEmptyStateIconClass(settings.theme)}`} />
+  return (
+    <div className="min-h-screen" style={{ background: bgColor }}>
+      <div className="max-w-[1200px] mx-auto px-8 py-8">
+        {/* 顶部标题区 */}
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <RiHeartFill className="w-6 h-6" style={{ color: '#c43d3d' }} />
+            <h1 className="text-xl font-bold" style={{ color: textPrimary }}>我的收藏</h1>
+            <span className="px-2 py-0.5 rounded-full text-xs" style={{ background: 'rgba(196,61,61,0.2)', color: '#c43d3d' }}>
+              {favorites.length}个频道
+            </span>
+          </div>
         </div>
-            <h3 className={`text-lg font-medium ${getTextClass(settings.theme)} mb-2`}>还没有收藏任何频道</h3>
-            <p className={`${getTextSecondaryClass(settings.theme)} text-sm mb-6`}>前往频道页面，点击爱心图标即可收藏喜欢的频道</p>
-            <button
-              onClick={() => navigate('/')}
-              className="px-6 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center gap-2"
-            >
-              <RiTvLine className="w-4 h-4" />
-              前往频道页
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 gap-4">
-            {favoriteChannels.map((channel) => (
-              <div
-                key={channel.id}
-                onClick={() => handleChannelClick(channel)}
-                className={`${getCardClass(settings.theme)} border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer group`}
-              >
-                <div className={`relative h-36 overflow-hidden ${getCardImageBgClass(settings.theme)}`}>
-                  <img
-                          src={channel.logo}
-                    alt={channel.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
 
-                  <div className="absolute top-2 right-2">
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(channel.id);
-                    }}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors ${settings.theme === 'black' ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-black/50 text-white hover:bg-black/70'}`}
-                  >
-                    <RiHeartFill className="w-4 h-4" />
-                  </div>
-                </div>
-                </div>
-                <div className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-6 h-6 rounded overflow-hidden ${getLogoBgClass(settings.theme)} flex items-center justify-center`}>
-                        <img
-                    src={channel.logo}
-                          alt={channel.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                          }}
-                        />
-                      </div>
-                      <span className={`font-medium ${getTextClass(settings.theme)} text-sm`}>{channel.name}</span>
+        {/* 搜索框 */}
+        <div className="relative mb-6 max-w-md">
+          <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: subText }} />
+          <input
+            type="text"
+            placeholder="搜索收藏..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border outline-none text-sm"
+            style={{ background: inputBg, borderColor, color: textPrimary }}
+          />
+        </div>
+
+        {/* 分组列表 */}
+        <div className="space-y-4">
+          {groupedFavorites.length === 0 ? (
+            <div className="text-center py-12" style={{ color: subText }}>
+              {searchQuery ? '未找到匹配的收藏' : '暂无收藏频道'}
+            </div>
+          ) : (
+            groupedFavorites.map(({ group, channels: groupChannels }) => (
+              <div key={group}>
+                <button
+                  onClick={() => toggleCategory(group)}
+                  className="w-full flex items-center justify-between rounded-lg border px-4 py-3 transition-colors"
+                  style={{ background: cardBg, borderColor }}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded flex items-center justify-center" style={{ background: '#c9a96e' }}>
+                      <span className="text-white text-xs font-bold"></span>
                     </div>
+                    <span className="font-semibold text-sm" style={{ color: textPrimary }}>{group}</span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: '#c9a96e' }}>{`（${groupChannels.length}）`}</span>
+                    {expandedCategories[group] ? (
+                      <RiArrowDownSLine className="w-4 h-4" style={{ color: textSecondary }} />
+                    ) : (
+                      <RiArrowRightSLine className="w-4 h-4" style={{ color: textSecondary }} />
+                    )}
+                  </div>
+                </button>
 
-                </div>
+                {expandedCategories[group] && (
+                  <div className="mt-2 grid grid-cols-4 gap-4">
+                    {groupChannels.map((channel) => (
+                      <div
+                        key={channel.id}
+                        onClick={() => handleChannelClick(channel)}
+                        className="rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer group"
+                        style={{ background: cardBg, border: `1px solid ${borderColor}` }}
+                      >
+                        <div className="relative h-36 overflow-hidden flex items-center justify-center" style={{ background: inputBg }}>
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(196,61,61,0.15)' }}>
+                            <RiHeartFill className="w-6 h-6" style={{ color: '#c43d3d' }} />
+                          </div>
+
+                          <div className="absolute top-2 right-2">
+                            <div
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(channel.id);
+                              }}
+                              className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors bg-black/50 hover:bg-black/70"
+                            >
+                              <RiHeartFill className="w-4 h-4 text-red-500" />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm truncate" style={{ color: textPrimary }}>{channel.name}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
