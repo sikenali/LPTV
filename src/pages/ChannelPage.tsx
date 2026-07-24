@@ -1,215 +1,146 @@
-import React, { useState, useEffect } from 'react';
-import { RiSearchLine, RiHeartFill, RiHeartLine, RiArrowDownSLine, RiArrowUpSLine } from '@remixicon/react';
-import { Channel, ChannelLine } from '../types';
-import { useApp } from '../context/AppContext';
-import { getChannelLogo } from '../utils/icons';
-import { cctvChannels, wsChannels } from '../data/channels';
-import ChannelLineList from '../components/Player/ChannelLineList';
-import { ProxyPlayer } from '../components/Player';
-import { getBgClass, getPanelClass, getTextSecondaryClass, getSearchContainerClass, getChannelItemSelectedClass, getTextClass, getHoverClass, getLogoBgClass, getHeartIconClass, getBorderClass, getInputTextClass } from '../utils/theme';
+import { useState, useMemo } from 'react'
+import { useApp } from '../context/AppContext'
+import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
+import { HlsPlayer } from '../components/Player'
+import { RiSearchLine, RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react'
+import type { Channel } from '../types'
 
-type CategoryKey = 'cctv' | 'ws';
+export default function ChannelPage() {
+  const { channels, channelsLoading, channelsError, loadChannels } = useApp()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    '央视频道': true,
+    '卫视频道': true,
+  })
 
-const categoryConfig: Record<CategoryKey, { label: string; channels: Channel[] }> = {
-  cctv: { label: '央视频道', channels: cctvChannels },
-  ws: { label: '卫视频道', channels: wsChannels },
-};
+  const filtered = useMemo(() => {
+    const allowed = filterChannels(channels)
+    if (!searchQuery.trim()) return allowed
+    return allowed.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+  }, [channels, searchQuery])
 
-const ChannelPage: React.FC = () => {
-  const { settings, favorites, toggleFavorite } = useApp();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(cctvChannels[0] || null);
-  const [lines, setLines] = useState<ChannelLine[]>([]);
-  const [expandedCategories, setExpandedCategories] = useState<Record<CategoryKey, boolean>>({
-    cctv: true,
-    ws: false,
-  });
-  const [showPlayer, setShowPlayer] = useState(false);
+  const grouped = useMemo(() => getGroupedChannels(filtered), [filtered])
 
-  useEffect(() => {
-    const lastChannelId = localStorage.getItem('lastPlayedChannel');
-    
-    if (lastChannelId) {
-      const [tid, id] = lastChannelId.split('-');
-      if (tid && id) {
-        const channel = [...cctvChannels, ...wsChannels].find(c => c.id === id && c.tid === tid);
-        if (channel) {
-          setSelectedChannel(channel);
-          setShowPlayer(true);
-          return;
-        }
-      }
-    }
-    
-    if (cctvChannels[0]) {
-      setSelectedChannel(cctvChannels[0]);
-      setShowPlayer(true);
-    }
-  }, []);
+  const toggleCategory = (group: string) => {
+    setExpandedCategories(prev => ({ ...prev, [group]: !prev[group] }))
+  }
 
-  const loadChannel = (channel: Channel) => {
-    setSelectedChannel(channel);
-    localStorage.setItem('lastPlayedChannel', `${channel.tid}-${channel.id}`);
-    setShowPlayer(true);
-  };
-
-  const toggleCategory = (category: CategoryKey) => {
-    setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }));
-  };
-
-  const handleChannelClick = (channel: Channel) => {
-    loadChannel(channel);
-  };
-
-  const handleLineSwitch = (line: ChannelLine) => {
-    setLines(lines.map(l => ({ ...l, isActive: l.id === line.id })));
-  };
-
-  const filteredChannels = (category: CategoryKey) => {
-    const channels = categoryConfig[category].channels;
-    return channels.filter(channel =>
-      channel.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  };
-
-  const ChannelItem: React.FC<{ channel: Channel }> = ({ channel }) => {
-    const isFavorite = favorites.includes(`${channel.tid}-${channel.id}`);
-    const isSelected = selectedChannel?.id === channel.id && selectedChannel?.tid === channel.tid;
-
+  if (channelsLoading && channels.length === 0) {
     return (
-      <div
-        key={`${channel.tid}-${channel.id}`}
-        onClick={() => handleChannelClick(channel)}
-        className={`w-full flex items-center justify-between px-3 py-[10px] transition-all duration-200 cursor-pointer ${getChannelItemSelectedClass(isSelected, settings.theme)} ${isSelected ? 'ring-2 ring-blue-500/50' : 'hover:bg-white/5'}`}
-      >
-        <div className="flex items-center gap-3 min-w-0">
-          <div className={`w-[41px] h-10 rounded-lg overflow-hidden ${getLogoBgClass(settings.theme)} flex items-center justify-center shrink-0`}>
-            <img
-              src={getChannelLogo(channel.name)}
-              alt={channel.name}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          </div>
-          <div className="text-left min-w-0">
-            <div className={`text-sm font-medium ${getTextClass(settings.theme)} truncate`}>{channel.name}</div>
-            <div className={`text-[11px] ${getTextSecondaryClass(settings.theme)} truncate max-w-[140px] mt-0.5`}>{channel.currentProgram}</div>
-          </div>
-        </div>
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleFavorite(`${channel.tid}-${channel.id}`);
-          }}
-          className="p-1 shrink-0 cursor-pointer"
-        >
-          {isFavorite ? (
-            <RiHeartFill className="w-[18px] h-[18px] text-red-500" />
-          ) : (
-            <RiHeartLine className={`w-[18px] h-[18px] ${getHeartIconClass(settings.theme)}`} />
-          )}
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-white/60 text-lg">加载频道列表...</div>
       </div>
-    );
-  };
+    )
+  }
+
+  if (channelsError && channels.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <div className="text-white/60 text-lg">{channelsError}</div>
+        <button
+          onClick={() => loadChannels(true)}
+          className="px-6 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20"
+        >
+          重试
+        </button>
+      </div>
+    )
+  }
 
   return (
-    <div className={`flex h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
-      <div className={`w-[340px] ${getPanelClass(settings.theme)} border-r ${getBorderClass(settings.theme)} flex flex-col shrink-0 transition-colors duration-300`}>
-        <div className={`px-4 pt-4 pb-3 border-b ${getBorderClass(settings.theme)}`}>
-          <div className={`flex items-center gap-2 ${getSearchContainerClass(settings.theme)} border ${getBorderClass(settings.theme)} rounded-lg px-3 h-10`}>
-            <RiSearchLine className={`w-[18px] h-[18px] ${getTextSecondaryClass(settings.theme)} shrink-0`} />
-            <input
-              type="text"
-              placeholder="搜索频道..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`flex-1 bg-transparent text-sm ${getInputTextClass(settings.theme)} focus:outline-none`}
-            />
-          </div>
+    <div className="flex gap-4 h-[calc(100vh-80px)]">
+      {/* 左侧频道列表 */}
+      <div className="w-full lg:w-96 xl:w-[420px] flex flex-col gap-3 overflow-hidden">
+        {/* 搜索框 */}
+        <div className="relative">
+          <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+          <input
+            type="text"
+            placeholder="搜索频道..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white/10 text-white placeholder-white/40 border border-white/10 focus:outline-none focus:border-white/30"
+          />
         </div>
 
-        <div className="flex-1 overflow-y-auto px-3">
-          {(Object.keys(categoryConfig) as CategoryKey[]).map((key) => {
-            const { label } = categoryConfig[key];
-            const filtered = filteredChannels(key);
-            const isExpanded = expandedCategories[key];
-            const isActive = key === 'ws';
-
-            return (
-              <div key={key}>
+        {/* 分组折叠列表 */}
+        <div className="flex-1 overflow-y-auto space-y-2 scrollbar-hide">
+          {grouped.length === 0 ? (
+            <div className="text-center text-white/40 py-8">
+              {searchQuery ? '未找到匹配的频道' : '暂无可用频道'}
+            </div>
+          ) : (
+            grouped.map(({ group, channels: groupChannels }) => (
+              <div key={group} className="rounded-xl bg-white/5">
                 <button
-                  onClick={() => toggleCategory(key)}
-                  className={`w-full flex items-center justify-between px-3 py-3 rounded-lg my-1 transition-colors ${
-                    isActive ? 'bg-blue-50' : getHoverClass(settings.theme)
-                  }`}
+                  onClick={() => toggleCategory(group)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-white font-semibold"
                 >
-                  <div className="flex items-center gap-2">
-                    {isExpanded ? (
-                      <RiArrowUpSLine className={`w-[18px] h-[18px] ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                    ) : (
-                      <RiArrowDownSLine className={`w-[18px] h-[18px] ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                    )}
-                    <span className={`text-sm font-semibold ${getTextClass(settings.theme)}`}>{label}</span>
-                    <span className={`text-xs ${getTextSecondaryClass(settings.theme)}`}>（{filtered.length}）</span>
-                  </div>
-                  {isExpanded ? (
-                    <RiArrowUpSLine className={`w-[18px] h-[18px] ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span>{group} ({groupChannels.length})</span>
+                  {expandedCategories[group] ? (
+                    <RiArrowDownSLine className="w-5 h-5" />
                   ) : (
-                    <RiArrowDownSLine className={`w-[18px] h-[18px] ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                    <RiArrowRightSLine className="w-5 h-5" />
                   )}
                 </button>
-
-                {isExpanded && (
-                  <div className="pb-1">
-                    {filtered.map((channel) => (
-                      <ChannelItem key={`${channel.tid}-${channel.id}`} channel={channel} />
+                {expandedCategories[group] && (
+                  <div className="px-2 pb-2 space-y-1">
+                    {groupChannels.map(ch => (
+                      <button
+                        key={ch.id}
+                        onClick={() => setSelectedChannel(ch)}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                          selectedChannel?.id === ch.id
+                            ? 'bg-white/15'
+                            : 'hover:bg-white/10'
+                        }`}
+                      >
+                        {ch.logo ? (
+                          <img src={ch.logo} alt="" className="w-8 h-8 rounded object-contain" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
+                            <span className="text-white text-sm font-bold">{ch.name[0]}</span>
+                          </div>
+                        )}
+                        <div className="flex-1 text-left min-w-0">
+                          <div className="text-white text-sm truncate">{ch.name}</div>
+                        </div>
+                      </button>
                     ))}
                   </div>
                 )}
               </div>
-            );
-          })}
+            ))
+          )}
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-black relative overflow-hidden">
-        {showPlayer && selectedChannel && (
-          <ProxyPlayer channel={selectedChannel} onBack={() => setShowPlayer(false)} />
-        )}
-        {!showPlayer && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black">
-            <div className="text-white text-center">
-              <p className="text-lg">请选择一个频道开始观看</p>
+      {/* 右侧播放器 */}
+      <div className="hidden lg:flex flex-1 rounded-xl overflow-hidden bg-black">
+        {selectedChannel ? (
+          <div className="w-full h-full flex flex-col">
+            <div className="flex-1 relative">
+              <HlsPlayer
+                url={selectedChannel.url}
+                channelName={selectedChannel.name}
+                channelLogo={selectedChannel.logo}
+              />
+            </div>
+            <div className="px-4 py-2 bg-white/5">
+              <div className="text-white font-semibold">{selectedChannel.name}</div>
+              <div className="text-white/50 text-sm">{selectedChannel.group}</div>
             </div>
           </div>
-        )}
-
-        {settings.showLines && showPlayer && (
-          <div className="p-4 bg-gray-900 border-t border-gray-800">
-            {selectedChannel && lines.length > 0 && (
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-blue-400 text-sm font-medium">线路切换</span>
-                  <span className="text-gray-400 text-xs">当前：{lines.find(l => l.isActive)?.name || '未选择'}</span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  <ChannelLineList
-                    lines={lines}
-                    currentLine={lines.find(l => l.isActive) || null}
-                    onLineSwitch={handleLineSwitch}
-                    theme={settings.theme}
-                  />
-                </div>
-              </div>
-            )}
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-white/30 text-6xl mb-4">📺</div>
+              <div className="text-white/40 text-lg">选择一个频道开始观看</div>
+            </div>
           </div>
         )}
       </div>
     </div>
-  );
-};
-
-export default ChannelPage;
+  )
+}
