@@ -2,10 +2,8 @@ export interface Channel {
   id: string;
   name: string;
   logo: string;
-  category: string;
-  currentProgram: string;
-  isLive: boolean;
-  tid: 'ws' | 'ys';
+  group: string;
+  url: string;
 }
 
 export interface ChannelLine {
