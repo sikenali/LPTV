@@ -59,6 +59,54 @@ app.get('/api/m3u', async (req, res) => {
   }
 })
 
+function resolveUrl(base, relative) {
+  if (relative.startsWith('http://') || relative.startsWith('https://')) return relative
+  if (relative.startsWith('/')) {
+    const u = new URL(base)
+    return `${u.protocol}//${u.host}${relative}`
+  }
+  const lastSlash = base.lastIndexOf('/')
+  const dir = lastSlash >= 0 ? base.substring(0, lastSlash + 1) : base + '/'
+  return dir + relative
+}
+
+app.get('/api/proxy/stream', async (req, res) => {
+  const streamUrl = req.query.url
+  if (!streamUrl) return res.status(400).json({ error: 'Missing url parameter' })
+
+  try {
+    const response = await fetch(streamUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://iptv345.com/',
+      },
+    })
+    if (!response.ok) return res.status(response.status).json({ error: 'Stream fetch failed' })
+
+    const contentType = response.headers.get('content-type') || ''
+    res.set('Access-Control-Allow-Origin', '*')
+
+    if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
+      const text = await response.text()
+      const lines = text.split('\n')
+      const rewritten = lines.map(line => {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#')) return line
+        const resolved = resolveUrl(streamUrl, trimmed)
+        return `/api/proxy/stream?url=${encodeURIComponent(resolved)}`
+      }).join('\n')
+      res.set('Content-Type', 'application/vnd.apple.mpegurl')
+      res.send(rewritten)
+    } else {
+      const buffer = await response.arrayBuffer()
+      res.set('Content-Type', contentType || 'video/MP2T')
+      res.send(Buffer.from(buffer))
+    }
+  } catch (err) {
+    res.status(502).json({ error: 'Proxy stream error' })
+  }
+})
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })

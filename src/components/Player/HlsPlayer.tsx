@@ -8,6 +8,11 @@ interface HlsPlayerProps {
   onError?: (err: Error) => void
 }
 
+function proxyUrl(url: string) {
+  const base = '/api/proxy/stream'
+  return `${base}?url=${encodeURIComponent(url)}`
+}
+
 export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -29,7 +34,7 @@ export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
 
     if (!Hls.isSupported()) {
       if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
-        videoRef.current.src = src
+        videoRef.current.src = proxyUrl(src)
         return
       }
       setError('浏览器不支持 HLS 播放')
@@ -41,7 +46,7 @@ export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
     retryCountRef.current = 0
 
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-      hls.loadSource(src)
+      hls.loadSource(proxyUrl(src))
     })
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
