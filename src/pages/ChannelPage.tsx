@@ -51,7 +51,7 @@ export default function ChannelPage() {
   return (
     <div className="flex gap-4 h-full">
       {/* 左侧频道列表 */}
-      <div className="w-full lg:w-96 xl:w-[420px] flex flex-col gap-3 min-h-0">
+      <div className="w-full lg:w-96 xl:w-[420px] flex flex-col gap-3 overflow-hidden min-h-0 h-full">
         {/* 搜索框 */}
         <div className="relative">
           <RiSearchLine className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
