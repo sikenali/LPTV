@@ -94,9 +94,11 @@ app.get('/api/proxy/stream', async (req, res) => {
       res.set('Content-Type', 'application/vnd.apple.mpegurl')
       res.send(rewritten)
     } else {
-      const buffer = await response.arrayBuffer()
-      res.set('Content-Type', contentType || 'video/MP2T')
-      res.send(Buffer.from(buffer))
+      // Use pipe for non-M3U8 content (TS slices, etc.) to avoid memory pressure
+      response.body.pipe(res)
+      response.body.on('error', () => res.destroy())
+      res.on('close', () => response.body.destroy())
+      return
     }
   } catch (err) {
     res.status(502).json({ error: 'Proxy stream error' })
