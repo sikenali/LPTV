@@ -32,9 +32,12 @@ const ChannelRow: React.FC<{
   const isFav = favorites.includes(channel.id);
 
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`relative w-[300px] shrink-0 rounded-xl overflow-hidden transition-all duration-200 text-left ${
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick?.(); }}
+      className={`relative w-[300px] shrink-0 rounded-xl overflow-hidden transition-all duration-200 text-left cursor-pointer ${
         isSelected
           ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/20'
           : 'hover:bg-white/5'
@@ -59,7 +62,7 @@ const ChannelRow: React.FC<{
         </div>
         <div className="text-xs text-white/60 truncate">{''}</div>
       </div>
-    </button>
+    </div>
   );
 };
 
