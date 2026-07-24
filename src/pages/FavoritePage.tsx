@@ -1,20 +1,20 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RiHeartFill, RiTvLine } from '@remixicon/react';
-import { channels } from '../data/channels';
 import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
-import { getChannelLogo } from '../utils/icons';
+import { filterChannels } from '../utils/channelFilter';
 import { getBgClass, getTextClass, getTextSecondaryClass, getCardClass, getLogoBgClass, getCardImageBgClass, getEmptyStateIconClass } from '../utils/theme';
 
 const FavoritePage: React.FC = () => {
   const navigate = useNavigate();
-  const { settings, favorites, toggleFavorite } = useApp();
+  const { settings, favorites, toggleFavorite, channels } = useApp();
 
-  const favoriteChannels = channels.filter(c => favorites.includes(`${c.tid}-${c.id}`));
+  const allowed = useMemo(() => filterChannels(channels), [channels])
+  const favoriteChannels = useMemo(() => allowed.filter(c => favorites.includes(c.id)), [allowed, favorites])
 
   const handleChannelClick = (channel: Channel) => {
-    localStorage.setItem('lastPlayedChannel', `${channel.tid}-${channel.id}`);
+    localStorage.setItem('lastPlayedChannel', channel.id);
     navigate('/');
   };
 
@@ -50,29 +50,25 @@ const FavoritePage: React.FC = () => {
           <div className="grid grid-cols-4 gap-4">
             {favoriteChannels.map((channel) => (
               <div
-                key={`${channel.tid}-${channel.id}`}
+                key={channel.id}
                 onClick={() => handleChannelClick(channel)}
                 className={`${getCardClass(settings.theme)} border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer group`}
               >
                 <div className={`relative h-36 overflow-hidden ${getCardImageBgClass(settings.theme)}`}>
                   <img
-                    src={getChannelLogo(channel.name)}
+                          src={channel.logo}
                     alt={channel.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     onError={(e) => {
                       (e.target as HTMLImageElement).style.display = 'none';
                     }}
                   />
-                  {channel.isLive && (
-                    <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-red-500/90 text-white text-xs font-medium">
-                      LIVE
-                    </div>
-                  )}
+
                   <div className="absolute top-2 right-2">
                   <div
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleFavorite(`${channel.tid}-${channel.id}`);
+                      toggleFavorite(channel.id);
                     }}
                     className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-colors ${settings.theme === 'black' ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-black/50 text-white hover:bg-black/70'}`}
                   >
@@ -85,7 +81,7 @@ const FavoritePage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <div className={`w-6 h-6 rounded overflow-hidden ${getLogoBgClass(settings.theme)} flex items-center justify-center`}>
                         <img
-                          src={getChannelLogo(channel.name)}
+                    src={channel.logo}
                           alt={channel.name}
                           className="w-full h-full object-cover"
                           onError={(e) => {
@@ -96,7 +92,7 @@ const FavoritePage: React.FC = () => {
                       <span className={`font-medium ${getTextClass(settings.theme)} text-sm`}>{channel.name}</span>
                     </div>
                   </div>
-                  <p className={`${getTextSecondaryClass(settings.theme)} text-xs mt-1 truncate`}>{channel.currentProgram}</p>
+
                 </div>
               </div>
             ))}
