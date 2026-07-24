@@ -3,12 +3,12 @@ import Hls from 'hls.js'
 
 interface HlsPlayerProps {
   url: string
-  channelName: string
+  channelName?: string
   channelLogo?: string
   onError?: (err: Error) => void
 }
 
-export default function HlsPlayer({ url, channelName, onError }: HlsPlayerProps) {
+export default function HlsPlayer({ url, onError }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +50,7 @@ export default function HlsPlayer({ url, channelName, onError }: HlsPlayerProps)
       videoRef.current?.play().catch(() => {})
     })
 
-    hls.on(Hls.Events.ERROR, (event, data) => {
+    hls.on(Hls.Events.ERROR, (_event, data) => {
       if (data.fatal) {
         retryCountRef.current++
         if (retryCountRef.current <= MAX_RETRIES) {

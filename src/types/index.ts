@@ -4,6 +4,9 @@ export interface Channel {
   logo: string;
   group: string;
   url: string;
+  tid: string;
+  currentProgram: string;
+  isLive: boolean;
 }
 
 export interface ChannelLine {

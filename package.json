@@ -12,8 +12,6 @@
   "dependencies": {
     "@m0x3mkx/liquid-glass-react": "^1.1.4",
     "@remixicon/react": "^4.9.0",
-    "axios": "^1.18.1",
-    "cheerio": "^1.2.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "hls.js": "^1.6.16",
