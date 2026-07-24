@@ -11,7 +11,7 @@ import { getBgClass } from './utils/theme';
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="flex flex-col h-screen">
     <Header />
-    <div className="flex-1 min-h-0">
+    <div className="flex-1 min-h-0 overflow-hidden">
       {children}
     </div>
   </div>
