@@ -8,7 +8,7 @@ const { M3uParser } = require('m3u-parser-generator')
 const app = express()
 const PORT = process.env.PORT || 3000
 const M3U_URL = 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8'
-const CACHE_TTL = 5 * 60 * 1000
+const CACHE_TTL = 4 * 60 * 60 * 1000 // 4 hours, matches upstream update frequency
 const LOGO_DIR = path.join(__dirname, 'logos')
 
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
