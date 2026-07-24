@@ -3,6 +3,7 @@ const cors = require('cors')
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
+const { M3uParser } = require('m3u-parser-generator')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -18,26 +19,15 @@ app.use(cors())
 app.use(express.json())
 
 function parseM3U(text) {
-  const channels = []
-  const lines = text.split('\n')
-  for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].startsWith('#EXTINF:')) continue
-    const meta = lines[i]
-    const urlLine = lines[i + 1]?.trim()
-    if (!urlLine || urlLine.startsWith('#')) continue
-    const tvgName = meta.match(/tvg-name="(.*?)"/)?.[1] || ''
-    const tvgLogo = meta.match(/tvg-logo="(.*?)"/)?.[1] || ''
-    const groupTitle = meta.match(/group-title="(.*?)"/)?.[1] || '未分类'
-    const displayName = meta.split(',').pop()?.trim() || tvgName
-    channels.push({
-      id: `${groupTitle}-${tvgName}`,
-      name: displayName,
-      logo: tvgLogo,
-      group: groupTitle,
-      url: urlLine,
-    })
-  }
-  return channels
+  const parser = new M3uParser()
+  const playlist = parser.parse(text)
+  return (playlist.medias || []).map(m => ({
+    id: `${m.attributes?.['group-title'] || '未分类'}-${m.attributes?.['tvg-name'] || m.name}`,
+    name: m.name,
+    logo: m.attributes?.['tvg-logo'] || '',
+    group: m.attributes?.['group-title'] || '未分类',
+    url: m.location,
+  }))
 }
 
 app.get('/api/m3u', async (req, res) => {
