@@ -113,8 +113,25 @@ app.get('/api/proxy/stream', async (req, res) => {
   }
 })
 
+function generateLogoSvg(name) {
+  const colors = ['#3b82f6','#8b5cf6','#ef4444','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16']
+  const color = colors[Math.abs(hashCode(name)) % colors.length]
+  const letter = name.charAt(0).toUpperCase()
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+    <rect width="80" height="80" rx="12" fill="${color}" opacity="0.8"/>
+    <text x="40" y="44" text-anchor="middle" fill="white" font-size="28" font-weight="bold" font-family="sans-serif">${letter}</text>
+  </svg>`
+}
+
+function hashCode(s) {
+  let hash = 0
+  for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash) + s.charCodeAt(i)
+  return hash
+}
+
 app.get('/api/proxy/image', async (req, res) => {
   const imgUrl = req.query.url
+  const name = req.query.name || ''
   if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
 
   const hash = crypto.createHash('md5').update(imgUrl).digest('hex')
@@ -143,7 +160,13 @@ app.get('/api/proxy/image', async (req, res) => {
     })
     res.send(buffer)
   } catch (err) {
-    res.status(502).json({ error: 'Image proxy error' })
+    const svg = generateLogoSvg(name)
+    res.set({
+      'Access-Control-Allow-Origin': '*',
+      'Content-Type': 'image/svg+xml',
+      'Cache-Control': 'public, max-age=86400',
+    })
+    res.send(svg)
   }
 })
 
