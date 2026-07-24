@@ -1,10 +1,16 @@
 const express = require('express')
 const cors = require('cors')
+const fs = require('fs')
+const path = require('path')
+const crypto = require('crypto')
 
 const app = express()
 const PORT = process.env.PORT || 3000
 const M3U_URL = 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8'
 const CACHE_TTL = 5 * 60 * 1000
+const LOGO_DIR = path.join(__dirname, 'logos')
+
+if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
 let cache = { data: null, timestamp: 0 }
 
@@ -111,21 +117,33 @@ app.get('/api/proxy/image', async (req, res) => {
   const imgUrl = req.query.url
   if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
 
+  const hash = crypto.createHash('md5').update(imgUrl).digest('hex')
+  const ext = path.extname(new URL(imgUrl).pathname) || '.png'
+  const localPath = path.join(LOGO_DIR, hash + ext)
+
+  if (fs.existsSync(localPath)) {
+    const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
+    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': contentType })
+    return res.send(fs.readFileSync(localPath))
+  }
+
   try {
     const response = await fetch(imgUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
     })
-    if (!response.ok) return res.status(502).json({ error: 'Image fetch failed' })
+    if (!response.ok) throw new Error('Fetch failed')
 
-    const buffer = await response.arrayBuffer()
+    const buffer = Buffer.from(await response.arrayBuffer())
+    fs.writeFileSync(localPath, buffer)
     res.set({
       'Access-Control-Allow-Origin': '*',
       'Content-Type': response.headers.get('content-type') || 'image/png',
       'Cache-Control': 'public, max-age=86400',
     })
-    res.send(Buffer.from(buffer))
+    res.send(buffer)
   } catch (err) {
-    res.status(502).json({ error: 'Proxy image error' })
+    res.status(502).json({ error: 'Image proxy error' })
   }
 })
 
