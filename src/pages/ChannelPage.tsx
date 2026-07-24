@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useApp } from '../context/AppContext'
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
 import { HlsPlayer } from '../components/Player'
@@ -13,6 +13,16 @@ export default function ChannelPage() {
     '央视频道': true,
     '卫视频道': true,
   })
+  const [logoErrors, setLogoErrors] = useState<Set<string>>(new Set())
+
+  const handleLogoError = useCallback((id: string) => {
+    setLogoErrors(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }, [])
 
   const filtered = useMemo(() => {
     const allowed = filterChannels(channels)
@@ -96,8 +106,8 @@ export default function ChannelPage() {
                             : 'hover:bg-white/10'
                         }`}
                       >
-                        {ch.logo ? (
-                          <img src={ch.logo} alt="" className="w-8 h-8 rounded object-contain" />
+                        {ch.logo && !logoErrors.has(ch.id) ? (
+                          <img src={ch.logo} alt="" className="w-8 h-8 rounded object-contain" onError={() => handleLogoError(ch.id)} />
                         ) : (
                           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center">
                             <span className="text-white text-sm font-bold">{ch.name[0]}</span>
