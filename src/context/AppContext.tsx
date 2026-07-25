@@ -9,6 +9,7 @@ type Action =
   | { type: 'REMOVE_FAVORITE'; payload: string }
   | { type: 'TOGGLE_FAVORITE'; payload: string }
   | { type: 'SET_FAVORITES'; payload: string[] }
+  | { type: 'CLEAN_ORPHANED_FAVORITES'; payload: string[] }
   | { type: 'UPDATE_SETTINGS'; payload: Partial<UserSettings> }
   | { type: 'SET_CATEGORY'; payload: string }
   | { type: 'SET_CHANNELS'; payload: Channel[] }
@@ -37,6 +38,8 @@ const reducer = (state: AppState, action: Action): AppState => {
         ? { ...state, favorites: state.favorites.filter(id => id !== action.payload) }
         : { ...state, favorites: [...state.favorites, action.payload] };
     case 'SET_FAVORITES':
+      return { ...state, favorites: action.payload };
+    case 'CLEAN_ORPHANED_FAVORITES':
       return { ...state, favorites: action.payload };
     case 'UPDATE_SETTINGS':
       return { ...state, settings: { ...state.settings, ...action.payload } };
@@ -115,6 +118,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const data = await fetchChannels(refresh);
       dispatch({ type: 'SET_CHANNELS', payload: data });
+      // Auto-clear orphaned favorites
+      const channelIds = new Set(data.map(c => c.id));
+      const validFavorites = state.favorites.filter(id => channelIds.has(id));
+      if (validFavorites.length !== state.favorites.length) {
+        dispatch({ type: 'CLEAN_ORPHANED_FAVORITES', payload: validFavorites });
+      }
       const savedId = localStorage.getItem('lastPlayedChannel');
       if (savedId && data.some(c => c.id === savedId)) {
         dispatch({ type: 'SET_LAST_PLAYED_CHANNEL', payload: savedId });

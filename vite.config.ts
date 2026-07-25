@@ -9,6 +9,15 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          hls: ['hls.js'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

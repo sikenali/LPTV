@@ -1,17 +1,29 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import Header from './components/Layout/Header';
-import ChannelPage from './pages/ChannelPage';
-import FavoritePage from './pages/FavoritePage';
-import SettingsPage from './pages/SettingsPage';
-import TvModePage from './pages/TvModePage';
+
+const LazyChannelPage = React.lazy(() => import('./pages/ChannelPage'));
+const LazyFavoritePage = React.lazy(() => import('./pages/FavoritePage'));
+const LazySettingsPage = React.lazy(() => import('./pages/SettingsPage'));
+const LazyTvModePage = React.lazy(() => import('./pages/TvModePage'));
+
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center h-full" style={{ background: '#fbf7f0' }}>
+    <div className="text-center">
+      <div className="w-10 h-10 border-4 border-[#c43d3d] border-t-transparent rounded-full animate-spin mx-auto" />
+      <div className="text-sm mt-4" style={{ color: '#8b7e6a' }}>加载中...</div>
+    </div>
+  </div>
+);
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="flex flex-col h-screen">
     <Header />
     <div className="flex-1 min-h-0 overflow-hidden">
-      {children}
+      <Suspense fallback={<LoadingSpinner />}>
+        {children}
+      </Suspense>
     </div>
   </div>
 );
@@ -32,7 +44,7 @@ const ThemedApp: React.FC = () => {
           path="/" 
           element={
             <Layout>
-              <ChannelPage />
+              <LazyChannelPage />
             </Layout>
           } 
         />
@@ -40,7 +52,7 @@ const ThemedApp: React.FC = () => {
           path="/favorites" 
           element={
             <Layout>
-              <FavoritePage />
+              <LazyFavoritePage />
             </Layout>
           } 
         />
@@ -48,13 +60,17 @@ const ThemedApp: React.FC = () => {
           path="/settings" 
           element={
             <Layout>
-              <SettingsPage />
+              <LazySettingsPage />
             </Layout>
           } 
         />
         <Route 
           path="/tv-mode" 
-          element={<TvModePage />} 
+          element={
+            <Suspense fallback={<LoadingSpinner />}>
+              <LazyTvModePage />
+            </Suspense>
+          } 
         />
       </Routes>
     </div>

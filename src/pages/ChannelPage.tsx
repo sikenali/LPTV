@@ -15,8 +15,15 @@ const groupIcons: Record<string, { color: string }> = {
 export default function ChannelPage() {
   const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite, lastPlayedChannel } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
+  const [logoErrors, setLogoErrors] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   useEffect(() => {
     const allowed = filterChannels(channels)
@@ -44,9 +51,9 @@ export default function ChannelPage() {
 
   const filtered = useMemo(() => {
     const allowed = filterChannels(channels)
-    if (!searchQuery.trim()) return allowed
-    return allowed.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  }, [channels, searchQuery])
+    if (!debouncedQuery.trim()) return allowed
+    return allowed.filter(c => c.name.toLowerCase().includes(debouncedQuery.toLowerCase()))
+  }, [channels, debouncedQuery])
 
   const grouped = useMemo(() => getGroupedChannels(filtered), [filtered])
 
@@ -149,27 +156,17 @@ export default function ChannelPage() {
                               borderWidth: isSelected ? '1px' : '0px',
                             }}
                           >
-                            <div className="flex items-center gap-3 pl-3 pr-2 py-2.5 flex-1 min-w-0">
-                              {ch.logo ? (
+                            <div className="flex items-center gap-3 pl-3 pr-2 py-2.5 flex-1 min-w-0 relative">
+                              {ch.logo && !logoErrors[ch.id] ? (
                                 <img
                                   src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
                                   alt=""
-                                  className="w-9 h-9 rounded object-contain shrink-0"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement
-                                    target.style.display = 'none'
-                                    const parent = target.parentElement
-                                    if (parent && !parent.querySelector('.fallback-logo')) {
-                                      const fallback = document.createElement('div')
-                                      fallback.className = 'fallback-logo w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0'
-                                      fallback.style.background = isSelected ? '#c43d3d' : '#5b8c5a'
-                                      fallback.textContent = ch.name.substring(0, 2)
-                                      parent.appendChild(fallback)
-                                    }
-                                  }}
+                                  className="w-9 h-9 rounded object-contain shrink-0 absolute inset-0"
+                                  style={{ zIndex: 1 }}
+                                  onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
                                 />
                               ) : null}
-                              <div className={`w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 ${ch.logo ? 'hidden' : ''}`}
+                              <div className="w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 relative z-0"
                                 style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
                               >
                                 {ch.name.substring(0, 2)}

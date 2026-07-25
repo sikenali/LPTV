@@ -20,10 +20,12 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showPlayOverlay, setShowPlayOverlay] = useState(false)
   const retryCountRef = useRef(0)
   const MAX_RETRIES = 3
   const timeoutRef = useRef<number | null>(null)
   const errorTypeRef = useRef<string | null>(null)
+  const isPlayingRef = useRef(false)
 
   const clearAllTimers = useCallback(() => {
     if (timeoutRef.current) {
@@ -81,7 +83,12 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
       clearAllTimers()
       setLoading(false)
       setError(null)
-      videoRef.current?.play().catch(() => {})
+      videoRef.current?.play().then(() => {
+        isPlayingRef.current = true
+        setShowPlayOverlay(false)
+      }).catch(() => {
+        setShowPlayOverlay(true)
+      })
       retryCountRef.current = 0
       errorTypeRef.current = null
     })
@@ -208,7 +215,46 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
         className="w-full h-full object-contain"
         playsInline
         controls
+        onLoadedData={() => {
+          isPlayingRef.current = true
+          setShowPlayOverlay(false)
+        }}
+        onClick={() => {
+          if (videoRef.current) {
+            if (isPlayingRef.current) {
+              videoRef.current.play().catch(() => {})
+            } else {
+              videoRef.current.play()
+                .then(() => {
+                  isPlayingRef.current = true
+                  setShowPlayOverlay(false)
+                })
+                .catch(() => setShowPlayOverlay(true))
+            }
+          }
+        }}
       />
+      {showPlayOverlay && !error && (
+        <button
+          onClick={() => {
+            if (videoRef.current) {
+              videoRef.current.play()
+                .then(() => {
+                  isPlayingRef.current = true
+                  setShowPlayOverlay(false)
+                })
+                .catch(() => setShowPlayOverlay(true))
+            }
+          }}
+          className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent cursor-pointer"
+        >
+          <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm hover:bg-black/70 transition-colors">
+            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          </div>
+        </button>
+      )}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="text-white text-lg">加载中...</div>

@@ -3,22 +3,36 @@ const cors = require('cors')
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
+const zlib = require('zlib')
 const { M3uParser } = require('m3u-parser-generator')
 
 const app = express()
 const PORT = process.env.PORT || 3000
 const LOCAL_M3U_PATH = path.join(__dirname, 'local.m3u8')
-const USE_LOCAL_M3U = fs.existsSync(LOCAL_M3U_PATH)
 const M3U_URL = 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8'
 const CACHE_TTL = 4 * 60 * 60 * 1000
 const LOGO_DIR = path.join(__dirname, 'logos')
-const STREAM_TIMEOUT = 15000
+const STREAM_TIMEOUT = 30000
+const maxConcurrentStreams = 10
+let activeStreams = 0
+const pendingStreamRequests = []
 
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
 let cache = { data: null, timestamp: 0 }
 
-app.use(cors())
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173']
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (ALLOWED_ORIGINS.includes(origin) || origin === '') {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  credentials: true,
+}
+app.use(cors(corsOptions))
 app.use(express.json())
 
 function parseM3U(text) {
@@ -99,15 +113,24 @@ app.get('/api/m3u', async (req, res) => {
 
   try {
     let text
-    if (USE_LOCAL_M3U) {
+    const useLocal = process.env.USE_LOCAL_M3U === 'true'
+    if (useLocal && fs.existsSync(LOCAL_M3U_PATH)) {
       text = fs.readFileSync(LOCAL_M3U_PATH, 'utf-8')
-      console.log('[m3u] loaded from local file:', LOCAL_M3U_PATH)
+      console.log('[m3u] loaded from local file (USE_LOCAL_M3U=true):', LOCAL_M3U_PATH)
     } else {
       const response = await fetch(M3U_URL)
       if (!response.ok) {
+        if (cache.data) {
+          return res.json(cache.data)
+        }
         return res.status(502).json({ error: 'M3U source unavailable', status: response.status })
       }
       text = await response.text()
+      if (!useLocal) {
+        console.log('[m3u] loaded from remote:', M3U_URL)
+      } else {
+        console.log('[m3u] USE_LOCAL_M3U=true but local file missing, loaded from remote:', M3U_URL)
+      }
     }
     let channels = parseM3U(text)
 
@@ -190,7 +213,6 @@ const COMMON_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 
 const GROUP_PRIORITY = ['央视频道', '卫视频道']
 const PROBE_TIMEOUT = 3000
 const MAX_CONCURRENT = 5
-
 const REFERER_MAP = {
   'm3u.81diangao.com': 'https://m3u.81diangao.com/',
   'live-trac': 'https://live-trac.tv/',
@@ -206,25 +228,6 @@ function getSmartReferer(url) {
     }
   } catch {}
   return `https://${new URL(url).hostname}/`
-}
-
-function parseMasterPlaylist(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
-  if (lines.length === 0) return null
-  if (lines.length === 1) return lines[0]
-  return lines
-}
-
-function pickBestQuality(variants) {
-  if (variants.length === 0) return null
-  const byResolution = variants
-    .map(v => {
-      const match = v.match(/(\d+)x(\d+)/)
-      if (match) return { ...v, res: Math.min(parseInt(match[1]), parseInt(match[2])) }
-      return { ...v, res: 0 }
-    })
-    .sort((a, b) => b.res - a.res)
-  return byResolution[0]?.url || variants[0]
 }
 
 function rewriteManifest(text, masterUrl) {
@@ -272,59 +275,146 @@ app.get('/api/proxy/stream', async (req, res) => {
   }
 
   const referer = getSmartReferer(streamUrl)
+  const qualityParam = req.query.quality
 
-  try {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT)
+  function setStreamCORS() {
+    res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0] || '*')
+    res.set('Vary', 'Origin')
+  }
 
-    const response = await fetch(streamUrl, {
-      headers: {
-        'User-Agent': COMMON_UA,
-        'Referer': referer,
-        'Origin': referer,
-      },
-      signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
-
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: 'Stream fetch failed',
-        status: response.status,
-        url: streamUrl,
+  function enqueueStream(cb) {
+    if (activeStreams < maxConcurrentStreams) {
+      activeStreams++
+      cb(() => { activeStreams-- ; dequeueStream() })
+    } else {
+      pendingStreamRequests.push(() => {
+        activeStreams++
+        cb(() => { activeStreams-- ; dequeueStream() })
       })
     }
+  }
 
-    const contentType = response.headers.get('content-type') || ''
-
-    if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
-      const text = await response.text()
-
-      const variants = parseMasterPlaylist(text)
-
-      if (Array.isArray(variants)) {
-        const best = pickBestQuality(variants)
-        if (best) {
-          const finalUrl = resolveUrl(streamUrl, best)
-          return res.redirect(`/api/proxy/stream?url=${encodeURIComponent(finalUrl)}`)
-        }
-      }
-
-      if (variants) {
-        const finalUrl = resolveUrl(streamUrl, variants)
-        if (finalUrl.endsWith('.m3u8') || new URL(finalUrl).pathname.includes('m3u8')) {
-          return res.redirect(`/api/proxy/stream?url=${encodeURIComponent(finalUrl)}`)
-        }
-      }
-
-      const rewritten = rewriteManifest(text, streamUrl)
-      res.set('Content-Type', 'application/vnd.apple.mpegurl')
-      res.send(rewritten)
-    } else {
-      response.body.pipe(res)
-      response.body.on('error', () => res.destroy())
-      res.on('close', () => response.body.destroy())
+  function dequeueStream() {
+    while (pendingStreamRequests.length > 0 && activeStreams < maxConcurrentStreams) {
+      const next = pendingStreamRequests.shift()
+      activeStreams++
+      next(() => { activeStreams-- ; dequeueStream() })
     }
+  }
+
+  function handleStreamFetch(finish) {
+    return new Promise((resolve, reject) => {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT)
+
+      fetch(streamUrl, {
+        headers: {
+          'User-Agent': COMMON_UA,
+          'Referer': referer,
+          'Origin': referer,
+        },
+        signal: controller.signal,
+      }).then(async response => {
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          finish()
+          return resolve(res.status(response.status).json({
+            error: 'Stream fetch failed',
+            status: response.status,
+            url: streamUrl,
+          }))
+        }
+
+        const contentType = response.headers.get('content-type') || ''
+
+        if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
+          const text = await response.text()
+
+          const isMasterPlaylist = text.includes('#EXT-X-STREAM-INF')
+
+          if (isMasterPlaylist) {
+            const lines = text.split('\n')
+            const variants = []
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i]
+              if (line.trim().startsWith('#EXT-X-STREAM-INF')) {
+                const urlLine = lines[i + 1]
+                if (urlLine && !urlLine.trim().startsWith('#')) {
+                  const resolvedUrl = resolveUrl(streamUrl, urlLine.trim())
+                  const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/)
+                  const resolutionMatch = line.match(/RESOLUTION=(\d+)x(\d+)/)
+                  variants.push({
+                    url: resolvedUrl,
+                    bandwidth: bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0,
+                    resolution: resolutionMatch ? Math.min(parseInt(resolutionMatch[1]), parseInt(resolutionMatch[2])) : 0,
+                    line: urlLine.trim(),
+                  })
+                }
+              }
+            }
+
+            let chosenVariant = null
+            if (qualityParam) {
+              const qMap = { 'high': Infinity, 'low': 0, '4k': 2160, '1080p': 1080, '720p': 720, '480p': 480 }
+              const targetRes = typeof qMap[qualityParam.toLowerCase()] !== 'undefined' ? qMap[qualityParam.toLowerCase()] : 0
+              if (targetRes > 0) {
+                const matched = variants.filter(v => v.resolution === targetRes)
+                if (matched.length > 0) chosenVariant = matched.sort((a, b) => b.bandwidth - a.bandwidth)[0]
+              } else {
+                const matchedBW = variants.filter(v => v.bandwidth.toString() === qualityParam)
+                if (matchedBW.length > 0) chosenVariant = matchedBW.sort((a, b) => b.bandwidth - a.bandwidth)[0]
+              }
+            }
+            if (!chosenVariant) {
+              chosenVariant = variants.sort((a, b) => b.bandwidth - a.bandwidth)[0]
+            }
+
+            if (chosenVariant) {
+              finish()
+              return resolve(res.redirect(`/api/proxy/stream?url=${encodeURIComponent(chosenVariant.url)}${qualityParam ? '&quality=' + qualityParam : ''}`))
+            }
+          }
+
+          let rewritten = rewriteManifest(text, streamUrl)
+
+          const acceptEncoding = req.headers['accept-encoding'] || ''
+          const shouldCompress = rewritten.length > 1024 && (acceptEncoding.includes('gzip') || acceptEncoding.includes('deflate'))
+
+          setStreamCORS()
+
+          if (shouldCompress) {
+            const compressed = zlib.gzipSync(Buffer.from(rewritten, 'utf-8'))
+            res.set('Content-Encoding', 'gzip')
+            res.set('Content-Type', 'application/vnd.apple.mpegurl')
+            res.set('Content-Length', compressed.length.toString())
+            finish()
+            return resolve(res.send(compressed))
+          }
+
+          res.set('Content-Type', 'application/vnd.apple.mpegurl')
+          finish()
+          return resolve(res.send(rewritten))
+        } else {
+          setStreamCORS()
+          response.body.pipe(res)
+          response.body.on('error', () => res.destroy())
+          res.on('close', () => { response.body.destroy(); finish() })
+        }
+      }).catch(err => {
+        clearTimeout(timeoutId)
+        finish()
+        reject(err)
+      })
+    })
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      enqueueStream((done) => {
+        handleStreamFetch(done).then(resolve).catch(reject)
+      })
+    })
   } catch (err) {
     console.error('[proxy/stream] Error:', err.message, 'URL:', streamUrl)
     res.status(502).json({ error: 'Proxy stream error', url: streamUrl })
@@ -409,5 +499,8 @@ app.get('/health', (req, res) => {
 })
 
 app.listen(PORT, () => {
+  const useLocal = process.env.USE_LOCAL_M3U === 'true'
   console.log(`LPTV proxy server running on port ${PORT}`)
+  console.log(`[startup] M3U source: ${useLocal && fs.existsSync(LOCAL_M3U_PATH) ? 'local (USE_LOCAL_M3U=true)' : 'remote (always)'}`)
+  console.log(`[startup] CORS allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)
 })
