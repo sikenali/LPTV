@@ -1,12 +1,24 @@
 import React from 'react';
 import { RiCheckLine } from '@remixicon/react';
-import LiquidGlass from '@m0x3mkx/liquid-glass-react';
 import { useApp } from '../../context/AppContext';
 
 const themes = [
-  { id: 'white' as const, name: '白色主题', subtitle: '#FFFFFF', previewColor: 'bg-white' },
-  { id: 'black' as const, name: '黑色主题', subtitle: '#4A4A4A', previewColor: 'bg-gray-800' },
-  { id: 'glass' as const, name: '液态玻璃', subtitle: 'Glass', previewColor: 'bg-blue-500/10' },
+  {
+    id: 'glass' as const,
+    name: '羊皮纸',
+    label: '默认主题',
+    previewBg: '#fbf7f0',
+    previewStroke: '#e5d9c4',
+    previewBars: ['#e5d9c4', '#f0e8d8', '#c43d3d', '#c9a96e', '#5b8c5a'],
+  },
+  {
+    id: 'black' as const,
+    name: '近黑',
+    label: '#0A0A0A',
+    previewBg: '#0a0a0a',
+    previewStroke: '#2a2a2a',
+    previewBars: ['#2a2a2a', '#1a1a1a', '#c43d3d', '#444444', '#666666'],
+  },
 ];
 
 const ThemeSetting: React.FC = () => {
@@ -20,39 +32,37 @@ const ThemeSetting: React.FC = () => {
           onClick={() => updateSettings({ theme: theme.id })}
           className={`w-56 rounded-xl overflow-hidden transition-all ${
             settings.theme === theme.id
-              ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/20'
+              ? 'ring-2 ring-[#c43d3d] shadow-lg'
               : 'border border-white/10 hover:border-white/20'
           }`}
         >
-          <LiquidGlass
-            cornerRadius={0}
-            padding="0"
-            displacementScale={20}
-            blurAmount={settings.theme === theme.id ? 0.1 : 0.05}
-            className="h-full"
-          >
-            <div className={`h-32 ${theme.previewColor} p-3 flex flex-col`}>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-3 rounded bg-blue-500" />
-                <div className="w-10 h-2 rounded bg-white/30" />
-              </div>
-              <div className="flex-1 mt-2 flex gap-2">
-                <div className={`flex-1 rounded ${theme.id === 'black' ? 'bg-gray-700' : theme.id === 'white' ? 'bg-gray-100' : 'bg-white/10'}`} />
-                <div className={`flex-[2] rounded ${theme.id === 'black' ? 'bg-gray-600' : theme.id === 'white' ? 'bg-gray-50' : 'bg-white/5'}`} />
-              </div>
+          <div className="h-32" style={{ background: theme.previewBg }}>
+            <div className="w-full h-full p-3 flex flex-col gap-1.5">
+              {theme.previewBars.slice(0, 5).map((bar, i) => (
+                <div
+                  key={i}
+                  className="rounded-[4px]"
+                  style={{
+                    width: i === 0 ? '80px' : i === 1 ? '120px' : i === 2 ? '60px' : i === 3 ? '100px' : '50px',
+                    height: '8px',
+                    background: bar,
+                    borderRadius: '4px',
+                  }}
+                />
+              ))}
             </div>
-            <div className="p-4 flex items-center justify-between">
-              <div>
-                <div className="text-white font-medium text-sm">{theme.name}</div>
-                <div className="text-white/40 text-xs mt-0.5">{theme.subtitle}</div>
-              </div>
-              {settings.theme === theme.id && (
-                <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center">
-                  <RiCheckLine className="w-4 h-4 text-white" />
-                </div>
-              )}
+          </div>
+          <div className="p-4 flex items-center justify-between" style={{ background: '#f8f3e8' }}>
+            <div>
+              <div className="text-sm font-medium" style={{ color: theme.id === 'black' ? '#fff' : '#3d2b1f' }}>{theme.name}</div>
+              <div className="text-[#8b7e6a] text-xs mt-0.5">{theme.label}</div>
             </div>
-          </LiquidGlass>
+            {settings.theme === theme.id && (
+              <div className="w-6 h-6 rounded-full bg-[#c43d3d] flex items-center justify-center">
+                <RiCheckLine className="w-4 h-4 text-white" />
+              </div>
+            )}
+          </div>
         </button>
       ))}
     </div>

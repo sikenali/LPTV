@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@m0x3mkx/liquid-glass-react": "^1.1.4",
     "@remixicon/react": "^4.9.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",

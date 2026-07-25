@@ -8,8 +8,9 @@ const { M3uParser } = require('m3u-parser-generator')
 const app = express()
 const PORT = process.env.PORT || 3000
 const M3U_URL = 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8'
-const CACHE_TTL = 4 * 60 * 60 * 1000 // 4 hours, matches upstream update frequency
+const CACHE_TTL = 4 * 60 * 60 * 1000
 const LOGO_DIR = path.join(__dirname, 'logos')
+const STREAM_TIMEOUT = 15000
 
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
@@ -55,53 +56,199 @@ app.get('/api/m3u', async (req, res) => {
   }
 })
 
-function resolveUrl(base, relative) {
-  if (relative.startsWith('http://') || relative.startsWith('https://')) return relative
-  if (relative.startsWith('/')) {
-    const u = new URL(base)
-    return `${u.protocol}//${u.host}${relative}`
+function extractBaseUrl(url) {
+  try {
+    const u = new URL(url)
+    return `${u.protocol}//${u.host}`
+  } catch {
+    return ''
   }
-  const lastSlash = base.lastIndexOf('/')
-  const dir = lastSlash >= 0 ? base.substring(0, lastSlash + 1) : base + '/'
-  return dir + relative
+}
+
+function extractBaseAndPath(url) {
+  try {
+    const u = new URL(url)
+    const base = `${u.protocol}//${u.host}`
+    let pathPart = u.pathname + u.search + u.hash
+    return { base, pathPart }
+  } catch {
+    return { base: '', pathPart: '' }
+  }
+}
+
+function resolveUrl(base, relative) {
+  if (!base || !relative) return relative
+
+  if (relative.startsWith('http://') || relative.startsWith('https://')) {
+    return relative
+  }
+
+  if (relative.startsWith('//')) {
+    const parsed = new URL(relative, 'https://')
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`
+  }
+
+  if (relative.startsWith('/')) {
+    const parsed = new URL(relative, base)
+    return parsed.toString()
+  }
+
+  try {
+    const resolved = new URL(relative, base)
+    return resolved.toString()
+  } catch {
+    return relative
+  }
+}
+
+function getRefererFromUrl(url) {
+  try {
+    const u = new URL(url)
+    return `${u.protocol}//${u.host}/`
+  } catch {
+    return ''
+  }
+}
+
+const COMMON_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+const REFERER_MAP = {
+  'm3u.81diangao.com': 'https://m3u.81diangao.com/',
+  'live-trac': 'https://live-trac.tv/',
+  'hls': 'https://www.hls.tv/',
+  'iqilu': 'https://www.iqilu.com/',
+}
+
+function getSmartReferer(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    for (const [key, referer] of Object.entries(REFERER_MAP)) {
+      if (host.includes(key)) return referer
+    }
+  } catch {}
+  return `https://${new URL(url).hostname}/`
+}
+
+function parseMasterPlaylist(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+  if (lines.length === 0) return null
+  if (lines.length === 1) return lines[0]
+  return lines
+}
+
+function pickBestQuality(variants) {
+  if (variants.length === 0) return null
+  const byResolution = variants
+    .map(v => {
+      const match = v.match(/(\d+)x(\d+)/)
+      if (match) return { ...v, res: Math.min(parseInt(match[1]), parseInt(match[2])) }
+      return { ...v, res: 0 }
+    })
+    .sort((a, b) => b.res - a.res)
+  return byResolution[0]?.url || variants[0]
+}
+
+function rewriteManifest(text, masterUrl) {
+  const lines = text.split('\n')
+  const result = []
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (!trimmed || trimmed.startsWith('#')) {
+      if (trimmed.startsWith('#EXT-X-STREAM-INF') || trimmed.startsWith('#EXT-X-MEDIA:')) {
+        const nextLine = lines[i + 1]
+        if (nextLine && !nextLine.trim().startsWith('#')) {
+          const resolved = resolveUrl(masterUrl, nextLine.trim())
+          if (resolved.endsWith('.m3u8') || resolved.includes('m3u8')) {
+            result.push(trimmed)
+            result.push(`/api/proxy/stream?url=${encodeURIComponent(resolved)}`)
+            i++
+            continue
+          }
+        }
+      }
+      result.push(line)
+      continue
+    }
+
+    const resolved = resolveUrl(masterUrl, trimmed)
+    result.push(`/api/proxy/stream?url=${encodeURIComponent(resolved)}`)
+  }
+
+  return result.join('\n')
 }
 
 app.get('/api/proxy/stream', async (req, res) => {
-  const streamUrl = req.query.url
+  let streamUrl = req.query.url
   if (!streamUrl) return res.status(400).json({ error: 'Missing url parameter' })
 
+  streamUrl = String(streamUrl).trim()
+
   try {
+    new URL(streamUrl)
+  } catch {
+    return res.status(400).json({ error: 'Invalid stream URL' })
+  }
+
+  const referer = getSmartReferer(streamUrl)
+
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT)
+
     const response = await fetch(streamUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': 'https://iptv345.com/',
+        'User-Agent': COMMON_UA,
+        'Referer': referer,
+        'Origin': referer,
       },
+      signal: controller.signal,
     })
-    if (!response.ok) return res.status(response.status).json({ error: 'Stream fetch failed' })
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: 'Stream fetch failed',
+        status: response.status,
+        url: streamUrl,
+      })
+    }
 
     const contentType = response.headers.get('content-type') || ''
-    res.set('Access-Control-Allow-Origin', '*')
 
     if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
       const text = await response.text()
-      const lines = text.split('\n')
-      const rewritten = lines.map(line => {
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith('#')) return line
-        const resolved = resolveUrl(streamUrl, trimmed)
-        return `/api/proxy/stream?url=${encodeURIComponent(resolved)}`
-      }).join('\n')
+
+      const variants = parseMasterPlaylist(text)
+
+      if (Array.isArray(variants)) {
+        const best = pickBestQuality(variants)
+        if (best) {
+          const finalUrl = resolveUrl(streamUrl, best)
+          return res.redirect(`/api/proxy/stream?url=${encodeURIComponent(finalUrl)}`)
+        }
+      }
+
+      if (variants) {
+        const finalUrl = resolveUrl(streamUrl, variants)
+        if (finalUrl.endsWith('.m3u8') || new URL(finalUrl).pathname.includes('m3u8')) {
+          return res.redirect(`/api/proxy/stream?url=${encodeURIComponent(finalUrl)}`)
+        }
+      }
+
+      const rewritten = rewriteManifest(text, streamUrl)
       res.set('Content-Type', 'application/vnd.apple.mpegurl')
       res.send(rewritten)
     } else {
-      // Use pipe for non-M3U8 content (TS slices, etc.) to avoid memory pressure
       response.body.pipe(res)
       response.body.on('error', () => res.destroy())
       res.on('close', () => response.body.destroy())
-      return
     }
   } catch (err) {
-    res.status(502).json({ error: 'Proxy stream error' })
+    console.error('[proxy/stream] Error:', err.message, 'URL:', streamUrl)
+    res.status(502).json({ error: 'Proxy stream error', url: streamUrl })
   }
 })
 
@@ -170,7 +317,7 @@ app.get('/api/probe', async (req, res) => {
     const resp = await fetch(url, {
       method: 'HEAD',
       signal: AbortSignal.timeout(5000),
-      headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://iptv345.com/' },
+      headers: { 'User-Agent': COMMON_UA },
     })
     res.json({ status: resp.ok ? 'ok' : 'error', code: resp.status })
   } catch (err) {

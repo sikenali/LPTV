@@ -1,0 +1,9 @@
+{
+  "isError": true,
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"status\":\"error\",\"message\":\"Failed to execute tool 'get_design_data': connection timed out after 5000 ms: /172.16.10.16:9092\"}"
+    }
+  ]
+}

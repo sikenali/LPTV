@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { AppState, UserSettings, Channel } from '../types';
 import { fetchChannels } from '../services/channelApi';
+
+const AUTO_REFRESH_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
 
 type Action =
   | { type: 'ADD_FAVORITE'; payload: string }
@@ -15,7 +17,7 @@ type Action =
 
 const initialState: AppState = {
   favorites: [],
-  settings: { theme: 'white', autoPlay: false, quality: 'high', tvMode: false, showLines: true },
+  settings: { theme: 'glass', autoPlay: false, quality: 'high', tvMode: false },
   currentCategory: '全部',
   channels: [],
   channelsLoading: false,
@@ -62,6 +64,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const refreshTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('lptv-favorites');
@@ -111,6 +114,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       dispatch({ type: 'SET_CHANNELS_ERROR', payload: err instanceof Error ? err.message : '加载失败' });
     }
+  }, []);
+
+  const startAutoRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = window.setInterval(() => {
+      loadChannels(true);
+    }, AUTO_REFRESH_INTERVAL);
+  }, [loadChannels]);
+
+  useEffect(() => {
+    loadChannels();
+    startAutoRefresh();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
   }, []);
 
   return (

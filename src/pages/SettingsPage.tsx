@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RiPaletteLine, RiLayoutGridLine, RiRefreshLine, RiRouteLine, RiCheckLine, RiEyeLine, RiArrowRightSLine } from '@remixicon/react';
+import { RiPaletteLine, RiLayoutGridLine, RiRefreshLine, RiCheckLine, RiArrowRightSLine } from '@remixicon/react';
 import { useApp } from '../context/AppContext';
 
 type TabType = 'theme' | 'mode';
@@ -13,18 +13,6 @@ const themes = [
     previewBg: '#fbf7f0',
     previewStroke: '#e5d9c4',
     previewBars: ['#e5d9c4', '#f0e8d8', '#c43d3d', '#c9a96e', '#5b8c5a'],
-    sideBg: 'bg-white/55',
-    mainBg: 'bg-white/30',
-  },
-  {
-    id: 'white' as const,
-    name: '米白',
-    label: '#F5F5F5',
-    previewBg: '#f5f5f5',
-    previewStroke: '#e0e0e0',
-    previewBars: ['#e0e0e0', '#eeeeee', '#c43d3d', '#999999', '#666666'],
-    sideBg: 'bg-[#F8F8F8]',
-    mainBg: 'bg-[#EEEEEE]',
   },
   {
     id: 'black' as const,
@@ -33,8 +21,6 @@ const themes = [
     previewBg: '#0a0a0a',
     previewStroke: '#2a2a2a',
     previewBars: ['#2a2a2a', '#1a1a1a', '#c43d3d', '#444444', '#666666'],
-    sideBg: 'bg-[#1A1A1A]',
-    mainBg: 'bg-[#1A1A1A]',
   },
 ];
 
@@ -44,15 +30,9 @@ const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('theme');
   const [selectedTheme, setSelectedTheme] = useState(settings.theme);
   const [tvMode, setTvMode] = useState(settings.tvMode);
-  const [playbackMode, setPlaybackMode] = useState(false);
-  const [autoUpdate, setAutoUpdate] = useState(true);
-  const [showLines, setShowLines] = useState(settings.showLines);
 
   useEffect(() => { setSelectedTheme(settings.theme); }, [settings.theme]);
   useEffect(() => { setTvMode(settings.tvMode); }, [settings.tvMode]);
-  useEffect(() => { setShowLines(settings.showLines); }, [settings.showLines]);
-
-  const handleApplyTheme = () => { updateSettings({ theme: selectedTheme }); };
 
   const isBlack = settings.theme === 'black';
   const sidebarBg = isBlack ? '#1a1a1a' : '#f8f3e8';
@@ -62,9 +42,7 @@ const SettingsPage: React.FC = () => {
 
   return (
     <div className="flex h-screen" style={{ background: isBlack ? '#0a0a0a' : '#fbf7f0' }}>
-      {/* 左侧标签导航 - w:260, fills:#f8f3e8, stroke right:#e5d9c4 */}
       <aside className="w-[260px] flex flex-col shrink-0" style={{ background: sidebarBg, borderRight: `1px solid ${borderCol}` }}>
-        {/* 标签导航标题 - padding: [32,24,16,24] */}
         <div style={{ paddingTop: 32, paddingRight: 24, paddingBottom: 16, paddingLeft: 24 }}>
           <div className="flex items-center gap-3">
             <div className="w-1 h-6 rounded-[2px]" style={{ background: '#c43d3d' }} />
@@ -72,9 +50,7 @@ const SettingsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 标签列表 - gap:4, padding: [0,16,28,16] */}
         <div style={{ paddingTop: 0, paddingRight: 16, paddingBottom: 28, paddingLeft: 16 }}>
-          {/* 标签-主题管理 - padding: [14,16,14,16], gap:12, radius:8 */}
           <button
             onClick={() => setActiveTab('theme')}
             className="w-full flex items-center rounded-[8px] transition-colors"
@@ -86,11 +62,9 @@ const SettingsPage: React.FC = () => {
               gap: 12,
             }}
           >
-            {/* 标签图标 - 36x36, fills:#f8f3e8, radius:8 */}
             <div className="w-9 h-9 shrink-0 rounded-[8px] flex items-center justify-center" style={{ background: inputBg }}>
               <RiPaletteLine className="w-[18px] h-[18px]" style={{ color: activeTab === 'theme' ? '#c43d3d' : '#8b7e6a' }} />
             </div>
-            {/* 标签文字区 */}
             <div className="flex flex-col">
               <div className="leading-tight" style={{
                 color: activeTab === 'theme' ? '#c43d3d' : '#3d2b1f',
@@ -101,7 +75,6 @@ const SettingsPage: React.FC = () => {
               }}>主题管理</div>
               <div className="mt-1 leading-tight" style={{ color: '#b8a88a', fontSize: 11, lineHeight: 1.27 }}>界面配色方案</div>
             </div>
-            {/* 选中箭头容器 - padding-right:35 */}
             <div style={{ paddingRight: 35 }}>
               {activeTab === 'theme' && (
                 <RiArrowRightSLine className="w-[18px] h-[18px]" style={{ color: '#c43d3d' }} />
@@ -109,7 +82,6 @@ const SettingsPage: React.FC = () => {
             </div>
           </button>
 
-          {/* 标签-模式管理 - padding: [14,16,14,16], gap:12, radius:8 */}
           <button
             onClick={() => setActiveTab('mode')}
             className="w-full flex items-center rounded-[8px] transition-colors"
@@ -143,12 +115,10 @@ const SettingsPage: React.FC = () => {
         </div>
       </aside>
 
-      {/* 右侧内容区 - padding: [32,40,32,40] */}
       <main className="flex-1 overflow-y-auto" style={{ paddingTop: 32, paddingRight: 40, paddingBottom: 32, paddingLeft: 40 }}>
         <div className="max-w-[700px]">
           {activeTab === 'theme' ? (
             <div>
-              {/* 内容标题区 - gap:12 */}
               <div className="flex items-center gap-3 mb-8">
                 <div className="w-1 h-7 shrink-0 rounded-[2px]" style={{ background: '#c43d3d' }} />
                 <div>
@@ -157,18 +127,15 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 主题选项卡片 - fills:#fdfaf4, stroke:#e5d9c4, padding:24, radius:12 */}
               <div className="rounded-xl border" style={{ background: '#fdfaf4', borderColor: '#e5d9c4' }}>
-                {/* container padding-top:8 */}
                 <div style={{ paddingTop: 8 }}>
-                  {/* 主题选项区 - gap:20 */}
                   <div className="flex gap-5 overflow-x-auto">
                     {themes.map((theme) => {
                       const isSelected = selectedTheme === theme.id;
                       return (
                         <button
                           key={theme.id}
-                          onClick={() => setSelectedTheme(theme.id)}
+                          onClick={() => { setSelectedTheme(theme.id); updateSettings({ theme: theme.id }); }}
                           className="w-[200px] shrink-0 flex flex-col items-center rounded-xl transition-all"
                           style={{
                             background: '#f8f3e8',
@@ -178,7 +145,6 @@ const SettingsPage: React.FC = () => {
                             gap: 16,
                           }}
                         >
-                          {/* 主题预览 - 160x100, fills:#fbf7f0, stroke:#e5d9c4, radius:8 */}
                           <div className="w-[160px] h-[100px] rounded-lg overflow-hidden" style={{
                             background: theme.previewBg,
                             borderColor: theme.previewStroke,
@@ -200,7 +166,6 @@ const SettingsPage: React.FC = () => {
                             </div>
                           </div>
 
-                          {/* 主题信息 - gap:4 */}
                           <div className="flex flex-col items-center gap-1 px-2">
                             <span className="font-semibold leading-tight" style={{
                               color: isSelected ? '#c43d3d' : '#3d2b1f',
@@ -211,7 +176,6 @@ const SettingsPage: React.FC = () => {
                             <span className="leading-tight" style={{ color: '#8b7e6a', fontSize: 12, lineHeight: 1.33 }}>{theme.label}</span>
                           </div>
 
-                          {/* 选中标记 - 24x24, fills:#c43d3d, radius:9999 */}
                           {isSelected && (
                             <div className="w-6 h-6 rounded-full bg-[#c43d3d] flex items-center justify-center">
                               <RiCheckLine className="w-3.5 h-3.5 text-white" />
@@ -224,22 +188,18 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 主题预览效果卡片 - fills:#fdfaf4, stroke:#e5d9c4, padding:24, gap:16, radius:12 */}
               <div className="mt-8 rounded-xl border" style={{ background: '#fdfaf4', borderColor: '#e5d9c4' }}>
                 <div style={{ padding: 24, gap: 16 }}>
-                  {/* 预览标题 - gap:8 */}
                   <div className="flex items-center gap-2">
                     <span className="text-base leading-tight" style={{ color: '#c9a96e', fontFamily: 'remixicon' }}></span>
                     <span className="font-medium leading-tight" style={{ color: '#3d2b1f', fontSize: 14, lineHeight: 1.29 }}>实时预览</span>
                   </div>
 
-                  {/* 预览窗口 - fills:#fbf7f0, stroke:#e5d9c4, radius:8 */}
                   <div className="rounded-lg overflow-hidden" style={{
                     background: '#fbf7f0',
                     borderColor: '#e5d9c4',
                     borderWidth: '1px',
                   }}>
-                    {/* 预览顶部栏 - padding: [10,16,10,16], gap:6 */}
                     <div className="flex items-center justify-between" style={{
                       background: '#f8f3e8',
                       borderBottom: `1px solid #e5d9c4`,
@@ -253,7 +213,6 @@ const SettingsPage: React.FC = () => {
                       <span className="leading-tight" style={{ color: '#b8a88a', fontSize: 11, lineHeight: 1.27 }}>LPTV 预览</span>
                     </div>
 
-                    {/* 预览内容区 - padding:16, gap:12 */}
                     <div className="p-4 space-y-3">
                       {[
                         { color: '#c43d3d', titleW: 160, subW: 100 },
@@ -273,16 +232,10 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleApplyTheme}
-                className="mt-8 block px-8 py-3 bg-[#c43d3d] text-white text-sm font-semibold rounded-lg hover:bg-[#a83232] transition-colors"
-              >
-                应用主题
-              </button>
             </div>
+
           ) : (
             <div>
-              {/* 内容标题区 */}
               <div className="flex items-center gap-3 mb-8">
                 <div className="w-1 h-7 shrink-0 rounded-[2px]" style={{ background: '#c43d3d' }} />
                 <div>
@@ -291,9 +244,7 @@ const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* 开关列表卡片 - fills:#fdfaf4, stroke:#e5d9c4, radius:12 */}
               <div className="rounded-xl border" style={{ background: '#fdfaf4', borderColor: '#e5d9c4' }}>
-                {/* TV模式 - stroke bottom, padding:20 */}
                 <div className="flex items-center justify-between" style={{
                   borderBottom: `1px solid #f0e8d8`,
                   padding: 20,
@@ -323,80 +274,17 @@ const SettingsPage: React.FC = () => {
                   </button>
                 </div>
 
-                {/* 回看功能 - stroke bottom, padding:20 */}
-                <div className="flex items-center justify-between" style={{
-                  borderBottom: `1px solid #f0e8d8`,
-                  padding: 20,
-                }}>
-                  <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: '#f8f3e8' }}>
-                      <RiEyeLine className="w-[22px] h-[22px]" style={{ color: '#7b9eb3' }} />
-                    </div>
-                    <div>
-                      <div className="font-semibold leading-tight" style={{ color: '#3d2b1f', fontSize: 15, lineHeight: 1.33 }}>回看功能</div>
-                      <div className="mt-1 leading-tight" style={{ color: '#8b7e6a', fontSize: 12, lineHeight: 1.33 }}>支持回看过去 7 天内的节目内容</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setPlaybackMode(!playbackMode)}
-                    className="relative w-[52px] h-7 rounded-full transition-colors shrink-0"
-                    style={{ background: playbackMode ? '#c43d3d' : '#d5cdc4' }}
-                  >
-                    <span className="absolute left-0.5 top-0.5 w-6 h-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-transform"
-                      style={{ transform: playbackMode ? 'translateX(24px)' : 'translateX(0)' }}
-                    />
-                  </button>
-                </div>
-
-                {/* 频道自动更新 - stroke bottom, padding:20 */}
-                <div className="flex items-center justify-between" style={{
-                  borderBottom: `1px solid #f0e8d8`,
-                  padding: 20,
-                }}>
+                <div className="flex items-center justify-between" style={{ padding: 20 }}>
                   <div className="flex items-center gap-4">
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: '#f8f3e8' }}>
                       <RiRefreshLine className="w-[22px] h-[22px]" style={{ color: '#5b8c5a' }} />
                     </div>
                     <div>
                       <div className="font-semibold leading-tight" style={{ color: '#3d2b1f', fontSize: 15, lineHeight: 1.33 }}>频道自动更新</div>
-                      <div className="mt-1 leading-tight" style={{ color: '#8b7e6a', fontSize: 12, lineHeight: 1.33 }}>后台自动检测并更新频道列表与源地址</div>
+                      <div className="mt-1 leading-tight" style={{ color: '#8b7e6a', fontSize: 12, lineHeight: 1.33 }}>每4小时自动检测并更新频道列表</div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setAutoUpdate(!autoUpdate)}
-                    className="relative w-[52px] h-7 rounded-full transition-colors shrink-0"
-                    style={{ background: autoUpdate ? '#c43d3d' : '#d5cdc4' }}
-                  >
-                    <span className="absolute left-0.5 top-0.5 w-6 h-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-transform"
-                      style={{ transform: autoUpdate ? 'translateX(24px)' : 'translateX(0)' }}
-                    />
-                  </button>
-                </div>
-
-                {/* 线路切换 - padding:20 */}
-                <div className="flex items-center justify-between" style={{ padding: 20 }}>
-                  <div className="flex items-center gap-4">
-                    <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: '#f8f3e8' }}>
-                      <RiRouteLine className="w-[22px] h-[22px]" style={{ color: '#c9a96e' }} />
-                    </div>
-                    <div>
-                      <div className="font-semibold leading-tight" style={{ color: '#3d2b1f', fontSize: 15, lineHeight: 1.33 }}>线路切换</div>
-                      <div className="mt-1 leading-tight" style={{ color: '#8b7e6a', fontSize: 12, lineHeight: 1.33 }}>启用后在播放页面显示线路切换功能</div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const next = !showLines;
-                      setShowLines(next);
-                      updateSettings({ showLines: next });
-                    }}
-                    className="relative w-[52px] h-7 rounded-full transition-colors shrink-0"
-                    style={{ background: showLines ? '#c43d3d' : '#d5cdc4' }}
-                  >
-                    <span className="absolute left-0.5 top-0.5 w-6 h-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-transform"
-                      style={{ transform: showLines ? 'translateX(24px)' : 'translateX(0)' }}
-                    />
-                  </button>
+                  <span className="text-xs px-3 py-1 rounded-full" style={{ background: 'rgba(91,140,90,0.15)', color: '#5b8c5a' }}>已启用</span>
                 </div>
               </div>
             </div>

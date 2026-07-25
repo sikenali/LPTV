@@ -10,8 +10,3 @@ export async function fetchChannels(refresh = false): Promise<Channel[]> {
   }
   return res.json()
 }
-
-export async function probeChannel(url: string): Promise<{ status: string; code: number }> {
-  const res = await fetch(`${API_BASE}/probe?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(6000) })
-  return res.json()
-}

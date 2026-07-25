@@ -2,12 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RiArrowLeftSLine, RiHeartFill, RiHeartLine, RiArrowDownSLine,
-  RiArrowUpSLine, RiCloseLine, RiSpeedLine,
-  RiWifiLine, RiPlayListLine, RiTvLine, RiFullscreenLine,
+  RiArrowUpSLine, RiCloseLine, RiPlayListLine, RiTvLine, RiFullscreenLine,
 } from '@remixicon/react';
 import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
-import { HlsPlayer } from '../components/Player';
+import HlsPlayer from '../components/Player/HlsPlayer';
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter';
 
 const formatDate = (): string => {
@@ -60,7 +59,6 @@ const ChannelRow: React.FC<{
             )}
           </button>
         </div>
-        <div className="text-xs text-white/60 truncate">{''}</div>
       </div>
     </div>
   );
@@ -105,7 +103,7 @@ const TvModePage: React.FC = () => {
             </div>
             <div>
               <div className="text-sm font-semibold text-white">{selectedChannel?.name || 'LPTV'}</div>
-              <div className="text-[10px] text-white/40">{''}</div>
+              <div className="text-[10px] text-white/40">{selectedChannel?.group}</div>
             </div>
           </div>
           <div className="flex items-center gap-4 text-right">
@@ -134,14 +132,9 @@ const TvModePage: React.FC = () => {
           )}
         </div>
 
-        {/* Play info area: channel name, program, status badges */}
+        {/* Play info area */}
         <div className="px-8 py-3 border-b border-white/5">
           <div className="text-2xl font-bold text-white">{selectedChannel?.name || '请选择频道'}</div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-sm text-white/60">{''}</span>
-            <span className="text-white/20">|</span>
-            <span className="text-xs text-white/40">正在播放</span>
-          </div>
           <div className="flex items-center gap-3 mt-3">
             <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1">
               {isFavSelected ? (
@@ -150,14 +143,6 @@ const TvModePage: React.FC = () => {
                 <RiHeartLine className="w-3.5 h-3.5 text-white/50" />
               )}
               <span className="text-xs text-white/60">{isFavSelected ? '已收藏' : '收藏'}</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1">
-              <RiSpeedLine className="w-3.5 h-3.5 text-white/50" />
-              <span className="text-xs text-white/60">高清</span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1">
-              <RiWifiLine className="w-3.5 h-3.5 text-green-400" />
-              <span className="text-xs text-green-400">良好</span>
             </div>
           </div>
         </div>

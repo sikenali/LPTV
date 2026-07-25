@@ -4,25 +4,13 @@ export interface Channel {
   logo: string;
   group: string;
   url: string;
-  tid: string;
-  currentProgram: string;
-  isLive: boolean;
-}
-
-export interface ChannelLine {
-  id: string;
-  name: string;
-  url: string;
-  quality: string;
-  isActive?: boolean;
 }
 
 export interface UserSettings {
-  theme: 'glass' | 'white' | 'black';
+  theme: 'glass' | 'black';
   autoPlay: boolean;
   quality: 'high' | 'medium' | 'low';
   tvMode: boolean;
-  showLines: boolean;
 }
 
 export interface AppState {

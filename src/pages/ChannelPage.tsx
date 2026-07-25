@@ -1,10 +1,9 @@
-import { useState, useMemo, useEffect } from 'react' // eslint-disable-line no-unused-vars
+import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
-import { HlsPlayer, ChannelLineList } from '../components/Player'
+import HlsPlayer from '../components/Player/HlsPlayer'
 import { RiSearchLine, RiArrowDownSLine, RiArrowRightSLine, RiTvFill, RiHeartFill, RiHeartLine, RiPlayFill } from '@remixicon/react'
-import type { Channel, ChannelLine } from '../types'
-import { probeChannel } from '../services/channelApi'
+import type { Channel } from '../types'
 
 const groupIcons: Record<string, { color: string }> = {
   '央视频道': { color: '#c43d3d' },
@@ -18,40 +17,21 @@ export default function ChannelPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
-  const [currentLines, setCurrentLines] = useState<ChannelLine[]>([])
-  const [activeLine, setActiveLine] = useState<ChannelLine | null>(null)
 
   useEffect(() => {
     const allowed = filterChannels(channels)
     if (allowed.length === 0) return
 
-    // 分组展开：央视频道默认展开，卫视频道默认折叠
     const groups = getGroupedChannels(allowed)
     const initial: Record<string, boolean> = {}
     groups.forEach(g => { initial[g.group] = g.group !== '卫视频道' })
     setExpandedCategories(initial)
 
-    // 查找 CCTV1 频道并自动播放
     const cctv1 = allowed.find(c => c.name.toLowerCase().includes('cctv1'))
     if (cctv1 && !selectedChannel) {
       setSelectedChannel(cctv1)
     }
   }, [channels])
-
-  useEffect(() => {
-    if (!selectedChannel) return
-    probeChannel(selectedChannel.url)
-      .then(() => {})
-      .catch(() => {})
-
-    const lines: ChannelLine[] = [
-      { id: '1', name: '源 1', url: selectedChannel.url, quality: '1080P' },
-      { id: '2', name: '源 2', url: selectedChannel.url, quality: '720P' },
-      { id: '3', name: '源 3', url: selectedChannel.url, quality: '4K' },
-    ]
-    setCurrentLines(lines)
-    setActiveLine(lines[0])
-  }, [selectedChannel])
 
   const filtered = useMemo(() => {
     const allowed = filterChannels(channels)
@@ -93,11 +73,8 @@ export default function ChannelPage() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: bgMain }}>
-      {/* 左侧频道列表区 - 360px */}
       <div className="w-[360px] flex flex-col min-h-0 overflow-hidden" style={{ background: sidebarBg, borderRight: `1px solid ${borderCol}` }}>
-        {/* 搜索区 - padding: 20,20,12,20 */}
         <div className="px-5 pt-5 pb-3">
-          {/* 搜索框 - fills: #fbf7f0, stroke: #e5d9c4, padding: 10,12,10,12, radius: 8 */}
           <div className="flex items-center gap-2 rounded-lg border px-3 py-2.5"
             style={{ background: bgMain, borderColor: borderCol }}
           >
@@ -113,7 +90,6 @@ export default function ChannelPage() {
           </div>
         </div>
 
-        {/* 频道分组列表 - padding: 0,16,28,16, gap: 12 */}
         <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-3" style={{ scrollbarWidth: 'thin' }}>
           {grouped.length === 0 ? (
             <div className="text-center py-8" style={{ color: subTxt }}>
@@ -126,14 +102,12 @@ export default function ChannelPage() {
 
               return (
                 <div key={group}>
-                  {/* 分组标题栏 - fills: #fbf7f0, stroke: #e5d9c4, padding: 12, radius: 8 */}
                   <button
                     onClick={() => toggleCategory(group)}
                     className="w-full flex items-center justify-between rounded-lg border px-3 py-3 transition-colors"
                     style={{ background: bgMain, borderColor: borderCol }}
                   >
                     <div className="flex items-center gap-2">
-                      {/* 分组图标 - 28x28, filled with red */}
                       <div className="w-7 h-7 rounded flex items-center justify-center shrink-0" style={{ background: iconData.color }}>
                         <RiTvFill className="w-3.5 h-3.5 text-white" />
                       </div>
@@ -149,7 +123,6 @@ export default function ChannelPage() {
                     </div>
                   </button>
 
-                  {/* 频道列表 */}
                   {isExpanded && (
                     <div className="mt-1 space-y-1">
                       {groupChs.map(ch => {
@@ -168,7 +141,6 @@ export default function ChannelPage() {
                             }}
                           >
                             <div className="flex items-center gap-3 pl-3 pr-2 py-2.5 flex-1 min-w-0">
-                              {/* 频道Logo 36x36, filled with group color */}
                               <div className="w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0"
                                 style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
                               >
@@ -193,9 +165,9 @@ export default function ChannelPage() {
                                 )}
                               </span>
                               {isSelected ? (
-                                <span style={{ color: '#c43d3d' }}></span>
+                                <span style={{ color: '#c43d3d' }}><RiPlayFill className="w-4 h-4" /></span>
                               ) : (
-                                <span style={{ color: '#c9a96e' }}></span>
+                                <span style={{ color: '#999' }}><RiPlayFill className="w-4 h-4" /></span>
                               )}
                             </div>
                           </button>
@@ -209,7 +181,6 @@ export default function ChannelPage() {
           )}
         </div>
 
-        {/* 底部状态栏 - stroke top, padding: 12,20,12,20 */}
         <div className="px-5 py-3 border-t flex items-center justify-between" style={{ borderColor: borderCol }}>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-[#5b8c5a]" />
@@ -219,13 +190,11 @@ export default function ChannelPage() {
         </div>
       </div>
 
-      {/* 右侧播放区 - fill container, fills: #1a1410 */}
       <div className="flex-1 flex flex-col min-h-0" style={{ background: '#1a1410' }}>
-        {/* 视频播放画面 - height: 616 */}
         <div className="flex-1 relative bg-[#0d0a08]">
-          {selectedChannel && activeLine ? (
+          {selectedChannel ? (
             <HlsPlayer
-              url={activeLine.url}
+              url={selectedChannel.url}
               channelName={selectedChannel.name}
               channelLogo={selectedChannel.logo}
             />
@@ -240,22 +209,6 @@ export default function ChannelPage() {
             </div>
           )}
         </div>
-
-        {/* 源切换区 - fills: #1a1410, stroke top: #2a2218, padding: 16,24,16,24, gap: 12 */}
-        {selectedChannel && currentLines.length > 0 && (
-          <div className="px-6 py-4" style={{ background: '#1a1410', borderTop: '1px solid #2a2218' }}>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-[14px]" style={{ color: '#c9a96e' }}></span>
-              <span className="font-medium text-sm" style={{ color: '#c9a96e' }}>源切换</span>
-            </div>
-            <ChannelLineList
-              lines={currentLines}
-              currentLine={activeLine}
-              onLineSwitch={setActiveLine}
-              theme={settings.theme}
-            />
-          </div>
-        )}
       </div>
     </div>
   )

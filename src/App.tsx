@@ -6,7 +6,6 @@ import ChannelPage from './pages/ChannelPage';
 import FavoritePage from './pages/FavoritePage';
 import SettingsPage from './pages/SettingsPage';
 import TvModePage from './pages/TvModePage';
-import { getBgClass } from './utils/theme';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="flex flex-col h-screen">
@@ -24,8 +23,10 @@ const ThemedApp: React.FC = () => {
     loadChannels();
   }, [loadChannels]);
 
+  const isBlack = settings.theme === 'black';
+
   return (
-    <div className={`min-h-screen ${getBgClass(settings.theme)} transition-colors duration-300`}>
+    <div className="min-h-screen transition-colors duration-300" style={{ background: isBlack ? '#0a0a0a' : '#fbf7f0' }}>
       <Routes>
         <Route 
           path="/" 
