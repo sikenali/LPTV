@@ -43,14 +43,24 @@ const ChannelRow: React.FC<{
       }`}
     >
       <div className="h-[114px] bg-gradient-to-br from-gray-800 to-gray-900 p-4 flex flex-col justify-between">
-        <div className="flex items-center justify-between">
-          <div className="text-sm font-medium text-white">{channel.name}</div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {channel.logo ? (
+              <img
+                src={`/api/proxy/image?url=${encodeURIComponent(channel.logo)}&name=${encodeURIComponent(channel.name)}`}
+                alt=""
+                className="w-6 h-6 rounded object-contain shrink-0"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              />
+            ) : null}
+            <div className="text-sm font-medium text-white truncate">{channel.name}</div>
+          </div>
           <button
             onClick={(e) => {
               e.stopPropagation();
               toggleFavorite(channel.id);
             }}
-            className="p-0.5"
+            className="p-0.5 shrink-0"
           >
             {isFav ? (
               <RiHeartFill className="w-3.5 h-3.5 text-red-400" />

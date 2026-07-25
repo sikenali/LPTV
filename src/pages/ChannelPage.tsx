@@ -150,7 +150,26 @@ export default function ChannelPage() {
                             }}
                           >
                             <div className="flex items-center gap-3 pl-3 pr-2 py-2.5 flex-1 min-w-0">
-                              <div className="w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0"
+                              {ch.logo ? (
+                                <img
+                                  src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
+                                  alt=""
+                                  className="w-9 h-9 rounded object-contain shrink-0"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement
+                                    target.style.display = 'none'
+                                    const parent = target.parentElement
+                                    if (parent && !parent.querySelector('.fallback-logo')) {
+                                      const fallback = document.createElement('div')
+                                      fallback.className = 'fallback-logo w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0'
+                                      fallback.style.background = isSelected ? '#c43d3d' : '#5b8c5a'
+                                      fallback.textContent = ch.name.substring(0, 2)
+                                      parent.appendChild(fallback)
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              <div className={`w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 ${ch.logo ? 'hidden' : ''}`}
                                 style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
                               >
                                 {ch.name.substring(0, 2)}

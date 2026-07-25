@@ -8,6 +8,10 @@ interface HlsPlayerProps {
   onError?: (err: Error) => void
 }
 
+function logoUrl(logo: string, name: string): string {
+  return `/api/proxy/image?url=${encodeURIComponent(logo)}&name=${encodeURIComponent(name)}`
+}
+
 function proxyUrl(url: string) {
   const base = '/api/proxy/stream'
   return `${base}?url=${encodeURIComponent(url)}`
@@ -15,7 +19,7 @@ function proxyUrl(url: string) {
 
 const LOADING_TIMEOUT = 30000
 
-export default function HlsPlayer({ url, channelName: _channelName, onError }: HlsPlayerProps) {
+export default function HlsPlayer({ url, channelName: _channelName, channelLogo, onError }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -209,6 +213,17 @@ export default function HlsPlayer({ url, channelName: _channelName, onError }: H
         playsInline
         controls
       />
+      {channelLogo && (
+        <img
+          src={logoUrl(channelLogo, _channelName || '')}
+          alt=""
+          className="absolute top-4 right-4 w-[90px] h-[70px] object-contain rounded opacity-60 transition-opacity duration-300 hover:opacity-100 pointer-events-none"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement
+            target.style.display = 'none'
+          }}
+        />
+      )}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="text-white text-lg">加载中...</div>
