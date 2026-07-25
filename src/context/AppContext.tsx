@@ -13,7 +13,8 @@ type Action =
   | { type: 'SET_CATEGORY'; payload: string }
   | { type: 'SET_CHANNELS'; payload: Channel[] }
   | { type: 'SET_CHANNELS_LOADING'; payload: boolean }
-  | { type: 'SET_CHANNELS_ERROR'; payload: string | null };
+  | { type: 'SET_CHANNELS_ERROR'; payload: string | null }
+  | { type: 'SET_LAST_PLAYED_CHANNEL'; payload: string | null };
 
 const initialState: AppState = {
   favorites: [],
@@ -22,6 +23,7 @@ const initialState: AppState = {
   channels: [],
   channelsLoading: false,
   channelsError: null,
+  lastPlayedChannel: null,
 };
 
 const reducer = (state: AppState, action: Action): AppState => {
@@ -46,6 +48,8 @@ const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, channelsLoading: action.payload };
     case 'SET_CHANNELS_ERROR':
       return { ...state, channelsError: action.payload, channelsLoading: false };
+    case 'SET_LAST_PLAYED_CHANNEL':
+      return { ...state, lastPlayedChannel: action.payload };
     default:
       return state;
   }
@@ -111,6 +115,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const data = await fetchChannels(refresh);
       dispatch({ type: 'SET_CHANNELS', payload: data });
+      const savedId = localStorage.getItem('lastPlayedChannel');
+      if (savedId && data.some(c => c.id === savedId)) {
+        dispatch({ type: 'SET_LAST_PLAYED_CHANNEL', payload: savedId });
+      } else {
+        dispatch({ type: 'SET_LAST_PLAYED_CHANNEL', payload: null });
+      }
     } catch (err) {
       dispatch({ type: 'SET_CHANNELS_ERROR', payload: err instanceof Error ? err.message : '加载失败' });
     }

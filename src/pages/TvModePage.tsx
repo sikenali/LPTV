@@ -82,6 +82,18 @@ const TvModePage: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Restore last played channel on mount
+  useEffect(() => {
+    if (selectedChannel || allowed.length === 0) return;
+    const savedId = localStorage.getItem('lastPlayedChannel');
+    if (savedId) {
+      const saved = allowed.find(c => c.id === savedId);
+      if (saved) {
+        setSelectedChannel(saved);
+      }
+    }
+  }, [allowed]);
+
   const handleChannelSelect = (channel: Channel) => {
     setSelectedChannel(channel)
     localStorage.setItem('lastPlayedChannel', channel.id)
@@ -89,6 +101,46 @@ const TvModePage: React.FC = () => {
 
   const activeGroup = grouped.find(g => g.group === activeCategory)
   const filteredChannels = activeGroup?.channels ?? []
+
+  // Keyboard navigation for TV remote / directional pad
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const groupChannels = grouped.find(g => g.group === activeCategory)?.channels ?? [];
+      if (!groupChannels.length) return;
+
+      switch (e.key) {
+        case 'ArrowUp': {
+          e.preventDefault();
+          const currentIndex = groupChannels.findIndex(c => c.id === selectedChannel?.id);
+          const prevIndex = currentIndex <= 0 ? groupChannels.length - 1 : currentIndex - 1;
+          handleChannelSelect(groupChannels[prevIndex]);
+          break;
+        }
+        case 'ArrowDown': {
+          e.preventDefault();
+          const currentIndex = groupChannels.findIndex(c => c.id === selectedChannel?.id);
+          const nextIndex = currentIndex >= groupChannels.length - 1 ? 0 : currentIndex + 1;
+          handleChannelSelect(groupChannels[nextIndex]);
+          break;
+        }
+        case 'Enter': {
+          e.preventDefault();
+          if (selectedChannel) {
+            handleChannelSelect(selectedChannel);
+          }
+          break;
+        }
+        case 'Escape': {
+          e.preventDefault();
+          navigate('/');
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedChannel, grouped, activeCategory, navigate]);
 
   const isFavSelected = selectedChannel ? favorites.includes(selectedChannel.id) : false;
 

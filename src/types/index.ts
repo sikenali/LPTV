@@ -20,4 +20,5 @@ export interface AppState {
   channels: Channel[];
   channelsLoading: boolean;
   channelsError: string | null;
+  lastPlayedChannel: string | null;
 }

@@ -4,3 +4,5 @@ dist/
 .env.*.local
 *.log
 .DS_Store
+local.m3u8
+logos/

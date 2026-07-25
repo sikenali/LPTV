@@ -13,7 +13,7 @@ const groupIcons: Record<string, { color: string }> = {
 }
 
 export default function ChannelPage() {
-  const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite } = useApp()
+  const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite, lastPlayedChannel } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
@@ -27,9 +27,18 @@ export default function ChannelPage() {
     groups.forEach(g => { initial[g.group] = g.group !== '卫视频道' })
     setExpandedCategories(initial)
 
-    const cctv1 = allowed.find(c => c.name.toLowerCase().includes('cctv1'))
-    if (cctv1 && !selectedChannel) {
-      setSelectedChannel(cctv1)
+    if (!selectedChannel) {
+      if (lastPlayedChannel) {
+        const saved = allowed.find(c => c.id === lastPlayedChannel)
+        if (saved) {
+          setSelectedChannel(saved)
+        }
+      } else {
+        const cctv1 = allowed.find(c => c.name.toLowerCase().includes('cctv1'))
+        if (cctv1) {
+          setSelectedChannel(cctv1)
+        }
+      }
     }
   }, [channels])
 

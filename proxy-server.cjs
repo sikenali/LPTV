@@ -7,6 +7,8 @@ const { M3uParser } = require('m3u-parser-generator')
 
 const app = express()
 const PORT = process.env.PORT || 3000
+const LOCAL_M3U_PATH = path.join(__dirname, 'local.m3u8')
+const USE_LOCAL_M3U = fs.existsSync(LOCAL_M3U_PATH)
 const M3U_URL = 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8'
 const CACHE_TTL = 4 * 60 * 60 * 1000
 const LOGO_DIR = path.join(__dirname, 'logos')
@@ -31,21 +33,95 @@ function parseM3U(text) {
   }))
 }
 
+async function probeUrl(url) {
+  try {
+    const resp = await fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(PROBE_TIMEOUT),
+      headers: { 'User-Agent': COMMON_UA },
+    })
+    return resp.status < 400
+  } catch {
+    return false
+  }
+}
+
+async function filterValidChannels(channels) {
+  const results = new Array(channels.length)
+  let index = 0
+
+  async function probeBatch(batch) {
+    const promises = batch.map(async (channel, i) => {
+      const valid = await probeUrl(channel.url)
+      results[index + i] = valid ? channel : null
+    })
+    await Promise.all(promises)
+  }
+
+  for (let i = 0; i < channels.length; i += MAX_CONCURRENT) {
+    const batch = channels.slice(i, i + MAX_CONCURRENT)
+    await probeBatch(batch)
+  }
+
+  return results.filter(c => c !== null)
+}
+
+function deduplicateChannels(channels) {
+  const nameMap = new Map()
+
+  for (const channel of channels) {
+    const key = channel.name.toLowerCase()
+    if (!nameMap.has(key)) {
+      nameMap.set(key, channel)
+      continue
+    }
+
+    const existing = nameMap.get(key)
+    const existingPriority = GROUP_PRIORITY.indexOf(existing.group)
+    const newPriority = GROUP_PRIORITY.indexOf(channel.group)
+
+    if (newPriority > existingPriority) {
+      nameMap.set(key, channel)
+    }
+  }
+
+  return Array.from(nameMap.values())
+}
+
 app.get('/api/m3u', async (req, res) => {
   const forceRefresh = req.query.refresh === '1'
+  const shouldValidate = req.query.validate === 'true'
   const now = Date.now()
 
-  if (!forceRefresh && cache.data && now - cache.timestamp < CACHE_TTL) {
+  if (!forceRefresh && !shouldValidate && cache.data && now - cache.timestamp < CACHE_TTL) {
     return res.json(cache.data)
   }
 
   try {
-    const response = await fetch(M3U_URL)
-    if (!response.ok) {
-      return res.status(502).json({ error: 'M3U source unavailable', status: response.status })
+    let text
+    if (USE_LOCAL_M3U) {
+      text = fs.readFileSync(LOCAL_M3U_PATH, 'utf-8')
+      console.log('[m3u] loaded from local file:', LOCAL_M3U_PATH)
+    } else {
+      const response = await fetch(M3U_URL)
+      if (!response.ok) {
+        return res.status(502).json({ error: 'M3U source unavailable', status: response.status })
+      }
+      text = await response.text()
     }
-    const text = await response.text()
-    const channels = parseM3U(text)
+    let channels = parseM3U(text)
+
+    if (shouldValidate) {
+      console.log(`[m3u] validating ${channels.length} channels...`)
+      const before = channels.length
+
+      channels = await filterValidChannels(channels)
+      console.log(`[m3u] validation complete: ${before} -> ${channels.length} valid channels`)
+
+      channels = deduplicateChannels(channels)
+      console.log(`[m3u] deduplication complete: ${before} -> ${channels.length} channels after dedup`)
+    }
+
     cache = { data: channels, timestamp: now }
     res.json(channels)
   } catch (err) {
@@ -111,6 +187,9 @@ function getRefererFromUrl(url) {
 }
 
 const COMMON_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+const GROUP_PRIORITY = ['央视频道', '卫视频道']
+const PROBE_TIMEOUT = 3000
+const MAX_CONCURRENT = 5
 
 const REFERER_MAP = {
   'm3u.81diangao.com': 'https://m3u.81diangao.com/',
