@@ -26,10 +26,11 @@ const themes = [
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { settings, updateSettings } = useApp();
+  const { settings, updateSettings, showToast } = useApp();
   const [activeTab, setActiveTab] = useState<TabType>('theme');
   const [selectedTheme, setSelectedTheme] = useState(settings.theme);
   const [tvMode, setTvMode] = useState(settings.tvMode);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
   useEffect(() => { setSelectedTheme(settings.theme); }, [settings.theme]);
   useEffect(() => { setTvMode(settings.tvMode); }, [settings.tvMode]);
@@ -281,10 +282,23 @@ const SettingsPage: React.FC = () => {
                     </div>
                     <div>
                       <div className="font-semibold leading-tight" style={{ color: '#3d2b1f', fontSize: 15, lineHeight: 1.33 }}>频道自动更新</div>
-                      <div className="mt-1 leading-tight" style={{ color: '#8b7e6a', fontSize: 12, lineHeight: 1.33 }}>每4小时自动检测并更新频道列表</div>
+                      <div className="mt-1 leading-tight" style={{ color: '#8b7e6a', fontSize: 12, lineHeight: 1.33 }}>每4小时自动检测并更新频道列表与源地址</div>
                     </div>
                   </div>
-                  <span className="text-xs px-3 py-1 rounded-full" style={{ background: 'rgba(91,140,90,0.15)', color: '#5b8c5a' }}>已启用</span>
+                  <button
+                    onClick={() => {
+                      const next = !autoRefresh;
+                      setAutoRefresh(next);
+                      if (next) showToast('频道自动更新已开启', 'success');
+                      else showToast('频道自动更新已关闭', 'info');
+                    }}
+                    className="relative w-[52px] h-7 rounded-full transition-colors shrink-0"
+                    style={{ background: autoRefresh ? '#5b8c5a' : '#d5cdc4' }}
+                  >
+                    <span className="absolute left-0.5 top-0.5 w-6 h-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-transform"
+                      style={{ transform: autoRefresh ? 'translateX(24px)' : 'translateX(0)' }}
+                    />
+                  </button>
                 </div>
               </div>
             </div>

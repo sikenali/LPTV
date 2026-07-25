@@ -8,6 +8,7 @@ import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
 import HlsPlayer from '../components/Player/HlsPlayer';
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter';
+import Toast from '../components/Toast';
 
 const formatDate = (): string => {
   const now = new Date();
@@ -26,7 +27,8 @@ const ChannelRow: React.FC<{
   channel: Channel;
   isSelected?: boolean;
   onClick?: () => void;
-}> = ({ channel, isSelected, onClick }) => {
+  channelStatus?: Record<string, 'ok' | 'error' | 'unknown'>;
+}> = ({ channel, isSelected, onClick, channelStatus }) => {
   const { favorites, toggleFavorite } = useApp();
   const isFav = favorites.includes(channel.id);
 
@@ -55,19 +57,31 @@ const ChannelRow: React.FC<{
             ) : null}
             <div className="text-sm font-medium text-white truncate">{channel.name}</div>
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleFavorite(channel.id);
-            }}
-            className="p-0.5 shrink-0"
-          >
-            {isFav ? (
-              <RiHeartFill className="w-3.5 h-3.5 text-red-400" />
-            ) : (
-              <RiHeartLine className="w-3.5 h-3.5 text-white/40 hover:text-white/70" />
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(channel.id);
+              }}
+              className="p-0.5 transition-transform active:scale-150 hover:bg-white/10 rounded"
+            >
+              {isFav ? (
+                <RiHeartFill className="w-3.5 h-3.5 text-red-400" />
+              ) : (
+                <RiHeartLine className="w-3.5 h-3.5 text-white/40 hover:text-white/70" />
+              )}
+            </button>
+            {(channelStatus?.[channel.id] === 'ok' || channelStatus?.[channel.id] === 'error') && (
+              <span className="shrink-0 w-[6px]">
+                {channelStatus[channel.id] === 'ok' && (
+                  <span className="block w-[5px] h-[5px] rounded-full bg-green-500" />
+                )}
+                {channelStatus[channel.id] === 'error' && (
+                  <span className="block w-[5px] h-[5px] rounded-full bg-red-500" />
+                )}
+              </span>
             )}
-          </button>
+          </div>
         </div>
       </div>
     </div>
@@ -76,7 +90,7 @@ const ChannelRow: React.FC<{
 
 const TvModePage: React.FC = () => {
   const navigate = useNavigate();
-  const { channels, favorites } = useApp();
+  const { channels, favorites, channelStatus } = useApp();
   const [activeCategory, setActiveCategory] = useState<string>('央视频道');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
@@ -156,6 +170,7 @@ const TvModePage: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
+      <Toast />
       <div className="flex-1 flex flex-col min-h-0">
         {/* Top bar: channel info + date/time */}
         <div className="px-8 pt-4 pb-2 flex items-center justify-between border-b border-white/5">
@@ -241,6 +256,7 @@ const TvModePage: React.FC = () => {
                 channel={ch}
                 isSelected={selectedChannel?.id === ch.id}
                 onClick={() => handleChannelSelect(ch)}
+                channelStatus={channelStatus}
               />
             ))}
           </div>

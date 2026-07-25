@@ -2,6 +2,7 @@ import React, { useEffect, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import Header from './components/Layout/Header';
+import Toast from './components/Toast';
 
 const LazyChannelPage = React.lazy(() => import('./pages/ChannelPage'));
 const LazyFavoritePage = React.lazy(() => import('./pages/FavoritePage'));
@@ -19,6 +20,7 @@ const LoadingSpinner = () => (
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="flex flex-col h-screen">
+    <Toast />
     <Header />
     <div className="flex-1 min-h-0 overflow-hidden">
       <Suspense fallback={<LoadingSpinner />}>
@@ -38,7 +40,8 @@ const ThemedApp: React.FC = () => {
   const isBlack = settings.theme === 'black';
 
   return (
-    <div className="min-h-screen transition-colors duration-300" style={{ background: isBlack ? '#0a0a0a' : '#fbf7f0' }}>
+    <div className="min-h-screen transition-all duration-300 ease-in-out" style={{ background: isBlack ? '#0a0a0a' : '#fbf7f0' }}>
+      <Toast />
       <Routes>
         <Route 
           path="/" 

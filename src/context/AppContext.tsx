@@ -15,7 +15,9 @@ type Action =
   | { type: 'SET_CHANNELS'; payload: Channel[] }
   | { type: 'SET_CHANNELS_LOADING'; payload: boolean }
   | { type: 'SET_CHANNELS_ERROR'; payload: string | null }
-  | { type: 'SET_LAST_PLAYED_CHANNEL'; payload: string | null };
+  | { type: 'SET_LAST_PLAYED_CHANNEL'; payload: string | null }
+  | { type: 'SHOW_TOAST'; payload: { message: string; type?: 'success' | 'error' | 'info' } }
+  | { type: 'HIDE_TOAST' };
 
 const initialState: AppState = {
   favorites: [],
@@ -25,6 +27,9 @@ const initialState: AppState = {
   channelsLoading: false,
   channelsError: null,
   lastPlayedChannel: null,
+  channelStatus: {},
+  toastMessage: null,
+  toastType: null,
 };
 
 const reducer = (state: AppState, action: Action): AppState => {
@@ -53,6 +58,14 @@ const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, channelsError: action.payload, channelsLoading: false };
     case 'SET_LAST_PLAYED_CHANNEL':
       return { ...state, lastPlayedChannel: action.payload };
+    case 'SHOW_TOAST':
+      return {
+        ...state,
+        toastMessage: action.payload.message,
+        toastType: action.payload.type ?? 'success',
+      };
+    case 'HIDE_TOAST':
+      return { ...state, toastMessage: null, toastType: null };
     default:
       return state;
   }
@@ -65,6 +78,7 @@ interface AppContextType extends AppState {
   updateSettings: (settings: Partial<UserSettings>) => void;
   setCategory: (category: string) => void;
   loadChannels: (refresh?: boolean) => Promise<void>;
+  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -109,9 +123,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addFavorite = (id: string) => dispatch({ type: 'ADD_FAVORITE', payload: id });
   const removeFavorite = (id: string) => dispatch({ type: 'REMOVE_FAVORITE', payload: id });
-  const toggleFavorite = (id: string) => dispatch({ type: 'TOGGLE_FAVORITE', payload: id });
-  const updateSettings = (settings: Partial<UserSettings>) => dispatch({ type: 'UPDATE_SETTINGS', payload: settings });
   const setCategory = (category: string) => dispatch({ type: 'SET_CATEGORY', payload: category });
+  const showToast = useCallback((message: string, type: 'success'|'error'|'info' = 'success') => {
+    dispatch({ type: 'SHOW_TOAST', payload: { message, type } });
+    setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 2000);
+  }, []);
+
+  const toggleFavorite = useCallback((id: string) => {
+    dispatch({ type: 'TOGGLE_FAVORITE', payload: id })
+    const isFav = state.favorites.includes(id)
+    showToast(isFav ? '已取消收藏' : '已收藏', isFav ? 'info' : 'success')
+  }, [state.favorites, showToast])
+
+  const updateSettings = useCallback((settings: Partial<UserSettings>) => {
+    dispatch({ type: 'UPDATE_SETTINGS', payload: settings })
+    if (settings.theme) {
+      const name = settings.theme === 'glass' ? '羊皮纸' : settings.theme === 'black' ? '近黑' : settings.theme
+      showToast(`主题已切换为「${name}」`, 'info')
+    }
+  }, [showToast])
 
   const loadChannels = useCallback(async (refresh = false) => {
     dispatch({ type: 'SET_CHANNELS_LOADING', payload: true });
@@ -158,7 +188,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, []);
 
   return (
-    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels }}>
+    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels, showToast }}>
       {children}
     </AppContext.Provider>
   );

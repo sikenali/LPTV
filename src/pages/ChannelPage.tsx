@@ -209,13 +209,13 @@ export default function ChannelPage() {
                                 <div className="font-medium text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 pr-2">
+                            <div className="flex items-center gap-1.5 pr-1 shrink-0">
                               <span
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   toggleFavorite(ch.id)
                                 }}
-                                className="p-1 cursor-pointer"
+                                className="p-[3px] cursor-pointer transition-transform active:scale-150 hover:bg-white/10 rounded"
                               >
                                 {isFav ? (
                                   <RiHeartFill className="w-4 h-4" style={{ color: '#c43d3d' }} />
@@ -223,18 +223,18 @@ export default function ChannelPage() {
                                   <RiHeartLine className="w-4 h-4" style={{ color: subTxt }} />
                                 )}
                               </span>
-                              <span className="shrink-0">
+                              <span className="shrink-0 w-[6px]">
                                 {channelStatus[ch.id] === 'ok' && (
-                                  <span className="block w-[6px] h-[6px] rounded-full bg-green-500" />
+                                  <span className="block w-[5px] h-[5px] rounded-full bg-green-500 mx-auto" />
                                 )}
                                 {channelStatus[ch.id] === 'error' && (
-                                  <span className="block w-[6px] h-[6px] rounded-full bg-red-500" />
+                                  <span className="block w-[5px] h-[5px] rounded-full bg-red-500 mx-auto" />
                                 )}
                               </span>
                               {isSelected ? (
-                                <span style={{ color: '#c43d3d' }}><RiPlayFill className="w-4 h-4" /></span>
+                                <span style={{ color: '#c43d3d' }}><RiPlayFill className="w-3.5 h-3.5" /></span>
                               ) : (
-                                <span style={{ color: '#999' }}><RiPlayFill className="w-4 h-4" /></span>
+                                <span style={{ color: '#999' }}><RiPlayFill className="w-3.5 h-3.5" /></span>
                               )}
                             </div>
                           </button>
