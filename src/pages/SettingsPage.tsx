@@ -91,14 +91,14 @@ const SettingsPage: React.FC = () => {
               <RiPaletteLine className="w-[18px] h-[18px]" style={{ color: activeTab === 'theme' ? '#c43d3d' : '#8b7e6a' }} />
             </div>
             {/* 标签文字区 */}
-            <div style={{ width: 'fit-content' }}>
+            <div className="flex flex-col">
               <div className="leading-tight" style={{
                 color: activeTab === 'theme' ? '#c43d3d' : '#3d2b1f',
                 fontSize: 14,
                 fontWeight: activeTab === 'theme' ? 600 : 500,
                 lineHeight: 1.29,
                 fontFamily: activeTab === 'theme' ? 'SourceHanSans-SemiBold' : 'SourceHanSans-Medium',
-              }}>3.1 主题管理</div>
+              }}>主题管理</div>
               <div className="mt-1 leading-tight" style={{ color: '#b8a88a', fontSize: 11, lineHeight: 1.27 }}>界面配色方案</div>
             </div>
             {/* 选中箭头容器 - padding-right:35 */}
@@ -124,14 +124,14 @@ const SettingsPage: React.FC = () => {
             <div className="w-9 h-9 shrink-0 rounded-[8px] flex items-center justify-center" style={{ background: inputBg }}>
               <RiLayoutGridLine className="w-[18px] h-[18px]" style={{ color: activeTab === 'mode' ? '#c43d3d' : '#8b7e6a' }} />
             </div>
-            <div style={{ width: 'fit-content' }}>
+            <div className="flex flex-col">
               <div className="leading-tight" style={{
                 color: activeTab === 'mode' ? '#c43d3d' : '#3d2b1f',
                 fontSize: 14,
                 fontWeight: activeTab === 'mode' ? 600 : 500,
                 lineHeight: 1.29,
                 fontFamily: activeTab === 'mode' ? 'SourceHanSans-SemiBold' : 'SourceHanSans-Medium',
-              }}>3.2 模式管理</div>
+              }}>模式管理</div>
               <div className="mt-1 leading-tight" style={{ color: '#b8a88a', fontSize: 11, lineHeight: 1.27 }}>播放与更新功能</div>
             </div>
             <div style={{ paddingRight: 35 }}>
