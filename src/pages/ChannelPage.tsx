@@ -12,6 +12,8 @@ const groupIcons: Record<string, { color: string }> = {
   '数字频道': { color: '#5b8c5a' },
 }
 
+const VALIDATED_URLS = new Set<string>()
+
 export default function ChannelPage() {
   const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite, lastPlayedChannel } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
@@ -19,6 +21,38 @@ export default function ChannelPage() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   const [logoErrors, setLogoErrors] = useState<Record<string, boolean>>({})
+  const [channelStatus, setChannelStatus] = useState<Record<string, 'ok' | 'error' | 'unknown'>>({})
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Validate channels on load
+  useEffect(() => {
+    const allowed = filterChannels(channels)
+    if (allowed.length === 0) return
+
+    const current = { ...channelStatus }
+    allowed.forEach(ch => {
+      if (current[ch.id] !== undefined) return
+
+      if (VALIDATED_URLS.has(ch.url)) {
+        current[ch.id] = 'ok'
+      } else {
+        fetch(ch.url, { method: 'HEAD', signal: AbortSignal.timeout(3000), redirect: 'follow' })
+          .then(() => {
+            VALIDATED_URLS.add(ch.url)
+            current[ch.id] = 'ok'
+            setChannelStatus({ ...current })
+          })
+          .catch(() => {
+            current[ch.id] = 'error'
+            setChannelStatus({ ...current })
+          })
+      }
+    })
+  }, [channels])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300)
@@ -187,6 +221,14 @@ export default function ChannelPage() {
                                   <RiHeartFill className="w-4 h-4" style={{ color: '#c43d3d' }} />
                                 ) : (
                                   <RiHeartLine className="w-4 h-4" style={{ color: subTxt }} />
+                                )}
+                              </span>
+                              <span className="shrink-0">
+                                {channelStatus[ch.id] === 'ok' && (
+                                  <span className="block w-[6px] h-[6px] rounded-full bg-green-500" />
+                                )}
+                                {channelStatus[ch.id] === 'error' && (
+                                  <span className="block w-[6px] h-[6px] rounded-full bg-red-500" />
                                 )}
                               </span>
                               {isSelected ? (
