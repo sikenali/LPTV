@@ -16,7 +16,6 @@ type Action =
   | { type: 'SET_CHANNELS_LOADING'; payload: boolean }
   | { type: 'SET_CHANNELS_ERROR'; payload: string | null }
   | { type: 'SET_LAST_PLAYED_CHANNEL'; payload: string | null }
-  | { type: 'SET_SELECTED_CHANNEL'; payload: Channel | null }
   | { type: 'SHOW_TOAST'; payload: { message: string; type?: 'success' | 'error' | 'info' } }
   | { type: 'HIDE_TOAST' }
   | { type: 'SET_TV_MODE'; payload: boolean }
@@ -30,7 +29,6 @@ const initialState: AppState = {
   channelsLoading: false,
   channelsError: null,
   lastPlayedChannel: null,
-  selectedChannel: null,
   channelStatus: {},
   toastMessage: null,
   toastType: null,
@@ -63,8 +61,6 @@ const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, channelsError: action.payload, channelsLoading: false };
     case 'SET_LAST_PLAYED_CHANNEL':
       return { ...state, lastPlayedChannel: action.payload };
-    case 'SET_SELECTED_CHANNEL':
-      return { ...state, selectedChannel: action.payload };
     case 'SHOW_TOAST':
       return {
         ...state,
@@ -95,7 +91,6 @@ interface AppContextType extends AppState {
   setTvMode: (on: boolean) => void;
   setChannelStatus: (status: Record<string, 'ok' | 'error' | 'unknown'>) => void;
   loadChannels: (refresh?: boolean) => Promise<void>;
-  setSelectedChannel: (ch: Channel | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -185,10 +180,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, []);
 
-  const setSelectedChannel = useCallback((ch: Channel | null) => {
-    dispatch({ type: 'SET_SELECTED_CHANNEL', payload: ch });
-  }, []);
-
   const startAutoRefresh = useCallback(() => {
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
@@ -217,7 +208,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [state.settings.autoRefresh, startAutoRefresh]);
 
   return (
-    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels, showToast, setTvMode, setSelectedChannel, setChannelStatus }}>
+    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels, showToast, setTvMode, setChannelStatus }}>
       {children}
     </AppContext.Provider>
   );

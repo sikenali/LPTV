@@ -295,7 +295,8 @@ app.get('/api/proxy/stream', async (req, res) => {
   const referer = getSmartReferer(streamUrl)
 
   function setStreamCORS() {
-    res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0] || '*')
+    const reqOrigin = req.headers.origin
+    res.set('Access-Control-Allow-Origin', reqOrigin || '*')
     res.set('Vary', 'Origin')
   }
 
@@ -447,6 +448,17 @@ app.get('/api/proxy/image', async (req, res) => {
   }
 
   try {
+    // SSRF 防护：远程台标 fetch 也需校验
+    const imgParsed = new URL(imgUrl)
+    if (imgParsed.protocol !== 'https:' && imgParsed.protocol !== 'http:') {
+      throw new Error('Invalid protocol')
+    }
+    const imgHost = imgParsed.hostname.toLowerCase()
+    const privatePrefixes = ['localhost', '127.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '192.168.', '169.254.']
+    if (privatePrefixes.some(p => imgHost.startsWith(p) || imgHost === 'localhost')) {
+      throw new Error('Internal IP blocked')
+    }
+
     const response = await fetch(imgUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0' },
       signal: AbortSignal.timeout(8000),
