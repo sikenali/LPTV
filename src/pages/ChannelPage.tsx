@@ -151,8 +151,8 @@ export default function ChannelPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: bgMain }}>
-      <div className="w-[360px] flex flex-col min-h-0 overflow-hidden" style={{ background: sidebarBg, borderRight: `1px solid ${borderCol}` }}>
+      <div className="flex h-screen overflow-hidden" style={{ background: bgMain }}>
+      <div className="w-[360px] flex flex-col min-h-0 overflow-hidden shrink-0" style={{ background: sidebarBg, borderRight: `1px solid ${borderCol}` }}>
         <div className="px-5 pt-5 pb-3">
           <div className="flex items-center gap-2 rounded-lg border px-3 py-2.5"
             style={{ background: bgMain, borderColor: borderCol }}
@@ -321,8 +321,8 @@ export default function ChannelPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0" style={{ background: '#1a1410' }}>
-        <div className="flex-1 min-h-0 relative bg-[#0d0a08]">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ background: '#1a1410' }}>
+        <div className="flex-1 min-h-0 relative bg-[#0d0a08] overflow-hidden">
           {selectedChannel ? (
             <HlsPlayer
               ref={playerRef}

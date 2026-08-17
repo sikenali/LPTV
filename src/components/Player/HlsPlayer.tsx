@@ -251,11 +251,12 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
   }), [pause, resume, toggleFullscreen])
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-black" style={{ height: '100%', minHeight: 0 }}>
+    <div ref={containerRef} className="relative w-full h-full bg-black" style={{ height: '100%', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <video
         ref={videoRef}
         className="w-full h-full object-contain"
         playsInline
+        style={{ maxHeight: '100%', maxWidth: '100%' }}
         onLoadedData={() => {
           isPlayingRef.current = true
           setShowPlayOverlay(false)

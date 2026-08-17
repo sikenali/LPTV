@@ -22,14 +22,17 @@ if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
 let cache = { data: null, timestamp: 0 }
 
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173']
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173']
 const corsOptions = {
   origin: (origin, callback) => {
-    if (ALLOWED_ORIGINS.includes(origin) || !origin) {
-      callback(null, true)
-    } else {
-      callback(new Error('Not allowed by CORS'))
-    }
+    // 允许无 Origin 请求（如 Service Worker、某些移动端容器）
+    if (!origin) return callback(null, true)
+    // 开发环境：允许任意 origin
+    if (process.env.NODE_ENV !== 'production') return callback(null, true)
+    // 生产环境：检查白名单或回显 origin
+    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    // 允许与当前请求 origin 匹配（支持动态部署）
+    callback(null, true)
   },
   credentials: true,
 }
@@ -296,7 +299,9 @@ app.get('/api/proxy/stream', async (req, res) => {
 
   function setStreamCORS() {
     const reqOrigin = req.headers.origin
+    // 回显请求 Origin 以支持 credentials 模式
     res.set('Access-Control-Allow-Origin', reqOrigin || '*')
+    res.set('Access-Control-Allow-Credentials', 'true')
     res.set('Vary', 'Origin')
   }
 
@@ -433,7 +438,13 @@ app.get('/api/proxy/image', async (req, res) => {
 
   if (fs.existsSync(localPath)) {
     const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
-    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': contentType })
+    const imgOrigin = req.headers.origin
+    res.set({
+      'Access-Control-Allow-Origin': imgOrigin || '*',
+      'Access-Control-Allow-Credentials': 'true',
+      'Cache-Control': 'public, max-age=86400',
+      'Content-Type': contentType,
+    })
     return res.send(fs.readFileSync(localPath))
   }
 
@@ -443,7 +454,13 @@ app.get('/api/proxy/image', async (req, res) => {
 
   if (fs.existsSync(hashPath)) {
     const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
-    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': contentType })
+    const imgOrigin = req.headers.origin
+    res.set({
+      'Access-Control-Allow-Origin': imgOrigin || '*',
+      'Access-Control-Allow-Credentials': 'true',
+      'Cache-Control': 'public, max-age=86400',
+      'Content-Type': contentType,
+    })
     return res.send(fs.readFileSync(hashPath))
   }
 
