@@ -725,13 +725,13 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
 
 async def download_logos(channels: List[Dict[str, Any]], semaphore: asyncio.Semaphore, session: aiohttp.ClientSession):
     """并行下载所有频道台标到本地 logos/ 目录，文件名与 m3u8 tvg-logo 字段严格一致"""
-    logo_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'logos')
+    logo_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), 'logos')
     os.makedirs(logo_dir, exist_ok=True)
     downloaded = 0
     async def fetch_one(ch: Dict[str, Any]):
         nonlocal downloaded
         # ch['logo'] 格式为 "logos/CCTV1.png"（本地相对路径），fanmingming 原始 URL 存于 ch.get('logo_url')
-        # 若没有 logo_url，尝试从 fanmingming.cn 反向构造
+        # 若没有 logo_url，尝试从 GitHub 镜像反向构造
         fanming_url = ch.get('logo_url', '')
         if not fanming_url:
             # fallback：从 ch['logo'] 路径还原 fanmingming CDN 地址
