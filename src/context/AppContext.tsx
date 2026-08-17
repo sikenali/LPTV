@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, ReactNode } from 'react';
-import { AppState, UserSettings, Channel } from '../types';
+import { AppState, UserSettings, Channel, TvModeState } from '../types';
 import { fetchChannels } from '../services/channelApi';
 
 const AUTO_REFRESH_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours

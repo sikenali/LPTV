@@ -14,6 +14,8 @@ export interface UserSettings {
   autoRefresh: boolean;
 }
 
+export type TvModeState = 'off' | 'entering' | 'on' | 'exiting'
+
 export interface AppState {
   favorites: string[];
   settings: UserSettings;
