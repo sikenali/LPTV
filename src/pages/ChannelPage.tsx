@@ -249,9 +249,6 @@ export default function ChannelPage() {
                                         className="w-full h-full object-contain"
                                       />
                                     )}
-                                    {ch.logo && logoErrors[ch.id] && (
-                                      <span className="absolute text-white font-bold text-xs">{ch.name.substring(0, 2)}</span>
-                                    )}
                                   </div>
                                   <div className="flex-1 text-left min-w-0">
                                     <div className="font-medium text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
