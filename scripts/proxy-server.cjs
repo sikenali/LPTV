@@ -375,9 +375,9 @@ app.get('/api/proxy/stream', async (req, res) => {
           return resolve(res.send(rewritten))
         } else {
           setStreamCORS()
-          response.body.pipe(res)
-          response.body.on('error', () => res.destroy())
-          res.on('close', () => { response.body.destroy(); finish() })
+          const arrayBuffer = await response.arrayBuffer()
+          res.end(Buffer.from(arrayBuffer))
+          finish()
         }
       }).catch(err => {
         clearTimeout(timeoutId)
