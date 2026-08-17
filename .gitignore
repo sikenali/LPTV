@@ -9,3 +9,6 @@ logos/
 
 # lzmail project (separate repo)
 frontend/
+
+# lzc build artifacts
+*.lpk
