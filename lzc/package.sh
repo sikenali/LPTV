@@ -12,10 +12,20 @@ echo "Packaging version: $VERSION"
 
 bash "$(dirname "$0")/build.sh"
 
-CLI_BIN="/usr/local/lib/node_modules/@lazycatcloud/lzc-cli/scripts/cli.js"
+CLI_BIN=$(npm root -g)/@lazycatcloud/lzc-cli/scripts/cli.js
+if [ ! -f "$CLI_BIN" ]; then
+  CLI_BIN=$(which lzc-cli 2>/dev/null || echo "")
+  if [ -n "$CLI_BIN" ]; then
+    CLI_BIN="$CLI_BIN"
+  fi
+fi
+if [ -z "$CLI_BIN" ] || [ ! -f "$CLI_BIN" ]; then
+  echo "Error: lzc-cli not found"
+  exit 1
+fi
 (
   cd "$(dirname "$0")"
-  $CLI_BIN project release -o output.lpk
+  node "$CLI_BIN" project release -o output.lpk
 )
 
 if [ -f output.lpk ]; then
