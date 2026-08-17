@@ -21,6 +21,8 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showPlayOverlay, setShowPlayOverlay] = useState(false)
+  const loadingRef = useRef(true)
+  const errorRef = useRef<string | null>(null)
   const retryCountRef = useRef(0)
   const MAX_RETRIES = 3
   const timeoutRef = useRef<number | null>(null)
@@ -52,6 +54,7 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
       if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
         videoRef.current.src = proxyUrl(src)
         timeoutRef.current = window.setTimeout(() => {
+          errorRef.current = 'native_hls_timeout'
           setError(`浏览器原生 HLS 不支持或播放超时`)
           onError?.(new Error('native_hls_timeout'))
         }, LOADING_TIMEOUT)
@@ -68,8 +71,9 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
     hlsRef.current = hls
     retryCountRef.current = 0
 
+    loadingRef.current = true
     timeoutRef.current = window.setTimeout(() => {
-      if (loading && !error) {
+      if (loadingRef.current && !errorRef.current) {
         setError('加载超时，请检查网络或频道源')
         onError?.(new Error('loading_timeout'))
       }
@@ -81,7 +85,7 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       clearAllTimers()
-      setLoading(false)
+      loadingRef.current = false
       setError(null)
       videoRef.current?.play().then(() => {
         isPlayingRef.current = true
@@ -94,9 +98,9 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
     })
 
     hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-      if (loading) {
+      if (loadingRef.current) {
         clearAllTimers()
-        setLoading(false)
+        loadingRef.current = false
         setError(null)
       }
     })
@@ -184,19 +188,21 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
     })
 
     hls.on(Hls.Events.FRAG_BUFFERED, () => {
-      if (loading) {
+      if (loadingRef.current) {
         clearAllTimers()
-        setLoading(false)
+        loadingRef.current = false
       }
     })
 
     hls.attachMedia(videoRef.current)
-  }, [destroyHls, onError, loading, clearAllTimers])
+  }, [destroyHls, onError, clearAllTimers])
 
   useEffect(() => {
     if (!url) return
     setLoading(true)
+    loadingRef.current = true
     setError(null)
+    errorRef.current = null
     initHls(url)
     return destroyHls
   }, [url, initHls, destroyHls])
@@ -204,7 +210,9 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
   const handleRetry = () => {
     retryCountRef.current = 0
     setError(null)
+    errorRef.current = null
     setLoading(true)
+    loadingRef.current = true
     initHls(url)
   }
 

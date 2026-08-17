@@ -175,26 +175,26 @@ func deduplicate(channels []map[string]string) []map[string]string {
 	for i, ch := range channels {
 		key := strings.ToLower(ch["name"])
 		if idx, ok := seen[key]; ok {
-			if priority[ch["group"]] < priority[channels[idx]["group"]] {
+			oldGroup := channels[idx]["group"]
+			newGroup := ch["group"]
+			if priority[newGroup] < priority[oldGroup] {
 				seen[key] = i
 			}
 		} else {
 			seen[key] = i
 		}
 	}
-	result := make([]map[string]string, 0, len(seen))
-	for _, ch := range channels {
+	// Build kept-index set: only keep the entry with highest priority for each name
+	kept := make(map[int]bool)
+	for i, ch := range channels {
 		key := strings.ToLower(ch["name"])
-		if idx, ok := seen[key]; ok && idx == len(result) {
-			// Just append all unique ones
+		if seen[key] == i {
+			kept[i] = true
 		}
 	}
-	// Simpler dedup
-	seen2 := make(map[string]bool)
-	for _, ch := range channels {
-		key := strings.ToLower(ch["name"])
-		if !seen2[key] {
-			seen2[key] = true
+	result := make([]map[string]string, 0, len(seen))
+	for i, ch := range channels {
+		if kept[i] {
 			result = append(result, ch)
 		}
 	}
