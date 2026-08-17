@@ -215,20 +215,28 @@ export default function ChannelPage() {
                                   borderWidth: isSelected ? '1px' : '0px',
                                 }}
                               >
-                                <div className="flex items-center gap-3 pl-2 pr-2 flex-1 min-w-0 relative">
-                                  {ch.logo && !logoErrors[ch.id] ? (
-                                    <img
-                                      src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
-                                      alt=""
-                                      className="w-9 h-9 rounded object-contain shrink-0 absolute inset-0"
-                                      style={{ zIndex: 1 }}
-                                      onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
-                                    />
-                                  ) : null}
-                                  <div className="w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 relative z-0"
+                                <div className="flex items-center gap-3 pl-2 pr-2 flex-1 min-w-0">
+                                  <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center overflow-hidden"
                                     style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
                                   >
-                                    {ch.name.substring(0, 2)}
+                                    {ch.logo && !logoErrors[ch.id] ? (
+                                      <img
+                                        src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
+                                        alt=""
+                                        className="w-full h-full object-contain"
+                                        onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
+                                      />
+                                    ) : (
+                                      <img
+                                        src="/icon.png"
+                                        alt=""
+                                        className="w-full h-full object-contain"
+                                        onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
+                                      />
+                                    )}
+                                    {logoErrors[ch.id] && (
+                                      <span className="text-white font-bold text-xs">{ch.name.substring(0, 2)}</span>
+                                    )}
                                   </div>
                                   <div className="flex-1 text-left min-w-0">
                                     <div className="font-medium text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
@@ -256,18 +264,6 @@ export default function ChannelPage() {
                                       <span className="block w-[5px] h-[5px] rounded-full bg-red-500" style={{ margin: 'auto' }} />
                                     )}
                                   </span>
-                                  {isSelected ? (
-                                    <motion.span
-                                      initial={{ scale: 0 }}
-                                      animate={{ scale: 1 }}
-                                      transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-                                      style={{ color: '#c43d3d' }}
-                                    >
-                                      <RiPlayFill className="w-3.5 h-3.5" />
-                                    </motion.span>
-                                  ) : (
-                                    <span style={{ color: '#999' }}><RiPlayFill className="w-3.5 h-3.5" /></span>
-                                  )}
                                 </div>
                               </motion.button>
                             )
