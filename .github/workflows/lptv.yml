@@ -39,18 +39,18 @@ jobs:
             sed -i "s|<!-- Generated File Link M3U -->.*|<!-- Generated File Link M3U --> [View M3U File](${file_link})|" README.md
             sed -i "s|<!-- Generated File Link M3U8 -->.*|<!-- Generated File Link M3U8 --> [View M3U8 File](${file_link1})|" README.md
           else
-            cat > README.md << EOF
-# LPTV - Live TV
-
-<!-- Last Run Time --> <!-- Generated at runtime -->
-
-## Generated Files
-
-<!-- Generated File Link M3U --> [View M3U File](${file_link})
-<!-- Generated File Link M3U8 --> [View M3U8 File](${file_link1})
-
-Auto-generated IPTV playlist updated every 4 hours via GitHub Actions.
-EOF
+            printf '%s\n' \
+              "# LPTV - Live TV" \
+              "" \
+              "<!-- Last Run Time --> <!-- Generated at runtime -->" \
+              "" \
+              "## Generated Files" \
+              "" \
+              "<!-- Generated File Link M3U --> [View M3U File](${file_link})" \
+              "<!-- Generated File Link M3U8 --> [View M3U8 File](${file_link1})" \
+              "" \
+              "Auto-generated IPTV playlist updated every 4 hours via GitHub Actions." \
+              > README.md
           fi
 
       - name: Commit changes
