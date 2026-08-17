@@ -28,8 +28,10 @@ fi
 
 # Check if we're in a webshell container (can't reach box directly)
 is_webshell_container=false
-if ls /tmp/lcmd-webshell-agent-*.sock 2>/dev/null | grep -q . && ! is_on_box; then
-  is_webshell_container=true
+if ls /tmp/lcmd-webshell-agent-*.sock 2>/dev/null | grep -q .; then
+  if [ "$is_on_box" != "true" ]; then
+    is_webshell_container=true
+  fi
 fi
 
 # Get latest release info
