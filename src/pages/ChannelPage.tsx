@@ -300,7 +300,7 @@ export default function ChannelPage() {
       </div>
 
       <div className="flex-1 flex flex-col min-h-0" style={{ background: '#1a1410' }}>
-        <div className="flex-[0_0_300px] relative bg-[#0d0a08]">
+        <div className="flex-[0_0_520px] relative bg-[#0d0a08]">
           {selectedChannel ? (
             <HlsPlayer
               ref={playerRef}
@@ -319,7 +319,7 @@ export default function ChannelPage() {
         </div>
 
         {selectedChannel && (
-          <div className="flex-[0_0_48px] flex items-center justify-between px-4" style={{ background: '#0d0a08', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          <div className="flex-[0_0_52px] flex items-center justify-between px-4" style={{ background: '#0d0a08', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden flex items-center justify-center"
                 style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)' }}
