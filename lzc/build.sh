@@ -49,6 +49,11 @@ cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
 cp -f "$PROJECT_ROOT/channels/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/channels/lptv.m3u8" 2>/dev/null || true
+# 如果本地 logos/ 为空，尝试从 GitHub 下载常用频道台标
+if [ -z "$(ls -A "$PROJECT_ROOT/logos/" 2>/dev/null)" ]; then
+  echo "[build] logos/ empty, fetching from GitHub..."
+  node "$PROJECT_ROOT/scripts/fetch-logos.cjs" 2>/dev/null || true
+fi
 cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null || true
 
 cat > "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh" << 'RUNNER'
