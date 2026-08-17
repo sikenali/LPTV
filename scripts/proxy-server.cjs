@@ -25,7 +25,7 @@ let cache = { data: null, timestamp: 0 }
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173']
 const corsOptions = {
   origin: (origin, callback) => {
-    if (ALLOWED_ORIGINS.includes(origin) || origin === '') {
+    if (ALLOWED_ORIGINS.includes(origin) || !origin) {
       callback(null, true)
     } else {
       callback(new Error('Not allowed by CORS'))

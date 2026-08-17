@@ -9,6 +9,4 @@ local.m3u8
 # lzc build output
 lzc/_lpk_content/
 *.lpk
-channels/lptv.m3u
-channels/lptv.m3u8
 logos/
