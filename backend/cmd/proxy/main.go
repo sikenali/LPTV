@@ -1,9 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -19,41 +19,30 @@ import (
 )
 
 var (
-	m3uChannels    []map[string]string
-	m3uTimestamp   time.Time
-	m3uMutex       sync.RWMutex
-	activeStreams  int
-	streamMutex    sync.Mutex
-
-	validChannels []map[string]string
-	validTimestamp time.Time
-	validMutex    sync.RWMutex
-
-	validationRunning bool
-	validationMu      sync.Mutex
+	m3uChannels []map[string]string
+	m3uTimestamp time.Time
+	m3uMutex     sync.RWMutex
+	activeStreams int
+	streamMutex  sync.Mutex
 )
 
 const (
-	cacheTTL       = 4 * time.Hour
-	streamTimeout  = 30 * time.Second
-	maxStreams     = 30
-	logoDir        = "logos"
-	m3uFilename    = "lptv.m3u8"
-	staleThreshold = 6 * time.Hour
+	cacheTTL      = 4 * time.Hour
+	streamTimeout = 30 * time.Second
+	maxStreams    = 30
+	logoDir       = "logos"
+	m3uFilename   = "lptv.m3u8"
 )
 
+// m3uLocalPaths 按优先级搜索本地生成的 M3U 文件（channels/ 目录）
 var m3uLocalPaths = func() []string {
 	exe, _ := os.Executable()
 	exeDir := filepath.Dir(exe)
 	return []string{
-		m3uFilename,
-		filepath.Join("data", m3uFilename),
-		filepath.Join(exeDir, m3uFilename),
-		filepath.Join(exeDir, "data", m3uFilename),
+		filepath.Join("channels", m3uFilename),
+		filepath.Join(exeDir, "channels", m3uFilename),
 	}
 }()
-
-const defaultM3URemoteURL = "https://raw.githubusercontent.com/sikenali/lptv/main/lptv.m3u8"
 
 func parseM3U(text string) []map[string]string {
 	var channels []map[string]string
@@ -98,41 +87,16 @@ func extractAttr(line, key string) string {
 	return line[start : start+end]
 }
 
-func fetchRemoteM3U() string {
-	resp, err := http.Get(defaultM3URemoteURL)
-	if err != nil {
-		log.Printf("[m3u] remote fetch failed: %v", err)
-		return ""
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		log.Printf("[m3u] remote returned status %d", resp.StatusCode)
-		return ""
-	}
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("[m3u] remote read failed: %v", err)
-		return ""
-	}
-	return string(data)
-}
-
-func isLocalM3UStale() bool {
-	for _, localPath := range m3uLocalPaths {
-		info, err := os.Stat(localPath)
-		if err == nil {
-			return time.Since(info.ModTime()) > staleThreshold
-		}
-	}
-	return true
-}
-
 func getM3U(forceRefresh, validate bool) []map[string]string {
 	m3uMutex.RLock()
-	if !forceRefresh && !validate && m3uChannels != nil && time.Since(m3uTimestamp) < cacheTTL {
+	if !forceRefresh && m3uChannels != nil && time.Since(m3uTimestamp) < cacheTTL {
 		result := make([]map[string]string, len(m3uChannels))
 		copy(result, m3uChannels)
 		m3uMutex.RUnlock()
+		if validate {
+			result = probeChannels(result)
+			result = deduplicate(result)
+		}
 		return result
 	}
 	m3uMutex.RUnlock()
@@ -140,12 +104,21 @@ func getM3U(forceRefresh, validate bool) []map[string]string {
 	m3uMutex.Lock()
 	defer m3uMutex.Unlock()
 
-	if !forceRefresh && !validate && m3uChannels != nil && time.Since(m3uTimestamp) < cacheTTL {
+	// Re-check after acquiring write lock
+	m3uMutex.RLock()
+	if !forceRefresh && m3uChannels != nil && time.Since(m3uTimestamp) < cacheTTL {
 		result := make([]map[string]string, len(m3uChannels))
 		copy(result, m3uChannels)
+		m3uMutex.RUnlock()
+		if validate {
+			result = probeChannels(result)
+			result = deduplicate(result)
+		}
 		return result
 	}
+	m3uMutex.RUnlock()
 
+	// Read local m3u8 file only
 	var text string
 	for _, localPath := range m3uLocalPaths {
 		data, err := os.ReadFile(localPath)
@@ -155,41 +128,15 @@ func getM3U(forceRefresh, validate bool) []map[string]string {
 			break
 		}
 	}
-
 	if text == "" {
-		if isLocalM3UStale() {
-			log.Printf("[m3u] local file stale or missing, fetching from remote: %s", defaultM3URemoteURL)
-			text = fetchRemoteM3U()
-			if text != "" {
-				for _, localPath := range m3uLocalPaths {
-					if err := os.WriteFile(localPath, []byte(text), 0644); err == nil {
-						log.Printf("[m3u] saved remote M3U to: %s", localPath)
-						break
-					}
-				}
-			}
-		}
-		if text == "" {
-			log.Printf("[m3u] no local %s found and remote fetch unavailable; channel list will be empty", m3uFilename)
-		}
+		log.Printf("[m3u] no local %s found; channel list will be empty until workflow generates it", m3uFilename)
 	}
 
 	channels := parseM3U(text)
 	if validate {
 		channels = probeChannels(channels)
-		channels = deduplicate(channels)
-		validMutex.Lock()
-		validChannels = channels
-		validTimestamp = time.Now()
-		validMutex.Unlock()
-	} else {
-		validMutex.RLock()
-		if time.Since(validTimestamp) < cacheTTL {
-			channels = validChannels
-		}
-		validMutex.RUnlock()
-		channels = deduplicate(channels)
 	}
+	channels = deduplicate(channels)
 	m3uChannels = channels
 	m3uTimestamp = time.Now()
 	result := make([]map[string]string, len(channels))
@@ -483,14 +430,34 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing url", 400)
 		return
 	}
-	h := sha256.Sum256([]byte(imgURL))
+
+	// Local logo: path is relative to project root (e.g. "logos/湖南卫视.png")
+	BASE_DIR := filepath.Join(filepath.Dir(os.Args[0]), "..")
 	ext := filepath.Ext(imgURL)
 	if ext == "" {
 		ext = ".png"
 	}
-	localPath := filepath.Join(logoDir, hex.EncodeToString(h[:]) + ext)
+	// Strip path traversal, keep Chinese/letters/digits
+	sanitized := strings.ReplaceAll(imgURL, "..", "")
+	sanitized = strings.TrimPrefix(sanitized, "/")
+	localPath := filepath.Join(BASE_DIR, "logos", sanitized)
 
 	if data, err := os.ReadFile(localPath); err == nil {
+		ctype := mime.TypeByExtension(ext)
+		if ctype == "" {
+			ctype = "image/png"
+		}
+		w.Header().Set("Content-Type", ctype)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(data)
+		return
+	}
+
+	// Fallback: hash-based remote cache
+	h := sha256.Sum256([]byte(imgURL))
+	hashPath := filepath.Join(logoDir, hex.EncodeToString(h[:]) + ext)
+	if data, err := os.ReadFile(hashPath); err == nil {
 		ctype := mime.TypeByExtension(ext)
 		if ctype == "" {
 			ctype = "image/png"
@@ -515,8 +482,8 @@ func handleImage(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	os.MkdirAll(logoDir, 0755)
-	os.WriteFile(localPath, data, 0644)
-	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	os.WriteFile(hashPath, data, 0644)
+	w.Header().Set("Content-Type", resp.Header.Get("content-type"))
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Write(data)
@@ -554,8 +521,6 @@ func main() {
 
 	loadM3U()
 
-	go periodicM3URefresh()
-
 	http.HandleFunc("/health", handleHealth)
 	http.HandleFunc("/api/m3u", handleM3U)
 	http.HandleFunc("/api/proxy/stream", handleStream)
@@ -569,8 +534,7 @@ func loadM3U() {
 	for _, localPath := range m3uLocalPaths {
 		data, err := os.ReadFile(localPath)
 		if err == nil {
-			text := string(data)
-			channels := parseM3U(text)
+			channels := parseM3U(string(data))
 			m3uMutex.Lock()
 			m3uChannels = channels
 			m3uTimestamp = time.Now()
@@ -579,35 +543,5 @@ func loadM3U() {
 			return
 		}
 	}
-	log.Printf("[m3u] no local %s found, will fetch from remote on first request", m3uFilename)
-}
-
-func periodicM3URefresh() {
-	for {
-		time.Sleep(30 * time.Minute)
-		if isLocalM3UStale() {
-			log.Printf("[m3u] periodic refresh: local M3U is stale (%dh ago), fetching from remote", int(staleThreshold.Hours()))
-			text := fetchRemoteM3U()
-			if text != "" {
-				m3uMutex.Lock()
-				channels := parseM3U(text)
-				m3uChannels = channels
-				m3uTimestamp = time.Now()
-				validMutex.Lock()
-				validChannels = nil
-				validTimestamp = time.Time{}
-				validMutex.Unlock()
-				m3uMutex.Unlock()
-				log.Printf("[m3u] refreshed %d channels from remote", len(channels))
-				for _, localPath := range m3uLocalPaths {
-					if err := os.WriteFile(localPath, []byte(text), 0644); err == nil {
-						log.Printf("[m3u] saved updated M3U to %s", localPath)
-						break
-					}
-				}
-			} else {
-				log.Printf("[m3u] periodic refresh: remote fetch failed, keeping local data")
-			}
-		}
-	}
+	log.Printf("[m3u] no local %s found; channel list will be empty until workflow generates it", m3uFilename)
 }

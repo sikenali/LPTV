@@ -798,14 +798,14 @@ async def main(file_urls, cctv_channel_file, province_channel_files):
     deduplicated_entries = deduplicate_candidate_entries(all_valid_entries)
     best_entries = select_best_streams(deduplicated_entries)
     print(f"Valid streams: {len(all_valid_entries)}, deduplicated: {len(deduplicated_entries)}, best-per-channel: {len(best_entries)}")
-    generate_sorted_m3u(best_entries, cctv_channels, province_channels, CONFIG["output_file"])
+    all_channels = generate_sorted_m3u(best_entries, cctv_channels, province_channels, CONFIG["output_file"])
     print(f"Generated sorted M3U file: {CONFIG['output_file']}")
 
     # 下载台标
     semaphore = asyncio.Semaphore(CONFIG["max_parallel"])
     connector = aiohttp.TCPConnector(limit=CONFIG["max_parallel"] * 2)
     async with aiohttp.ClientSession(cookie_jar=None, timeout=timeout, connector=connector) as session:
-        await download_logos(best_entries, semaphore, session)
+        await download_logos(all_channels, semaphore, session)
 
 
 if __name__ == "__main__":
