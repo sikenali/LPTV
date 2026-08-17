@@ -682,19 +682,19 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
         normalized_channel = normalize_text_for_match(normalize_cctv_name(channel))
         upstream_group = infer_group_from_upstream_title(source_group_title, province_matchers)
         if is_cctv_channel(channel, normalized_channel, normalized_cctv_channels) or upstream_group == "央视频道":
-            cctv_channels_list.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://live.fanmingming.cn/tv/{sanitize_filename(channel)}.png", "group_title": "央视频道"})
+            cctv_channels_list.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": "央视频道"})
         elif "卫视" in channel or upstream_group == "卫视频道":
-            satellite_channels.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://live.fanmingming.cn/tv/{sanitize_filename(channel)}.png", "group_title": "卫视频道"})
+            satellite_channels.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": "卫视频道"})
         else:
             province = match_province(normalized_channel, province_matchers)
             if province:
-                province_channels_list[province].append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://live.fanmingming.cn/tv/{sanitize_filename(channel)}.png", "group_title": province})
+                province_channels_list[province].append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": province})
             else:
                 smart_category = upstream_group if upstream_group in SMART_CATEGORY_KEYWORDS else match_smart_category(normalized_channel)
                 if smart_category and smart_category in SMART_CATEGORY_KEYWORDS:
-                    smart_category_channels[smart_category].append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://live.fanmingming.cn/tv/{sanitize_filename(channel)}.png", "group_title": smart_category})
+                    smart_category_channels[smart_category].append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": smart_category})
                 else:
-                    other_channels.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://live.fanmingming.cn/tv/{sanitize_filename(channel)}.png", "group_title": "其他频道"})
+                    other_channels.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": "其他频道"})
 
     cctv_channels_list.sort(key=lambda x: cctv_sort_key(x["channel"]))
     for province in province_channels_list:
@@ -725,7 +725,7 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
 
 async def download_logos(channels: List[Dict[str, Any]], semaphore: asyncio.Semaphore, session: aiohttp.ClientSession):
     """并行下载所有频道台标到本地 logos/ 目录，文件名与 m3u8 tvg-logo 字段严格一致"""
-    logo_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logos')
+    logo_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'logos')
     os.makedirs(logo_dir, exist_ok=True)
     downloaded = 0
     async def fetch_one(ch: Dict[str, Any]):
@@ -736,7 +736,7 @@ async def download_logos(channels: List[Dict[str, Any]], semaphore: asyncio.Sema
         if not fanming_url:
             # fallback：从 ch['logo'] 路径还原 fanmingming CDN 地址
             channel_name = ch['channel'].strip()
-            fanming_url = f"https://live.fanmingming.cn/tv/{sanitize_filename(channel_name)}.png"
+            fanming_url = f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel_name)}.png"
         if not fanming_url or not fanming_url.startswith('https://'):
             return
         local_path = os.path.join(logo_dir, os.path.basename(ch['logo']))
