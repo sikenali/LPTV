@@ -12,7 +12,7 @@ const groupIcons: Record<string, { color: string }> = {
   '数字频道': { color: '#5b8c5a' },
 }
 
-const VALIDATED_URLS = new Set<string>()
+const VALIDATED_URLS_KEY = 'lptv_validated_urls'
 
 export default function ChannelPage() {
   const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite, lastPlayedChannel } = useApp()
@@ -34,20 +34,26 @@ export default function ChannelPage() {
     if (allowed.length === 0) return
 
     const current = { ...channelStatus }
+    let stored: string[] = []
+    try { stored = JSON.parse(localStorage.getItem(VALIDATED_URLS_KEY) || '[]') } catch {}
+
     allowed.forEach(ch => {
       if (current[ch.id] !== undefined) return
 
-      if (VALIDATED_URLS.has(ch.url)) {
+      if (stored.includes(ch.url)) {
         current[ch.id] = 'ok'
       } else {
-        fetch(ch.url, { method: 'HEAD', signal: AbortSignal.timeout(3000), redirect: 'follow' })
-          .then(() => {
-            VALIDATED_URLS.add(ch.url)
-            current[ch.id] = 'ok'
-            setChannelStatus({ ...current })
-          })
-          .catch(() => {
-            current[ch.id] = 'error'
+        fetch(`/api/probe?url=${encodeURIComponent(ch.url)}`, { signal: AbortSignal.timeout(3000) })
+          .then(resp => resp.json().then(d => ({ ok: d.status === 'ok' })))
+          .catch(() => ({ ok: false }))
+          .then(({ ok }) => {
+            if (ok) {
+              stored.push(ch.url)
+              try { localStorage.setItem(VALIDATED_URLS_KEY, JSON.stringify(stored)) } catch {}
+              current[ch.id] = 'ok'
+            } else {
+              current[ch.id] = 'error'
+            }
             setChannelStatus({ ...current })
           })
       }

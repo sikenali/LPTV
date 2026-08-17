@@ -8,10 +8,10 @@ const { M3uParser } = require('m3u-parser-generator')
 
 const app = express()
 const PORT = process.env.PORT || 3000
-const LOCAL_M3U_PATH = path.join(__dirname, 'local.m3u8')
+const LOCAL_M3U_PATH = path.join(__dirname, '..', 'local.m3u8')
 const M3U_URL = 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8'
 const CACHE_TTL = 4 * 60 * 60 * 1000
-const LOGO_DIR = path.join(__dirname, 'logos')
+const LOGO_DIR = path.join(__dirname, '..', 'logos')
 const STREAM_TIMEOUT = 30000
 const maxConcurrentStreams = 10
 let activeStreams = 0
