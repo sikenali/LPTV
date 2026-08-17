@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '../context/AppContext'
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
 import HlsPlayer from '../components/Player/HlsPlayer'
@@ -152,10 +153,20 @@ export default function ChannelPage() {
 
               return (
                 <div key={group}>
-                  <button
+                  <motion.button
                     onClick={() => toggleCategory(group)}
-                    className="w-full flex items-center justify-between rounded-lg border px-3 py-3 transition-colors"
-                    style={{ background: bgMain, borderColor: borderCol }}
+                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.015 }}
+                    animate={isExpanded
+                      ? { scale: [1, 1.04, 0.97, 1.02, 1], backgroundColor: cardBk }
+                      : { scale: 1, backgroundColor: bgMain }
+                    }
+                    transition={isExpanded
+                      ? { duration: 0.5, times: [0, 0.2, 0.4, 0.7, 1], ease: 'easeInOut' }
+                      : { duration: 0.2 }
+                    }
+                    className="w-full flex items-center justify-between rounded-lg border px-3 py-3"
+                    style={{ borderColor: borderCol }}
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded flex items-center justify-center shrink-0" style={{ background: iconData.color }}>
@@ -165,83 +176,116 @@ export default function ChannelPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs" style={{ color: '#c9a96e' }}>{`（${groupChs.length}）`}</span>
-                      {isExpanded ? (
-                        <RiArrowDownSLine className="w-4 h-4" style={{ color: textSec }} />
-                      ) : (
-                        <RiArrowRightSLine className="w-4 h-4" style={{ color: textSec }} />
-                      )}
+                      <motion.span
+                        animate={{ rotate: isExpanded ? 90 : 0 }}
+                        transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                      >
+                        {isExpanded ? (
+                          <RiArrowDownSLine className="w-4 h-4" style={{ color: textSec }} />
+                        ) : (
+                          <RiArrowRightSLine className="w-4 h-4" style={{ color: textSec }} />
+                        )}
+                      </motion.span>
                     </div>
-                  </button>
+                  </motion.button>
 
-                  {isExpanded && (
-                    <div className="mt-1 space-y-1">
-                      {groupChs.map(ch => {
-                        const isSelected = selectedChannel?.id === ch.id
-                        const isFav = favorites.includes(ch.id)
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div
+                        key={group}
+                        initial={{ opacity: 0, height: 0, translateY: -6 }}
+                        animate={{ opacity: 1, height: 'auto', translateY: 0 }}
+                        exit={{ opacity: 0, height: 0, translateY: -4 }}
+                        transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <div className="mt-1 space-y-1 pb-1">
+                          {groupChs.map(ch => {
+                            const isSelected = selectedChannel?.id === ch.id
+                            const isFav = favorites.includes(ch.id)
 
-                        return (
-                          <button
-                            key={ch.id}
-                            onClick={() => setSelectedChannel(ch)}
-                            className="w-full flex items-center justify-between rounded-lg transition-colors"
-                            style={{
-                              background: isSelected ? cardBk : bgMain,
-                              borderColor: isSelected ? borderCol : 'transparent',
-                              borderWidth: isSelected ? '1px' : '0px',
-                            }}
-                          >
-                            <div className="flex items-center gap-3 pl-3 pr-2 py-2.5 flex-1 min-w-0 relative">
-                              {ch.logo && !logoErrors[ch.id] ? (
-                                <img
-                                  src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
-                                  alt=""
-                                  className="w-9 h-9 rounded object-contain shrink-0 absolute inset-0"
-                                  style={{ zIndex: 1 }}
-                                  onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
-                                />
-                              ) : null}
-                              <div className="w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 relative z-0"
-                                style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
-                              >
-                                {ch.name.substring(0, 2)}
-                              </div>
-                              <div className="flex-1 text-left min-w-0">
-                                <div className="font-medium text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-1.5 pr-1 shrink-0">
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleFavorite(ch.id)
+                            return (
+                              <motion.button
+                                key={ch.id}
+                                onClick={() => setSelectedChannel(ch)}
+                                whileTap={{ scale: 0.97 }}
+                                whileHover={{ x: 3 }}
+                                animate={isSelected
+                                  ? { scale: [1, 1.03, 0.98, 1], background: cardBk, borderColor: borderCol, borderWidth: '1px' }
+                                  : { scale: 1, background: bgMain, borderColor: 'transparent', borderWidth: '0px' }
+                                }
+                                transition={isSelected
+                                  ? { duration: 0.4, times: [0, 0.2, 0.5, 1], ease: 'easeInOut' }
+                                  : { duration: 0.15 }
+                                }
+                                className="w-full flex items-center justify-between rounded-lg px-2 py-2.5"
+                                style={{
+                                  background: isSelected ? cardBk : bgMain,
+                                  borderColor: isSelected ? borderCol : 'transparent',
+                                  borderWidth: isSelected ? '1px' : '0px',
                                 }}
-                                className="p-[3px] cursor-pointer transition-transform active:scale-150 hover:bg-white/10 rounded"
                               >
-                                {isFav ? (
-                                  <RiHeartFill className="w-4 h-4" style={{ color: '#c43d3d' }} />
-                                ) : (
-                                  <RiHeartLine className="w-4 h-4" style={{ color: subTxt }} />
-                                )}
-                              </span>
-                              <span className="shrink-0 flex items-center justify-center" style={{ width: '6px' }}>
-                                {channelStatus[ch.id] === 'ok' && (
-                                  <span className="block w-[5px] h-[5px] rounded-full bg-green-500" style={{ margin: 'auto' }} />
-                                )}
-                                {channelStatus[ch.id] === 'error' && (
-                                  <span className="block w-[5px] h-[5px] rounded-full bg-red-500" style={{ margin: 'auto' }} />
-                                )}
-                              </span>
-                              {isSelected ? (
-                                <span style={{ color: '#c43d3d' }}><RiPlayFill className="w-3.5 h-3.5" /></span>
-                              ) : (
-                                <span style={{ color: '#999' }}><RiPlayFill className="w-3.5 h-3.5" /></span>
-                              )}
-                            </div>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
+                                <div className="flex items-center gap-3 pl-2 pr-2 flex-1 min-w-0 relative">
+                                  {ch.logo && !logoErrors[ch.id] ? (
+                                    <img
+                                      src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
+                                      alt=""
+                                      className="w-9 h-9 rounded object-contain shrink-0 absolute inset-0"
+                                      style={{ zIndex: 1 }}
+                                      onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
+                                    />
+                                  ) : null}
+                                  <div className="w-9 h-9 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 relative z-0"
+                                    style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
+                                  >
+                                    {ch.name.substring(0, 2)}
+                                  </div>
+                                  <div className="flex-1 text-left min-w-0">
+                                    <div className="font-medium text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 pr-1 shrink-0">
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      toggleFavorite(ch.id)
+                                    }}
+                                    className="p-[3px] cursor-pointer transition-transform hover:bg-white/10 rounded"
+                                  >
+                                    {isFav ? (
+                                      <RiHeartFill className="w-4 h-4" style={{ color: '#c43d3d' }} />
+                                    ) : (
+                                      <RiHeartLine className="w-4 h-4" style={{ color: subTxt }} />
+                                    )}
+                                  </span>
+                                  <span className="shrink-0 flex items-center justify-center" style={{ width: '6px' }}>
+                                    {channelStatus[ch.id] === 'ok' && (
+                                      <span className="block w-[5px] h-[5px] rounded-full bg-green-500" style={{ margin: 'auto' }} />
+                                    )}
+                                    {channelStatus[ch.id] === 'error' && (
+                                      <span className="block w-[5px] h-[5px] rounded-full bg-red-500" style={{ margin: 'auto' }} />
+                                    )}
+                                  </span>
+                                  {isSelected ? (
+                                    <motion.span
+                                      initial={{ scale: 0 }}
+                                      animate={{ scale: 1 }}
+                                      transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                                      style={{ color: '#c43d3d' }}
+                                    >
+                                      <RiPlayFill className="w-3.5 h-3.5" />
+                                    </motion.span>
+                                  ) : (
+                                    <span style={{ color: '#999' }}><RiPlayFill className="w-3.5 h-3.5" /></span>
+                                  )}
+                                </div>
+                              </motion.button>
+                            )
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               )
             })
