@@ -235,20 +235,20 @@ export default function ChannelPage() {
                                   <div className="w-9 h-9 rounded-full shrink-0 overflow-hidden"
                                     style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
                                   >
-                                    {ch.logo && !logoErrors[ch.id] ? (
-                                      <img
-                                        src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
-                                        alt=""
-                                        className="w-full h-full object-contain"
-                                        onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
-                                      />
-                                    ) : (
-                                      <img
-                                        src="/icon.png"
-                                        alt=""
-                                        className="w-full h-full object-contain"
-                                      />
-                                    )}
+                                     {ch.logo && !logoErrors[ch.logo] ? (
+                                       <img
+                                         src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
+                                         alt=""
+                                         className="w-full h-full object-contain"
+                                         onError={() => setLogoErrors(prev => ({ ...prev, [ch.logo]: true }))}
+                                       />
+                                     ) : (
+                                       <img
+                                         src="/icon.png"
+                                         alt=""
+                                         className="w-full h-full object-contain"
+                                       />
+                                     )}
                                   </div>
                                   <div className="flex-1 text-left min-w-0">
                                     <div className="font-medium text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
@@ -324,12 +324,12 @@ export default function ChannelPage() {
               <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden flex items-center justify-center"
                 style={{ background: '#c43d3d' }}
               >
-                {selectedChannel.logo && !logoErrors[selectedChannel.id] ? (
+                {selectedChannel.logo && !logoErrors[selectedChannel.logo] ? (
                   <img
                     src={`/api/proxy/image?url=${encodeURIComponent(selectedChannel.logo)}&name=${encodeURIComponent(selectedChannel.name)}`}
                     alt=""
                     className="w-full h-full object-contain"
-                    onError={() => setLogoErrors(prev => ({ ...prev, [selectedChannel.id]: true }))}
+                    onError={() => setLogoErrors(prev => ({ ...prev, [selectedChannel.logo]: true }))}
                   />
                 ) : (
                   <img src="/icon.png" alt="" className="w-full h-full object-contain" />
