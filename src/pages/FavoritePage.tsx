@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { RiHeartFill, RiTvLine, RiSearchLine, RiArrowDownSLine, RiArrowRightSLine, RiFilterLine, RiPlayFill } from '@remixicon/react';
 import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
-import { filterChannels } from '../utils/channelFilter';
+import { filterChannels, getGroupedChannels } from '../utils/channelFilter';
 
 const FavoritePage: React.FC = () => {
   const navigate = useNavigate();
@@ -27,14 +27,7 @@ const FavoritePage: React.FC = () => {
     return favChs.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
   }, [favChs, searchQuery])
 
-  const groupedFavs = useMemo(() => {
-    const g: Record<string, Channel[]> = {}
-    filteredFavs.forEach(ch => {
-      if (!g[ch.group]) g[ch.group] = []
-      g[ch.group].push(ch)
-    })
-    return Object.entries(g).map(([group, channels]) => ({ group, channels }))
-  }, [filteredFavs])
+  const groupedFavs = useMemo(() => getGroupedChannels(filteredFavs), [filteredFavs])
 
   useEffect(() => {
     const initial: Record<string, boolean> = {}

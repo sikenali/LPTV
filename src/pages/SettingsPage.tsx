@@ -30,10 +30,11 @@ const SettingsPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('theme');
   const [selectedTheme, setSelectedTheme] = useState(settings.theme);
   const [tvMode, setTvMode] = useState(settings.tvMode);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(settings.autoRefresh);
 
   useEffect(() => { setSelectedTheme(settings.theme); }, [settings.theme]);
   useEffect(() => { setTvMode(settings.tvMode); }, [settings.tvMode]);
+  useEffect(() => { setAutoRefresh(settings.autoRefresh); }, [settings.autoRefresh]);
 
   const isBlack = settings.theme === 'black';
   const sidebarBg = isBlack ? '#1a1a1a' : '#f8f3e8';
@@ -56,8 +57,8 @@ const SettingsPage: React.FC = () => {
             onClick={() => setActiveTab('theme')}
             className="w-full flex items-center rounded-[8px] transition-colors"
             style={{
-              background: activeTab === 'theme' ? '#fdfaf4' : 'transparent',
-              borderColor: activeTab === 'theme' ? '#e5d9c4' : 'transparent',
+              background: activeTab === 'theme' ? (isBlack ? 'rgba(255,255,255,0.05)' : '#fdfaf4') : 'transparent',
+              borderColor: activeTab === 'theme' ? (isBlack ? 'rgba(255,255,255,0.1)' : '#e5d9c4') : 'transparent',
               borderWidth: activeTab === 'theme' ? '1px' : '0px',
               padding: '14px 16px',
               gap: 12,
@@ -87,8 +88,8 @@ const SettingsPage: React.FC = () => {
             onClick={() => setActiveTab('mode')}
             className="w-full flex items-center rounded-[8px] transition-colors"
             style={{
-              background: activeTab === 'mode' ? '#fdfaf4' : 'transparent',
-              borderColor: activeTab === 'mode' ? '#e5d9c4' : 'transparent',
+              background: activeTab === 'mode' ? (isBlack ? 'rgba(255,255,255,0.05)' : '#fdfaf4') : 'transparent',
+              borderColor: activeTab === 'mode' ? (isBlack ? 'rgba(255,255,255,0.1)' : '#e5d9c4') : 'transparent',
               borderWidth: activeTab === 'mode' ? '1px' : '0px',
               padding: '14px 16px',
               gap: 12,
@@ -289,6 +290,7 @@ const SettingsPage: React.FC = () => {
                     onClick={() => {
                       const next = !autoRefresh;
                       setAutoRefresh(next);
+                      updateSettings({ autoRefresh: next });
                       if (next) showToast('频道自动更新已开启', 'success');
                       else showToast('频道自动更新已关闭', 'info');
                     }}

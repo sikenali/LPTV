@@ -21,7 +21,7 @@ type Action =
 
 const initialState: AppState = {
   favorites: [],
-  settings: { theme: 'glass', autoPlay: false, quality: 'high', tvMode: false },
+  settings: { theme: 'glass', autoPlay: false, quality: 'high', tvMode: false, autoRefresh: true },
   currentCategory: '全部',
   channels: [],
   channelsLoading: false,
@@ -176,16 +176,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     loadChannels();
-    startAutoRefresh();
   }, []);
 
   useEffect(() => {
+    if (state.settings.autoRefresh) {
+      startAutoRefresh();
+    } else if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
     return () => {
       if (refreshTimerRef.current) {
         clearTimeout(refreshTimerRef.current);
       }
     };
-  }, []);
+  }, [state.settings.autoRefresh, startAutoRefresh]);
 
   return (
     <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels, showToast }}>
