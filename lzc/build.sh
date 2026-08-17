@@ -31,12 +31,15 @@ locales:
 permissions:
   required:
     - net.internet
+runtime: node
+runtime_version: "20"
 PKGEOF
 
 rm -rf "$SCRIPT_DIR/_lpk_content"
-mkdir -p "$SCRIPT_DIR/_lpk_content/backend"
 mkdir -p "$SCRIPT_DIR/_lpk_content/frontend"
 mkdir -p "$SCRIPT_DIR/_lpk_content/scripts"
+mkdir -p "$SCRIPT_DIR/_lpk_content/channels"
+mkdir -p "$SCRIPT_DIR/_lpk_content/logos"
 
 cp "$SCRIPT_DIR/icon.png" "$SCRIPT_DIR/_lpk_content/icon.png"
 
@@ -44,15 +47,15 @@ cp "$SCRIPT_DIR/icon.png" "$SCRIPT_DIR/_lpk_content/icon.png"
 
 cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 
-(cd "$PROJECT_ROOT/backend/cmd/proxy" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$SCRIPT_DIR/_lpk_content/backend/lptv-proxy" .)
+cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
+cp -f "$PROJECT_ROOT/channels/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/channels/lptv.m3u8" 2>/dev/null || true
+cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null || true
 
-mkdir -p "$SCRIPT_DIR/_lpk_content/backend/logos"
-cp -f "$PROJECT_ROOT/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/backend/lptv.m3u8" 2>/dev/null || true
-cat > "$SCRIPT_DIR/_lpk_content/backend/run-server.sh" << 'RUNNER'
+cat > "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh" << 'RUNNER'
 #!/bin/sh
-exec /lzcapp/pkg/content/backend/lptv-proxy
+exec node /lzcapp/pkg/content/scripts/proxy-server.cjs
 RUNNER
-chmod +x "$SCRIPT_DIR/_lpk_content/backend/run-server.sh"
+chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh"
 
 (
   cd "$SCRIPT_DIR/_lpk_content/frontend"
@@ -75,10 +78,10 @@ set -e
 mkdir -p /app/data /app/logs
 chmod -R 777 /app/data || true
 
-/lzcapp/pkg/content/backend/run-server.sh >>/app/logs/backend.log 2>&1 &
+/lzcapp/pkg/content/scripts/start-server.sh >>/app/logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
-for i in $(seq 1 45); do
+for i in $(seq 1 30); do
   sleep 2
   if wget -qO- http://127.0.0.1:$BACKEND_PORT/health >/dev/null 2>&1; then
     echo "backend healthy after ${i}x2s"

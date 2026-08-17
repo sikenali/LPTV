@@ -1,7 +1,7 @@
 application:
   subdomain: lptv
   routes:
-    - /api=exec://8080,/lzcapp/pkg/content/backend/lptv-proxy
+    - /api=file:///lzcapp/pkg/content/scripts/proxy-server.cjs
     - /=file:///lzcapp/pkg/content/frontend
   environment:
     BACKEND_PORT: "8080"
@@ -11,5 +11,5 @@ application:
     NODE_ENV: production
   health_check:
     test_url: http://127.0.0.1:8080/health
-    start_period: 90s
+    start_period: 40s
     timeout: 10s
