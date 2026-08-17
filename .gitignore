@@ -12,3 +12,11 @@ frontend/
 
 # lzc build artifacts
 *.lpk
+
+# lzmail artifacts (unrelated)
+content.tar
+icon.png
+backend/lzmail
+scripts/
+manifest.yml
+package.yml
