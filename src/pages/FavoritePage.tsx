@@ -42,7 +42,7 @@ const FavoritePage: React.FC = () => {
 
   const handleChannelClick = (channel: Channel) => {
     localStorage.setItem('lastPlayedChannel', channel.id);
-    navigate('/');
+    navigate('/tv-mode');
   };
 
   if (favChs.length === 0) {
@@ -174,7 +174,7 @@ const FavoritePage: React.FC = () => {
                           <div className="p-4">
                             <div className="flex items-center justify-between">
                               <span className="font-semibold text-sm truncate flex-1" style={{ color: textPri }}>{ch.name}</span>
-                              <span className="text-[#c43d3d] ml-2"></span>
+                              <span className="text-[#c43d3d] ml-2"><RiHeartFill className="w-3.5 h-3.5" /></span>
                             </div>
                             <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: borderCol }}>
                               <span className="text-xs" style={{ color: subTxt }}>{ch.group}</span>

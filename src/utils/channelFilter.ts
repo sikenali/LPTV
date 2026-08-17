@@ -1,6 +1,6 @@
 import { Channel } from '../types'
 
-// 前端只展示这两个分组（其他频道、省份频道等暂隐藏）
+// 与 Web 模式保持一致：仅展示央视频道和卫视频道
 const DISPLAY_GROUPS = ['央视频道', '卫视频道']
 
 export function filterChannels(all: Channel[]): Channel[] {

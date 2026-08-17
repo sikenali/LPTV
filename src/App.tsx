@@ -40,7 +40,11 @@ const ThemedApp: React.FC = () => {
   const isBlack = settings.theme === 'black';
 
   return (
-    <div className="min-h-screen transition-all duration-300 ease-in-out" style={{ background: isBlack ? '#0a0a0a' : '#fbf7f0' }}>
+    <div
+      className="min-h-screen transition-all duration-300 ease-in-out"
+      style={{ background: isBlack ? '#0a0a0a' : '#fbf7f0' }}
+      data-theme={isBlack ? 'black' : 'glass'}
+    >
       <Toast />
       <Routes>
         <Route 
