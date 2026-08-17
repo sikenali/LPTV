@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "concurrently -n backend,frontend -c blue,green \"node scripts/proxy-server.cjs\" \"vite\"",
     "build": "tsc && vite build",
+    "fetch-logos": "node scripts/fetch-logos.cjs",
+    "fetch-logos:force": "node scripts/fetch-logos.cjs --force",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
