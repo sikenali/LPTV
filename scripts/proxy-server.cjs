@@ -278,13 +278,21 @@ app.get('/api/proxy/stream', async (req, res) => {
   streamUrl = String(streamUrl).trim()
 
   try {
-    new URL(streamUrl)
+    const parsed = new URL(streamUrl)
+    // SSRF 防护：仅允许 https 协议，阻止内网/本地地址
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return res.status(400).json({ error: 'Only http/https URLs are allowed' })
+    }
+    const hostname = parsed.hostname.toLowerCase()
+    const privatePrefixes = ['localhost', '127.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '192.168.', '169.254.']
+    if (privatePrefixes.some(p => hostname.startsWith(p) || hostname === 'localhost')) {
+      return res.status(403).json({ error: 'Internal IPs are not allowed' })
+    }
   } catch {
     return res.status(400).json({ error: 'Invalid stream URL' })
   }
 
   const referer = getSmartReferer(streamUrl)
-  const qualityParam = req.query.quality
 
   function setStreamCORS() {
     res.set('Access-Control-Allow-Origin', ALLOWED_ORIGINS[0] || '*')
@@ -412,11 +420,15 @@ app.get('/api/proxy/image', async (req, res) => {
   if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
 
   const BASE_DIR = path.join(__dirname, '..')
-  const LOGO_DIR = path.join(BASE_DIR, 'logos')
+  const LOGO_DIR = path.resolve(BASE_DIR, 'logos')
   const ext = path.extname(imgUrl) || '.png'
   // imgUrl 格式为 "logos/CCTV1.png"，提取文件名部分
-  const fileName = imgUrl.replace(/^.*[\\/]/, '').replace(/\.\.\//g, '').replace(/\.\.\\/g, '')
-  const localPath = path.join(LOGO_DIR, fileName)
+  const fileName = path.basename(imgUrl.replace(/^.*[\\/]/, ''))
+  const localPath = path.resolve(LOGO_DIR, fileName)
+  // 路径遍历防护：确保解析后的路径仍在 LOGO_DIR 下
+  if (!localPath.startsWith(LOGO_DIR + path.sep) && localPath !== LOGO_DIR) {
+    return res.status(403).json({ error: 'Access denied' })
+  }
 
   if (fs.existsSync(localPath)) {
     const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'

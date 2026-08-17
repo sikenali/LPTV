@@ -24,6 +24,7 @@ export interface AppState {
   channelsLoading: boolean;
   channelsError: string | null;
   lastPlayedChannel: string | null;
+  selectedChannel: Channel | null;
   channelStatus: Record<string, 'ok' | 'error' | 'unknown'>;
   toastMessage: string | null;
   toastType: 'success' | 'error' | 'info' | null;
