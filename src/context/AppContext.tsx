@@ -17,7 +17,8 @@ type Action =
   | { type: 'SET_CHANNELS_ERROR'; payload: string | null }
   | { type: 'SET_LAST_PLAYED_CHANNEL'; payload: string | null }
   | { type: 'SHOW_TOAST'; payload: { message: string; type?: 'success' | 'error' | 'info' } }
-  | { type: 'HIDE_TOAST' };
+  | { type: 'HIDE_TOAST' }
+  | { type: 'SET_TV_MODE'; payload: boolean };
 
 const initialState: AppState = {
   favorites: [],
@@ -30,6 +31,7 @@ const initialState: AppState = {
   channelStatus: {},
   toastMessage: null,
   toastType: null,
+  tvModeState: 'off',
 };
 
 const reducer = (state: AppState, action: Action): AppState => {
@@ -66,6 +68,12 @@ const reducer = (state: AppState, action: Action): AppState => {
       };
     case 'HIDE_TOAST':
       return { ...state, toastMessage: null, toastType: null };
+    case 'SET_TV_MODE':
+      return {
+        ...state,
+        settings: { ...state.settings, tvMode: action.payload },
+        tvModeState: action.payload ? 'on' : 'off',
+      };
     default:
       return state;
   }
@@ -77,6 +85,7 @@ interface AppContextType extends AppState {
   toggleFavorite: (id: string) => void;
   updateSettings: (settings: Partial<UserSettings>) => void;
   setCategory: (category: string) => void;
+  setTvMode: (on: boolean) => void;
   loadChannels: (refresh?: boolean) => Promise<void>;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
@@ -124,6 +133,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addFavorite = (id: string) => dispatch({ type: 'ADD_FAVORITE', payload: id });
   const removeFavorite = (id: string) => dispatch({ type: 'REMOVE_FAVORITE', payload: id });
   const setCategory = (category: string) => dispatch({ type: 'SET_CATEGORY', payload: category });
+  const setTvMode = (on: boolean) => dispatch({ type: 'SET_TV_MODE', payload: on });
   const showToast = useCallback((message: string, type: 'success'|'error'|'info' = 'success') => {
     dispatch({ type: 'SHOW_TOAST', payload: { message, type } });
     setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 2000);
