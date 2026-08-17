@@ -233,7 +233,7 @@ export default function ChannelPage() {
                               >
                                 <div className="flex items-center gap-3 pl-2 pr-2 flex-1 min-w-0">
                                   <div className="w-9 h-9 rounded-full shrink-0 overflow-hidden"
-                                    style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
+                                    style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)' }}
                                   >
                                     {ch.logo && !logoErrors[ch.id] ? (
                                       <img
@@ -322,7 +322,7 @@ export default function ChannelPage() {
           <div className="flex-[0_0_52px] flex items-center justify-between px-4" style={{ background: '#0d0a08', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="w-7 h-7 rounded-full shrink-0 overflow-hidden flex items-center justify-center"
-                style={{ background: '#c43d3d' }}
+                style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)' }}
               >
                 {selectedChannel.logo && !logoErrors[selectedChannel.id] ? (
                   <img
