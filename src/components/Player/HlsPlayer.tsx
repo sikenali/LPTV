@@ -15,7 +15,7 @@ function proxyUrl(url: string) {
 
 const LOADING_TIMEOUT = 30000
 
-export default function HlsPlayer({ url, channelName: _channelName, channelLogo: _channelLogo, onError }: HlsPlayerProps) {
+export default function HlsPlayer({ url, channelName: _channelName, channelLogo, onError }: HlsPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -218,6 +218,14 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo:
 
   return (
     <div className="relative w-full h-full bg-black">
+      {channelLogo && (
+        <img
+          src={`/api/proxy/image?url=${encodeURIComponent(channelLogo)}`}
+          alt=""
+          className="absolute top-3 left-3 w-16 h-16 object-contain opacity-80 pointer-events-none z-10"
+          style={{ mixBlendMode: 'screen' }}
+        />
+      )}
       <video
         ref={videoRef}
         className="w-full h-full object-contain"
