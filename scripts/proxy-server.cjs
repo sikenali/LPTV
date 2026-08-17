@@ -411,13 +411,12 @@ app.get('/api/proxy/image', async (req, res) => {
   const name = req.query.name || ''
   if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
 
-  // 本地台标：imgUrl 为相对于项目根的 logos/xxx.png 路径
-  // 只过滤路径穿越，保留原始频道名（含中文）以匹配 lptv.py 的保存方式
   const BASE_DIR = path.join(__dirname, '..')
+  const LOGO_DIR = path.join(BASE_DIR, 'logos')
   const ext = path.extname(imgUrl) || '.png'
-  // 移除路径穿越和前后斜杠，保留中文/字母/数字/标点
-  const sanitized = imgUrl.replace(/\.\.\//g, '').replace(/\.\.\\/g, '').replace(/^[/\\]+|[/\\]+$/g, '')
-  const localPath = path.join(BASE_DIR, 'logos', sanitized)
+  // imgUrl 格式为 "logos/CCTV1.png"，提取文件名部分
+  const fileName = imgUrl.replace(/^.*[\\/]/, '').replace(/\.\.\//g, '').replace(/\.\.\\/g, '')
+  const localPath = path.join(LOGO_DIR, fileName)
 
   if (fs.existsSync(localPath)) {
     const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
@@ -425,14 +424,14 @@ app.get('/api/proxy/image', async (req, res) => {
     return res.send(fs.readFileSync(localPath))
   }
 
-  // 远程台标：hash 缓存
+  // 远程台标 fallback：hash 缓存到 logos/hash.png
   const hash = crypto.createHash('md5').update(imgUrl).digest('hex')
   const hashPath = path.join(LOGO_DIR, hash + ext)
 
-  if (fs.existsSync(localPath)) {
+  if (fs.existsSync(hashPath)) {
     const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
     res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': contentType })
-    return res.send(fs.readFileSync(localPath))
+    return res.send(fs.readFileSync(hashPath))
   }
 
   try {
@@ -443,6 +442,7 @@ app.get('/api/proxy/image', async (req, res) => {
     if (!response.ok) throw new Error('Fetch failed')
 
     const buffer = Buffer.from(await response.arrayBuffer())
+    fs.mkdirSync(LOGO_DIR, { recursive: true })
     fs.writeFileSync(localPath, buffer)
     fs.writeFileSync(hashPath, buffer)
     res.set({
