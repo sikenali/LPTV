@@ -254,14 +254,6 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, channelName: 
 
   return (
     <div ref={containerRef} className="relative w-full h-full bg-black">
-      {channelLogo && (
-        <img
-          src={`/api/proxy/image?url=${encodeURIComponent(channelLogo)}`}
-          alt=""
-          className="absolute top-3 left-3 w-16 h-16 object-contain opacity-80 pointer-events-none z-10"
-          style={{ mixBlendMode: 'screen' }}
-        />
-      )}
       <video
         ref={videoRef}
         className="w-full h-full object-contain"
