@@ -252,7 +252,7 @@ const SettingsPage: React.FC = () => {
                 <div className="mt-8 rounded-xl border" style={{ background: cardBg, borderColor: cardBorder }}>
                   <div style={{ padding: 24 }}>
                     <div className="flex items-center gap-2 mb-4">
-                      <span className="text-base leading-tight" style={{ color: '#c9a96e', fontFamily: 'remixicon' }}></span>
+                      <RiPaletteLine className="w-4 h-4" style={{ color: '#c9a96e' }} />
                       <span className="font-medium leading-tight" style={{ color: textPri, fontSize: 14, lineHeight: 1.29 }}>实时预览</span>
                     </div>
 

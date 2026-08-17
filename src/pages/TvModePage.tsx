@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  RiArrowLeftSLine, RiHeartFill, RiHeartLine, RiArrowDownSLine,
-  RiArrowUpSLine, RiCloseLine, RiPlayListLine, RiTvLine, RiFullscreenLine,
+  RiArrowLeftSLine, RiArrowRightSLine, RiHeartFill, RiHeartLine, RiArrowDownSLine,
+  RiArrowUpSLine, RiCloseLine, RiTvLine,
 } from '@remixicon/react';
 import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
@@ -148,11 +148,27 @@ const TvModePage: React.FC = () => {
           break;
         }
         case 'Enter': {
+          if (!selectedChannel) {
+            e.preventDefault();
+            if (groupChannels.length > 0) handleChannelSelect(groupChannels[0]);
+          }
           break;
         }
         case 'Escape': {
           e.preventDefault();
           navigate('/');
+          break;
+        }
+        case 'ArrowLeft': {
+          e.preventDefault();
+          const idx = grouped.findIndex(g => g.group === activeCategory);
+          if (idx > 0) setActiveCategory(grouped[idx - 1].group);
+          break;
+        }
+        case 'ArrowRight': {
+          e.preventDefault();
+          const idx = grouped.findIndex(g => g.group === activeCategory);
+          if (idx < grouped.length - 1) setActiveCategory(grouped[idx + 1].group);
           break;
         }
       }
@@ -275,22 +291,17 @@ const TvModePage: React.FC = () => {
             <span className="text-xs">切换频道</span>
           </div>
           <div className="flex items-center gap-2 text-white/40">
-            <RiPlayListLine className="w-4 h-4" />
-            <span className="text-xs">节目列表</span>
+            <RiArrowLeftSLine className="w-4 h-4" />
+            <RiArrowRightSLine className="w-4 h-4" />
+            <span className="text-xs">切换分类</span>
+          </div>
+          <div className="flex items-center gap-2 text-white/40">
+            <RiCloseLine className="w-4 h-4" />
+            <span className="text-xs">退出 TV</span>
           </div>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-white/40">
-            <RiFullscreenLine className="w-4 h-4" />
-            <span className="text-xs">画面比例</span>
-          </div>
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 px-5 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-white/80 text-sm transition-all"
-          >
-            <RiCloseLine className="w-5 h-5" />
-            <span>退出 TV 模式</span>
-          </button>
+        <div className="text-white/30 text-xs">
+          {selectedChannel ? `${selectedChannel.name}` : '请选择频道'}
         </div>
       </div>
     </div>
