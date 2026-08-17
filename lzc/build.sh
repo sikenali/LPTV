@@ -60,11 +60,29 @@ cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null 
 
 cat > "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh" << 'RUNNER'
 #!/bin/sh
+set -e
+
+# 记录启动时间
+echo "[start] $(date) - Starting server..."
+
 # 若 node_modules 不存在則自動安裝依賴（容器首次啟動時執行）
 if [ ! -d "/lzcapp/pkg/content/node_modules" ]; then
-  echo "[start] installing dependencies..."
-  npm install --prefix /lzcapp/pkg/content --production --loglevel=error
+  echo "[start] Installing dependencies..."
+  cd /lzcapp/pkg/content
+  npm install --production --loglevel=verbose 2>&1 || {
+    echo "[start] ERROR: npm install failed"
+    exit 1
+  }
+  echo "[start] Dependencies installed successfully"
+else
+  echo "[start] node_modules exists, skipping npm install"
 fi
+
+# 检查端口是否在环境变量中
+PORT="${PORT:-8080}"
+echo "[start] Starting server on port $PORT..."
+
+# 启动服务
 exec node /lzcapp/pkg/content/scripts/proxy-server.cjs
 RUNNER
 chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh"
@@ -87,25 +105,50 @@ cat > "$SCRIPT_DIR/_lpk_content/scripts/start.sh" << 'STARTSCRIPT'
 #!/bin/sh
 set -e
 
+echo "=== LPTV Container Start ==="
+echo "Start time: $(date)"
+
 mkdir -p /app/data /app/logs
 chmod -R 777 /app/data || true
 
+# 使用 BACKEND_PORT 或默认 8080
+BACKEND_PORT="${BACKEND_PORT:-8080}"
+echo "Backend port: $BACKEND_PORT"
+
+# 启动后端服务（后台运行）
 /lzcapp/pkg/content/scripts/start-server.sh >>/app/logs/backend.log 2>&1 &
 BACKEND_PID=$!
+echo "Backend PID: $BACKEND_PID"
 
+# 等待后端健康检查（最多 60 秒）
+echo "Waiting for backend to be healthy..."
+HEALTHY=0
 for i in $(seq 1 30); do
   sleep 2
   if wget -qO- http://127.0.0.1:$BACKEND_PORT/health >/dev/null 2>&1; then
     echo "backend healthy after ${i}x2s"
+    HEALTHY=1
     break
   fi
+  # 检查进程是否还在运行
   if ! kill -0 $BACKEND_PID 2>/dev/null; then
-    echo "backend exited with code $?, logs:"
-    cat /app/logs/backend.log
+    echo "backend exited unexpectedly, logs:"
+    cat /app/logs/backend.log 2>/dev/null || true
     exit 1
+  fi
+  # 每 10 秒打印一次进度
+  if [ $((i % 5)) -eq 0 ]; then
+    echo "waiting... ${i}x2s"
   fi
 done
 
+if [ $HEALTHY -eq 0 ]; then
+  echo "backend health check failed after 60s"
+  cat /app/logs/backend.log 2>/dev/null || true
+  exit 1
+fi
+
+# 保持容器运行
 while kill -0 $BACKEND_PID 2>/dev/null; do
   sleep 2
 done
