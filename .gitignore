@@ -20,3 +20,8 @@ backend/lzmail
 scripts/
 manifest.yml
 package.yml
+
+# lzc build output
+lzc/_lpk_content/
+backend/lzmail
+scripts/
