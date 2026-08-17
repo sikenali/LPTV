@@ -232,8 +232,8 @@ export default function ChannelPage() {
                                 }}
                               >
                                 <div className="flex items-center gap-3 pl-2 pr-2 flex-1 min-w-0">
-                                  <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center overflow-hidden"
-                                    style={{ background: isSelected ? '#c43d3d' : '#5b8c5a' }}
+                                  <div className="w-9 h-9 rounded-full shrink-0 overflow-hidden"
+                                    style={{ background: ch.logo && !logoErrors[ch.id] ? 'transparent' : (isSelected ? '#c43d3d' : '#5b8c5a') }}
                                   >
                                     {ch.logo && !logoErrors[ch.id] ? (
                                       <img
@@ -247,11 +247,10 @@ export default function ChannelPage() {
                                         src="/icon.png"
                                         alt=""
                                         className="w-full h-full object-contain"
-                                        onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
                                       />
                                     )}
-                                    {logoErrors[ch.id] && (
-                                      <span className="text-white font-bold text-xs">{ch.name.substring(0, 2)}</span>
+                                    {ch.logo && logoErrors[ch.id] && (
+                                      <span className="absolute text-white font-bold text-xs">{ch.name.substring(0, 2)}</span>
                                     )}
                                   </div>
                                   <div className="flex-1 text-left min-w-0">
