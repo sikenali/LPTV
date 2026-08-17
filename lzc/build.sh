@@ -48,6 +48,8 @@ cp "$SCRIPT_DIR/icon.png" "$SCRIPT_DIR/_lpk_content/icon.png"
 cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
+# 將專為容器後端的 package.json 複製到部署包（只含 express/cors/m3u-parser-generator）
+cp "$SCRIPT_DIR/backend-package.json" "$SCRIPT_DIR/_lpk_content/package.json"
 cp -f "$PROJECT_ROOT/channels/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/channels/lptv.m3u8" 2>/dev/null || true
 # 如果本地 logos/ 为空，尝试从 GitHub 下载常用频道台标
 if [ -z "$(ls -A "$PROJECT_ROOT/logos/" 2>/dev/null)" ]; then
@@ -58,6 +60,11 @@ cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null 
 
 cat > "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh" << 'RUNNER'
 #!/bin/sh
+# 若 node_modules 不存在則自動安裝依賴（容器首次啟動時執行）
+if [ ! -d "/lzcapp/pkg/content/node_modules" ]; then
+  echo "[start] installing dependencies..."
+  npm install --prefix /lzcapp/pkg/content --production --loglevel=error
+fi
 exec node /lzcapp/pkg/content/scripts/proxy-server.cjs
 RUNNER
 chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh"
