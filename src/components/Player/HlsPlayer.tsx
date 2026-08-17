@@ -251,7 +251,7 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
   }), [pause, resume, toggleFullscreen])
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-black">
+    <div ref={containerRef} className="relative w-full h-full bg-black" style={{ height: '100%', minHeight: 0 }}>
       <video
         ref={videoRef}
         className="w-full h-full object-contain"

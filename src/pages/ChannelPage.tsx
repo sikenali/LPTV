@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
 import HlsPlayer, { type HlsPlayerRef } from '../components/Player/HlsPlayer'
@@ -15,15 +16,16 @@ const groupIcons: Record<string, { color: string }> = {
 const VALIDATED_URLS_KEY = 'lptv_validated_urls'
 
 export default function ChannelPage() {
-  const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite } = useApp()
+  const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite, setChannelStatus } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   const [logoErrors, setLogoErrors] = useState<Record<string, boolean>>({})
-  const [channelStatus, setChannelStatus] = useState<Record<string, 'ok' | 'error' | 'unknown'>>({})
+  const [channelStatus, setLocalChannelStatus] = useState<Record<string, 'ok' | 'error' | 'unknown'>>({})
   const [isPaused, setIsPaused] = useState(false)
   const playerRef = useRef<HlsPlayerRef>(null)
+  const location = useLocation()
 
   useEffect(() => {
     const allowed = filterChannels(channels)
@@ -33,27 +35,40 @@ export default function ChannelPage() {
     let stored: string[] = []
     try { stored = JSON.parse(localStorage.getItem(VALIDATED_URLS_KEY) || '[]') } catch {}
 
-    allowed.forEach(ch => {
-      if (current[ch.id] !== undefined) return
-
-      if (stored.includes(ch.url)) {
-        current[ch.id] = 'ok'
-      } else {
-        fetch(`/api/probe?url=${encodeURIComponent(ch.url)}`, { signal: AbortSignal.timeout(3000) })
-          .then(resp => resp.json().then(d => ({ ok: d.status === 'ok' })))
-          .catch(() => ({ ok: false }))
-          .then(({ ok }) => {
-            if (ok) {
-              stored.push(ch.url)
-              try { localStorage.setItem(VALIDATED_URLS_KEY, JSON.stringify(stored)) } catch {}
-              current[ch.id] = 'ok'
-            } else {
-              current[ch.id] = 'error'
-            }
-            setChannelStatus({ ...current })
-          })
-      }
+    // 并发限制：最多同时探测 5 个频道
+    const MAX_CONCURRENT = 5
+    let running = 0
+    const queue = allowed.filter(ch => {
+      if (current[ch.id] !== undefined) return false
+      return true
     })
+
+    const runProbe = (ch: Channel) => {
+      running++
+      const signal = AbortSignal.timeout(3000)
+      fetch(`/api/probe?url=${encodeURIComponent(ch.url)}`, { signal })
+        .then(resp => resp.json().then(d => ({ ok: d.status === 'ok' })))
+        .catch(() => ({ ok: false }))
+        .then(({ ok }) => {
+          if (ok) {
+            stored.push(ch.url)
+            try { localStorage.setItem(VALIDATED_URLS_KEY, JSON.stringify(stored)) } catch {}
+            current[ch.id] = 'ok'
+          } else {
+            current[ch.id] = 'error'
+          }
+          setLocalChannelStatus({ ...current }); setChannelStatus({ ...current })
+          running--
+          // 调度下一个
+          const next = queue.find(c => current[c.id] === undefined)
+          if (next) runProbe(next)
+        })
+    }
+
+    // 启动第一批
+    for (let i = 0; i < Math.min(MAX_CONCURRENT, queue.length); i++) {
+      runProbe(queue[i])
+    }
   }, [channels])
 
   useEffect(() => {
@@ -74,7 +89,14 @@ export default function ChannelPage() {
     if (cctv1) {
       setSelectedChannel(cctv1)
     }
-  }, [channels])
+
+    // Handle channel selection from favorites navigation
+    const state = location.state as { selectChannel?: Channel } | null
+    if (state?.selectChannel) {
+      setSelectedChannel(state.selectChannel)
+      window.history.replaceState({}, '')
+    }
+  }, [channels, location])
 
   const filtered = useMemo(() => {
     const allowed = filterChannels(channels)

@@ -16,9 +16,11 @@ type Action =
   | { type: 'SET_CHANNELS_LOADING'; payload: boolean }
   | { type: 'SET_CHANNELS_ERROR'; payload: string | null }
   | { type: 'SET_LAST_PLAYED_CHANNEL'; payload: string | null }
+  | { type: 'SET_SELECTED_CHANNEL'; payload: Channel | null }
   | { type: 'SHOW_TOAST'; payload: { message: string; type?: 'success' | 'error' | 'info' } }
   | { type: 'HIDE_TOAST' }
-  | { type: 'SET_TV_MODE'; payload: boolean };
+  | { type: 'SET_TV_MODE'; payload: boolean }
+  | { type: 'SET_CHANNEL_STATUS'; payload: Record<string, 'ok' | 'error' | 'unknown'> };
 
 const initialState: AppState = {
   favorites: [],
@@ -28,6 +30,7 @@ const initialState: AppState = {
   channelsLoading: false,
   channelsError: null,
   lastPlayedChannel: null,
+  selectedChannel: null,
   channelStatus: {},
   toastMessage: null,
   toastType: null,
@@ -60,6 +63,8 @@ const reducer = (state: AppState, action: Action): AppState => {
       return { ...state, channelsError: action.payload, channelsLoading: false };
     case 'SET_LAST_PLAYED_CHANNEL':
       return { ...state, lastPlayedChannel: action.payload };
+    case 'SET_SELECTED_CHANNEL':
+      return { ...state, selectedChannel: action.payload };
     case 'SHOW_TOAST':
       return {
         ...state,
@@ -74,6 +79,8 @@ const reducer = (state: AppState, action: Action): AppState => {
         settings: { ...state.settings, tvMode: action.payload },
         tvModeState: action.payload ? 'on' : 'off',
       };
+    case 'SET_CHANNEL_STATUS':
+      return { ...state, channelStatus: action.payload };
     default:
       return state;
   }
@@ -86,7 +93,9 @@ interface AppContextType extends AppState {
   updateSettings: (settings: Partial<UserSettings>) => void;
   setCategory: (category: string) => void;
   setTvMode: (on: boolean) => void;
+  setChannelStatus: (status: Record<string, 'ok' | 'error' | 'unknown'>) => void;
   loadChannels: (refresh?: boolean) => Promise<void>;
+  setSelectedChannel: (ch: Channel | null) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -134,6 +143,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const removeFavorite = (id: string) => dispatch({ type: 'REMOVE_FAVORITE', payload: id });
   const setCategory = (category: string) => dispatch({ type: 'SET_CATEGORY', payload: category });
   const setTvMode = (on: boolean) => dispatch({ type: 'SET_TV_MODE', payload: on });
+  const setChannelStatus = (status: Record<string, 'ok' | 'error' | 'unknown'>) => dispatch({ type: 'SET_CHANNEL_STATUS', payload: status });
   const showToast = useCallback((message: string, type: 'success'|'error'|'info' = 'success') => {
     dispatch({ type: 'SHOW_TOAST', payload: { message, type } });
     setTimeout(() => dispatch({ type: 'HIDE_TOAST' }), 2000);
@@ -148,7 +158,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateSettings = useCallback((settings: Partial<UserSettings>) => {
     dispatch({ type: 'UPDATE_SETTINGS', payload: settings })
     if (settings.theme) {
-      const name = settings.theme === 'glass' ? '羊皮纸' : settings.theme === 'black' ? '近黑' : settings.theme
+      const name = settings.theme === 'glass' ? '羊皮纸' : '近黑'
       showToast(`主题已切换为「${name}」`, 'info')
     }
   }, [showToast])
@@ -173,6 +183,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       dispatch({ type: 'SET_CHANNELS_ERROR', payload: err instanceof Error ? err.message : '加载失败' });
     }
+  }, []);
+
+  const setSelectedChannel = useCallback((ch: Channel | null) => {
+    dispatch({ type: 'SET_SELECTED_CHANNEL', payload: ch });
   }, []);
 
   const startAutoRefresh = useCallback(() => {
@@ -203,7 +217,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [state.settings.autoRefresh, startAutoRefresh]);
 
   return (
-    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels, showToast, setTvMode }}>
+    <AppContext.Provider value={{ ...state, addFavorite, removeFavorite, toggleFavorite, updateSettings, setCategory, loadChannels, showToast, setTvMode, setSelectedChannel, setChannelStatus }}>
       {children}
     </AppContext.Provider>
   );

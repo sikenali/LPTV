@@ -41,8 +41,7 @@ const FavoritePage: React.FC = () => {
   }
 
   const handleChannelClick = (channel: Channel) => {
-    localStorage.setItem('lastPlayedChannel', channel.id);
-    navigate('/tv-mode');
+    navigate('/', { state: { selectChannel: channel } });
   };
 
   if (favChs.length === 0) {
