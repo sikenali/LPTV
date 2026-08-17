@@ -1,0 +1,1 @@
+const r=["央视频道","卫视频道"];function s(e,t=r){return e.filter(n=>t.includes(n.group))}function a(e,t=r){return t.map(n=>({group:n,channels:e.filter(l=>l.group===n)})).filter(n=>n.channels.length>0)}export{s as f,a as g};
