@@ -3,8 +3,6 @@ import Hls from 'hls.js'
 
 interface HlsPlayerProps {
   url: string
-  channelName?: string
-  channelLogo?: string
   onError?: (err: Error) => void
 }
 
@@ -21,7 +19,7 @@ function proxyUrl(url: string) {
 
 const LOADING_TIMEOUT = 30000
 
-const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, channelName: _channelName, channelLogo, onError }, ref) => {
+const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)

@@ -208,8 +208,6 @@ const TvModePage: React.FC = () => {
           {selectedChannel ? (
             <HlsPlayer
               url={selectedChannel.url}
-              channelName={selectedChannel.name}
-              channelLogo={selectedChannel.logo}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900">

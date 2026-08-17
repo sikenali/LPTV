@@ -305,8 +305,6 @@ export default function ChannelPage() {
             <HlsPlayer
               ref={playerRef}
               url={selectedChannel.url}
-              channelName={selectedChannel.name}
-              channelLogo={selectedChannel.logo}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
