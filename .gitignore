@@ -6,3 +6,6 @@ dist/
 .DS_Store
 local.m3u8
 logos/
+
+# lzmail project (separate repo)
+frontend/
