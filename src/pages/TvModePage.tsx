@@ -148,10 +148,6 @@ const TvModePage: React.FC = () => {
           break;
         }
         case 'Enter': {
-          e.preventDefault();
-          if (selectedChannel) {
-            handleChannelSelect(selectedChannel);
-          }
           break;
         }
         case 'Escape': {

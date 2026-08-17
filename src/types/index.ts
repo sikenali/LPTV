@@ -11,6 +11,7 @@ export interface UserSettings {
   autoPlay: boolean;
   quality: 'high' | 'medium' | 'low';
   tvMode: boolean;
+  autoRefresh: boolean;
 }
 
 export interface AppState {

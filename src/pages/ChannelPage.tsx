@@ -24,12 +24,6 @@ export default function ChannelPage() {
   const [channelStatus, setChannelStatus] = useState<Record<string, 'ok' | 'error' | 'unknown'>>({})
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300)
-    return () => clearTimeout(timer)
-  }, [searchQuery])
-
-  // Validate channels on load
-  useEffect(() => {
     const allowed = filterChannels(channels)
     if (allowed.length === 0) return
 
@@ -229,12 +223,12 @@ export default function ChannelPage() {
                                   <RiHeartLine className="w-4 h-4" style={{ color: subTxt }} />
                                 )}
                               </span>
-                              <span className="shrink-0 w-[6px]">
+                              <span className="shrink-0 flex items-center justify-center" style={{ width: '6px' }}>
                                 {channelStatus[ch.id] === 'ok' && (
-                                  <span className="block w-[5px] h-[5px] rounded-full bg-green-500 mx-auto" />
+                                  <span className="block w-[5px] h-[5px] rounded-full bg-green-500" style={{ margin: 'auto' }} />
                                 )}
                                 {channelStatus[ch.id] === 'error' && (
-                                  <span className="block w-[5px] h-[5px] rounded-full bg-red-500 mx-auto" />
+                                  <span className="block w-[5px] h-[5px] rounded-full bg-red-500" style={{ margin: 'auto' }} />
                                 )}
                               </span>
                               {isSelected ? (
