@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '../context/AppContext'
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
-import HlsPlayer from '../components/Player/HlsPlayer'
-import { RiSearchLine, RiArrowDownSLine, RiArrowRightSLine, RiTvFill, RiHeartFill, RiHeartLine, RiPlayFill } from '@remixicon/react'
+import HlsPlayer, { type HlsPlayerRef } from '../components/Player/HlsPlayer'
+import { RiSearchLine, RiArrowDownSLine, RiArrowRightSLine, RiTvFill, RiHeartFill, RiHeartLine, RiPlayFill, RiPauseFill, RiFullscreenFill, RiFullscreenExitFill } from '@remixicon/react'
 import type { Channel } from '../types'
 
 const groupIcons: Record<string, { color: string }> = {
@@ -22,6 +22,8 @@ export default function ChannelPage() {
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   const [logoErrors, setLogoErrors] = useState<Record<string, boolean>>({})
   const [channelStatus, setChannelStatus] = useState<Record<string, 'ok' | 'error' | 'unknown'>>({})
+  const [isPaused, setIsPaused] = useState(false)
+  const playerRef = useRef<HlsPlayerRef>(null)
 
   useEffect(() => {
     const allowed = filterChannels(channels)
@@ -84,6 +86,20 @@ export default function ChannelPage() {
 
   const toggleCategory = (group: string) => {
     setExpandedCategories(prev => ({ ...prev, [group]: !prev[group] }))
+  }
+
+  const handlePause = () => {
+    playerRef.current?.pause()
+    setIsPaused(true)
+  }
+
+  const handlePlay = () => {
+    playerRef.current?.resume()
+    setIsPaused(false)
+  }
+
+  const handleToggleFullscreen = () => {
+    playerRef.current?.toggleFullscreen()
   }
 
   const isBlack = settings.theme === 'black'
@@ -288,9 +304,10 @@ export default function ChannelPage() {
       </div>
 
       <div className="flex-1 flex flex-col min-h-0" style={{ background: '#1a1410' }}>
-        <div className="flex-1 relative bg-[#0d0a08]">
+        <div className="flex-[0_0_480px] relative bg-[#0d0a08]">
           {selectedChannel ? (
             <HlsPlayer
+              ref={playerRef}
               url={selectedChannel.url}
               channelName={selectedChannel.name}
               channelLogo={selectedChannel.logo}
@@ -306,6 +323,46 @@ export default function ChannelPage() {
             </div>
           )}
         </div>
+
+        {selectedChannel && (
+          <div className="flex-[0_0_48px] flex items-center justify-between px-4" style={{ background: '#0d0a08', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center overflow-hidden"
+                style={{ background: '#c43d3d' }}
+              >
+                {selectedChannel.logo && !logoErrors[selectedChannel.id] ? (
+                  <img
+                    src={`/api/proxy/image?url=${encodeURIComponent(selectedChannel.logo)}&name=${encodeURIComponent(selectedChannel.name)}`}
+                    alt=""
+                    className="w-full h-full object-contain"
+                    onError={() => setLogoErrors(prev => ({ ...prev, [selectedChannel.id]: true }))}
+                  />
+                ) : (
+                  <img src="/icon.png" alt="" className="w-full h-full object-contain" />
+                )}
+              </div>
+              <span className="text-white/90 text-sm font-medium truncate">{selectedChannel.name}</span>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              {isPaused ? (
+                <button onClick={handlePlay} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                  <RiPlayFill className="w-5 h-5 text-white" />
+                </button>
+              ) : (
+                <button onClick={handlePause} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                  <RiPauseFill className="w-5 h-5 text-white" />
+                </button>
+              )}
+              <button onClick={handleToggleFullscreen} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                {document.fullscreenElement ? (
+                  <RiFullscreenExitFill className="w-5 h-5 text-white" />
+                ) : (
+                  <RiFullscreenFill className="w-5 h-5 text-white" />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

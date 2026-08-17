@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react'
 import Hls from 'hls.js'
 
 interface HlsPlayerProps {
@@ -8,6 +8,12 @@ interface HlsPlayerProps {
   onError?: (err: Error) => void
 }
 
+export interface HlsPlayerRef {
+  pause: () => void
+  resume: () => void
+  toggleFullscreen: () => void
+}
+
 function proxyUrl(url: string) {
   const base = '/api/proxy/stream'
   return `${base}?url=${encodeURIComponent(url)}`
@@ -15,7 +21,7 @@ function proxyUrl(url: string) {
 
 const LOADING_TIMEOUT = 30000
 
-export default function HlsPlayer({ url, channelName: _channelName, channelLogo, onError }: HlsPlayerProps) {
+const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, channelName: _channelName, channelLogo, onError }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -28,6 +34,7 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo,
   const timeoutRef = useRef<number | null>(null)
   const errorTypeRef = useRef<string | null>(null)
   const isPlayingRef = useRef(false)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   const clearAllTimers = useCallback(() => {
     if (timeoutRef.current) {
@@ -216,8 +223,37 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo,
     initHls(url)
   }
 
+  const pause = useCallback(() => {
+    videoRef.current?.pause()
+    isPlayingRef.current = false
+    setShowPlayOverlay(false)
+  }, [])
+
+  const resume = useCallback(() => {
+    videoRef.current?.play().then(() => {
+      isPlayingRef.current = true
+      setShowPlayOverlay(false)
+    }).catch(() => setShowPlayOverlay(true))
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().catch(() => {})
+    } else {
+      document.exitFullscreen().catch(() => {})
+    }
+  }, [])
+
+  useImperativeHandle(ref, () => ({
+    pause,
+    resume,
+    toggleFullscreen,
+  }), [pause, resume, toggleFullscreen])
+
   return (
-    <div className="relative w-full h-full bg-black">
+    <div ref={containerRef} className="relative w-full h-full bg-black">
       {channelLogo && (
         <img
           src={`/api/proxy/image?url=${encodeURIComponent(channelLogo)}`}
@@ -230,7 +266,6 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo,
         ref={videoRef}
         className="w-full h-full object-contain"
         playsInline
-        controls
         onLoadedData={() => {
           isPlayingRef.current = true
           setShowPlayOverlay(false)
@@ -238,7 +273,7 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo,
         onClick={() => {
           if (videoRef.current) {
             if (isPlayingRef.current) {
-              videoRef.current.play().catch(() => {})
+              videoRef.current.pause()
             } else {
               videoRef.current.play()
                 .then(() => {
@@ -289,4 +324,7 @@ export default function HlsPlayer({ url, channelName: _channelName, channelLogo,
       )}
     </div>
   )
-}
+})
+
+HlsPlayer.displayName = 'HlsPlayer'
+export default HlsPlayer
