@@ -8,8 +8,10 @@ const { M3uParser } = require('m3u-parser-generator')
 
 const app = express()
 const PORT = process.env.PORT || 3000
-const LOCAL_M3U_PATH = path.join(__dirname, '..', 'local.m3u8')
-const M3U_URL = 'https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8'
+const LOCAL_M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
+const LOCAL_M3U_FALLBACK = path.join(__dirname, '..', 'local.m3u8')
+// 开发环境本地文件不存在时的兜底源（本项目 GitHub raw 地址）
+const M3U_URL = 'https://raw.githubusercontent.com/sikenali/lptv/refs/heads/main/channels/lptv.m3u8'
 const CACHE_TTL = 4 * 60 * 60 * 1000
 const LOGO_DIR = path.join(__dirname, '..', 'logos')
 const STREAM_TIMEOUT = 30000
@@ -91,8 +93,8 @@ function deduplicateChannels(channels) {
     }
 
     const existing = nameMap.get(key)
-    const existingPriority = GROUP_PRIORITY.indexOf(existing.group)
-    const newPriority = GROUP_PRIORITY.indexOf(channel.group)
+    const existingPriority = GROUP_PRIORITY_INDEX[existing.group] ?? 999
+    const newPriority = GROUP_PRIORITY_INDEX[channel.group] ?? 999
 
     if (newPriority > existingPriority) {
       nameMap.set(key, channel)
@@ -113,10 +115,13 @@ app.get('/api/m3u', async (req, res) => {
 
   try {
     let text
-    const useLocal = process.env.USE_LOCAL_M3U === 'true'
+    const useLocal = process.env.USE_LOCAL_M3U !== 'false'
     if (useLocal && fs.existsSync(LOCAL_M3U_PATH)) {
       text = fs.readFileSync(LOCAL_M3U_PATH, 'utf-8')
-      console.log('[m3u] loaded from local file (USE_LOCAL_M3U=true):', LOCAL_M3U_PATH)
+      console.log('[m3u] loaded from local lptv.m3u8:', LOCAL_M3U_PATH)
+    } else if (useLocal && fs.existsSync(LOCAL_M3U_FALLBACK)) {
+      text = fs.readFileSync(LOCAL_M3U_FALLBACK, 'utf-8')
+      console.log('[m3u] loaded from local fallback:', LOCAL_M3U_FALLBACK)
     } else {
       const response = await fetch(M3U_URL)
       if (!response.ok) {
@@ -126,11 +131,7 @@ app.get('/api/m3u', async (req, res) => {
         return res.status(502).json({ error: 'M3U source unavailable', status: response.status })
       }
       text = await response.text()
-      if (!useLocal) {
-        console.log('[m3u] loaded from remote:', M3U_URL)
-      } else {
-        console.log('[m3u] USE_LOCAL_M3U=true but local file missing, loaded from remote:', M3U_URL)
-      }
+      console.log('[m3u] loaded from remote:', M3U_URL)
     }
     let channels = parseM3U(text)
 
@@ -211,6 +212,24 @@ function getRefererFromUrl(url) {
 
 const COMMON_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const GROUP_PRIORITY = ['央视频道', '卫视频道']
+// 与 iptv.py SMART_CATEGORY_KEYWORDS + 省份频道对齐的完整分组列表
+const KNOWN_GROUP_PRIORITY = [
+  ...GROUP_PRIORITY,
+  '北京频道', '天津频道', '河北频道', '山西频道', '内蒙古频道', '辽宁频道',
+  '吉林频道', '黑龙江频道', '上海频道', '江苏频道', '浙江频道', '安徽频道',
+  '福建频道', '江西频道', '山东频道', '河南频道', '湖北频道', '湖南频道',
+  '广东频道', '广西频道', '海南频道', '四川频道', '贵州频道', '云南频道',
+  '西藏频道', '陕西频道', '甘肃频道', '青海频道', '宁夏频道', '新疆频道',
+  '香港频道', '澳门频道', '台湾频道',
+  '新闻频道', '体育频道', '影视频道', '少儿动漫', '纪录人文', '音乐频道',
+  '广播频道', '戏曲综艺', '法治军事', '游戏电竞', '生活购物', '教育党建',
+  '港澳台频道', '文旅频道',
+  '其他频道', '未分类',
+]
+// 构建 group -> priority 映射，未知组排在最后
+const GROUP_PRIORITY_INDEX = Object.fromEntries(
+  KNOWN_GROUP_PRIORITY.map((g, i) => [g, i])
+)
 const PROBE_TIMEOUT = 3000
 const MAX_CONCURRENT = 5
 const REFERER_MAP = {
@@ -333,49 +352,9 @@ app.get('/api/proxy/stream', async (req, res) => {
 
           const isMasterPlaylist = text.includes('#EXT-X-STREAM-INF')
 
-          if (isMasterPlaylist) {
-            const lines = text.split('\n')
-            const variants = []
-            for (let i = 0; i < lines.length; i++) {
-              const line = lines[i]
-              if (line.trim().startsWith('#EXT-X-STREAM-INF')) {
-                const urlLine = lines[i + 1]
-                if (urlLine && !urlLine.trim().startsWith('#')) {
-                  const resolvedUrl = resolveUrl(streamUrl, urlLine.trim())
-                  const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/)
-                  const resolutionMatch = line.match(/RESOLUTION=(\d+)x(\d+)/)
-                  variants.push({
-                    url: resolvedUrl,
-                    bandwidth: bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0,
-                    resolution: resolutionMatch ? Math.min(parseInt(resolutionMatch[1]), parseInt(resolutionMatch[2])) : 0,
-                    line: urlLine.trim(),
-                  })
-                }
-              }
-            }
-
-            let chosenVariant = null
-            if (qualityParam) {
-              const qMap = { 'high': Infinity, 'low': 0, '4k': 2160, '1080p': 1080, '720p': 720, '480p': 480 }
-              const targetRes = typeof qMap[qualityParam.toLowerCase()] !== 'undefined' ? qMap[qualityParam.toLowerCase()] : 0
-              if (targetRes > 0) {
-                const matched = variants.filter(v => v.resolution === targetRes)
-                if (matched.length > 0) chosenVariant = matched.sort((a, b) => b.bandwidth - a.bandwidth)[0]
-              } else {
-                const matchedBW = variants.filter(v => v.bandwidth.toString() === qualityParam)
-                if (matchedBW.length > 0) chosenVariant = matchedBW.sort((a, b) => b.bandwidth - a.bandwidth)[0]
-              }
-            }
-            if (!chosenVariant) {
-              chosenVariant = variants.sort((a, b) => b.bandwidth - a.bandwidth)[0]
-            }
-
-            if (chosenVariant) {
-              finish()
-              return resolve(res.redirect(`/api/proxy/stream?url=${encodeURIComponent(chosenVariant.url)}${qualityParam ? '&quality=' + qualityParam : ''}`))
-            }
-          }
-
+          // 始终改写 manifest（含 master playlist），让所有变体和分段 URL 走代理，
+          // 避免浏览器直接请求 CDN 导致 CORS 拦截。
+          // 不再使用 redirect 选清晰度——让 hls.js 自行根据带宽自适应切换。
           let rewritten = rewriteManifest(text, streamUrl)
 
           const acceptEncoding = req.headers['accept-encoding'] || ''
@@ -442,9 +421,23 @@ app.get('/api/proxy/image', async (req, res) => {
   const name = req.query.name || ''
   if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
 
+  // 本地台标：imgUrl 为相对于项目根的 logos/xxx.png 路径
+  // 只过滤路径穿越，保留原始频道名（含中文）以匹配 lptv.py 的保存方式
+  const BASE_DIR = path.join(__dirname, '..')
+  const ext = path.extname(imgUrl) || '.png'
+  // 移除路径穿越和前后斜杠，保留中文/字母/数字/标点
+  const sanitized = imgUrl.replace(/\.\.\//g, '').replace(/\.\.\\/g, '').replace(/^[/\\]+|[/\\]+$/g, '')
+  const localPath = path.join(BASE_DIR, 'logos', sanitized)
+
+  if (fs.existsSync(localPath)) {
+    const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
+    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': contentType })
+    return res.send(fs.readFileSync(localPath))
+  }
+
+  // 远程台标：hash 缓存
   const hash = crypto.createHash('md5').update(imgUrl).digest('hex')
-  const ext = path.extname(new URL(imgUrl).pathname) || '.png'
-  const localPath = path.join(LOGO_DIR, hash + ext)
+  const hashPath = path.join(LOGO_DIR, hash + ext)
 
   if (fs.existsSync(localPath)) {
     const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
@@ -461,6 +454,7 @@ app.get('/api/proxy/image', async (req, res) => {
 
     const buffer = Buffer.from(await response.arrayBuffer())
     fs.writeFileSync(localPath, buffer)
+    fs.writeFileSync(hashPath, buffer)
     res.set({
       'Access-Control-Allow-Origin': '*',
       'Content-Type': response.headers.get('content-type') || 'image/png',
@@ -468,6 +462,12 @@ app.get('/api/proxy/image', async (req, res) => {
     })
     res.send(buffer)
   } catch (err) {
+    // 远程获取失败，尝试读 hash 缓存
+    if (fs.existsSync(hashPath)) {
+      const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
+      res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': contentType })
+      return res.send(fs.readFileSync(hashPath))
+    }
     const svg = generateLogoSvg(name)
     res.set({
       'Access-Control-Allow-Origin': '*',
@@ -499,8 +499,8 @@ app.get('/health', (req, res) => {
 })
 
 app.listen(PORT, () => {
-  const useLocal = process.env.USE_LOCAL_M3U === 'true'
+  const preferLocal = process.env.USE_LOCAL_M3U !== 'false'
   console.log(`LPTV proxy server running on port ${PORT}`)
-  console.log(`[startup] M3U source: ${useLocal && fs.existsSync(LOCAL_M3U_PATH) ? 'local (USE_LOCAL_M3U=true)' : 'remote (always)'}`)
+  console.log(`[startup] M3U source: ${preferLocal ? 'local lptv.m3u8 (auto)' : 'remote'}`)
   console.log(`[startup] CORS allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)
 })

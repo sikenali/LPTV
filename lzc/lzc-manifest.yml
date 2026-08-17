@@ -11,5 +11,5 @@ application:
     NODE_ENV: production
   health_check:
     test_url: http://127.0.0.1:8080/health
-    start_period: 40s
+    start_period: 90s
     timeout: 10s

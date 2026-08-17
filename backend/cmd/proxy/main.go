@@ -19,20 +19,41 @@ import (
 )
 
 var (
-	m3uChannels []map[string]string
-	m3uTimestamp time.Time
-	m3uMutex     sync.RWMutex
-	activeStreams int
-	streamMutex   sync.Mutex
+	m3uChannels    []map[string]string
+	m3uTimestamp   time.Time
+	m3uMutex       sync.RWMutex
+	activeStreams  int
+	streamMutex    sync.Mutex
+
+	validChannels []map[string]string
+	validTimestamp time.Time
+	validMutex    sync.RWMutex
+
+	validationRunning bool
+	validationMu      sync.Mutex
 )
 
 const (
-	m3uURL        = "https://raw.githubusercontent.com/zilong7728/Collect-IPTV/refs/heads/main/best_sorted.m3u8"
-	cacheTTL      = 4 * time.Hour
-	streamTimeout = 30 * time.Second
-	maxStreams    = 10
-	logoDir       = "logos"
+	cacheTTL       = 4 * time.Hour
+	streamTimeout  = 30 * time.Second
+	maxStreams     = 30
+	logoDir        = "logos"
+	m3uFilename    = "lptv.m3u8"
+	staleThreshold = 6 * time.Hour
 )
+
+var m3uLocalPaths = func() []string {
+	exe, _ := os.Executable()
+	exeDir := filepath.Dir(exe)
+	return []string{
+		m3uFilename,
+		filepath.Join("data", m3uFilename),
+		filepath.Join(exeDir, m3uFilename),
+		filepath.Join(exeDir, "data", m3uFilename),
+	}
+}()
+
+const defaultM3URemoteURL = "https://raw.githubusercontent.com/sikenali/lptv/main/lptv.m3u8"
 
 func parseM3U(text string) []map[string]string {
 	var channels []map[string]string
@@ -77,6 +98,35 @@ func extractAttr(line, key string) string {
 	return line[start : start+end]
 }
 
+func fetchRemoteM3U() string {
+	resp, err := http.Get(defaultM3URemoteURL)
+	if err != nil {
+		log.Printf("[m3u] remote fetch failed: %v", err)
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		log.Printf("[m3u] remote returned status %d", resp.StatusCode)
+		return ""
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("[m3u] remote read failed: %v", err)
+		return ""
+	}
+	return string(data)
+}
+
+func isLocalM3UStale() bool {
+	for _, localPath := range m3uLocalPaths {
+		info, err := os.Stat(localPath)
+		if err == nil {
+			return time.Since(info.ModTime()) > staleThreshold
+		}
+	}
+	return true
+}
+
 func getM3U(forceRefresh, validate bool) []map[string]string {
 	m3uMutex.RLock()
 	if !forceRefresh && !validate && m3uChannels != nil && time.Since(m3uTimestamp) < cacheTTL {
@@ -96,35 +146,48 @@ func getM3U(forceRefresh, validate bool) []map[string]string {
 		return result
 	}
 
-	useLocal := os.Getenv("USE_LOCAL_M3U") == "true"
-	localPath := filepath.Join(filepath.Dir(os.Args[0]), "local.m3u8")
 	var text string
-	if useLocal {
+	for _, localPath := range m3uLocalPaths {
 		data, err := os.ReadFile(localPath)
 		if err == nil {
 			text = string(data)
 			log.Printf("[m3u] loaded from local: %s", localPath)
+			break
 		}
 	}
+
 	if text == "" {
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Get(m3uURL)
-		if err != nil {
-			if m3uChannels != nil {
-				result := make([]map[string]string, len(m3uChannels))
-				copy(result, m3uChannels)
-				return result
+		if isLocalM3UStale() {
+			log.Printf("[m3u] local file stale or missing, fetching from remote: %s", defaultM3URemoteURL)
+			text = fetchRemoteM3U()
+			if text != "" {
+				for _, localPath := range m3uLocalPaths {
+					if err := os.WriteFile(localPath, []byte(text), 0644); err == nil {
+						log.Printf("[m3u] saved remote M3U to: %s", localPath)
+						break
+					}
+				}
 			}
-			return nil
 		}
-		defer resp.Body.Close()
-		data, _ := io.ReadAll(resp.Body)
-		text = string(data)
+		if text == "" {
+			log.Printf("[m3u] no local %s found and remote fetch unavailable; channel list will be empty", m3uFilename)
+		}
 	}
 
 	channels := parseM3U(text)
 	if validate {
 		channels = probeChannels(channels)
+		channels = deduplicate(channels)
+		validMutex.Lock()
+		validChannels = channels
+		validTimestamp = time.Now()
+		validMutex.Unlock()
+	} else {
+		validMutex.RLock()
+		if time.Since(validTimestamp) < cacheTTL {
+			channels = validChannels
+		}
+		validMutex.RUnlock()
 		channels = deduplicate(channels)
 	}
 	m3uChannels = channels
@@ -145,11 +208,11 @@ func probeChannels(channels []map[string]string) []map[string]string {
 		go func(c map[string]string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-		client := &http.Client{Timeout: 5 * time.Second}
-		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-		req, err := http.NewRequest("HEAD", c["url"], nil)
+			client := &http.Client{Timeout: 5 * time.Second}
+			client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			}
+			req, err := http.NewRequest("HEAD", c["url"], nil)
 			if err != nil {
 				return
 			}
@@ -184,7 +247,6 @@ func deduplicate(channels []map[string]string) []map[string]string {
 			seen[key] = i
 		}
 	}
-	// Build kept-index set: only keep the entry with highest priority for each name
 	kept := make(map[int]bool)
 	for i, ch := range channels {
 		key := strings.ToLower(ch["name"])
@@ -262,7 +324,13 @@ func handleM3U(w http.ResponseWriter, r *http.Request) {
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	m3uMutex.RLock()
+	channelCount := len(m3uChannels)
+	m3uMutex.RUnlock()
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":       "ok",
+		"channelCount": strconv.Itoa(channelCount),
+	})
 }
 
 func handleStream(w http.ResponseWriter, r *http.Request) {
@@ -483,11 +551,63 @@ func main() {
 		port = "8080"
 	}
 	os.MkdirAll(logoDir, 0755)
+
+	loadM3U()
+
+	go periodicM3URefresh()
+
 	http.HandleFunc("/health", handleHealth)
 	http.HandleFunc("/api/m3u", handleM3U)
 	http.HandleFunc("/api/proxy/stream", handleStream)
 	http.HandleFunc("/api/proxy/image", handleImage)
 	addr := ":" + port
-	log.Printf("LPTV proxy server running on port %s", port)
+	log.Printf("LPTV proxy server running on port %s (local m3u: %v)", port, m3uLocalPaths)
 	log.Fatal(http.ListenAndServe(addr, nil))
+}
+
+func loadM3U() {
+	for _, localPath := range m3uLocalPaths {
+		data, err := os.ReadFile(localPath)
+		if err == nil {
+			text := string(data)
+			channels := parseM3U(text)
+			m3uMutex.Lock()
+			m3uChannels = channels
+			m3uTimestamp = time.Now()
+			m3uMutex.Unlock()
+			log.Printf("[m3u] loaded %d channels from %s", len(channels), localPath)
+			return
+		}
+	}
+	log.Printf("[m3u] no local %s found, will fetch from remote on first request", m3uFilename)
+}
+
+func periodicM3URefresh() {
+	for {
+		time.Sleep(30 * time.Minute)
+		if isLocalM3UStale() {
+			log.Printf("[m3u] periodic refresh: local M3U is stale (%dh ago), fetching from remote", int(staleThreshold.Hours()))
+			text := fetchRemoteM3U()
+			if text != "" {
+				m3uMutex.Lock()
+				channels := parseM3U(text)
+				m3uChannels = channels
+				m3uTimestamp = time.Now()
+				validMutex.Lock()
+				validChannels = nil
+				validTimestamp = time.Time{}
+				validMutex.Unlock()
+				m3uMutex.Unlock()
+				log.Printf("[m3u] refreshed %d channels from remote", len(channels))
+				for _, localPath := range m3uLocalPaths {
+					if err := os.WriteFile(localPath, []byte(text), 0644); err == nil {
+						log.Printf("[m3u] saved updated M3U to %s", localPath)
+						break
+					}
+				}
+			} else {
+				log.Printf("[m3u] periodic refresh: remote fetch failed, keeping local data")
+			}
+		}
+	}
 }
