@@ -47,6 +47,7 @@ cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 (cd "$PROJECT_ROOT/backend/cmd/proxy" && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$SCRIPT_DIR/_lpk_content/backend/lptv-proxy" .)
 
 mkdir -p "$SCRIPT_DIR/_lpk_content/backend/logos"
+cp -f "$PROJECT_ROOT/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/backend/lptv.m3u8" 2>/dev/null || true
 cat > "$SCRIPT_DIR/_lpk_content/backend/run-server.sh" << 'RUNNER'
 #!/bin/sh
 exec /lzcapp/pkg/content/backend/lptv-proxy
@@ -77,7 +78,7 @@ chmod -R 777 /app/data || true
 /lzcapp/pkg/content/backend/run-server.sh >>/app/logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
-for i in $(seq 1 30); do
+for i in $(seq 1 45); do
   sleep 2
   if wget -qO- http://127.0.0.1:$BACKEND_PORT/health >/dev/null 2>&1; then
     echo "backend healthy after ${i}x2s"

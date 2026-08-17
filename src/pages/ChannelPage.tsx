@@ -9,14 +9,13 @@ import type { Channel } from '../types'
 const groupIcons: Record<string, { color: string }> = {
   '央视频道': { color: '#c43d3d' },
   '卫视频道': { color: '#7b9eb3' },
-  '地方频道': { color: '#c9a96e' },
-  '数字频道': { color: '#5b8c5a' },
+  '其他频道': { color: '#5b8c5a' },
 }
 
 const VALIDATED_URLS_KEY = 'lptv_validated_urls'
 
 export default function ChannelPage() {
-  const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite, lastPlayedChannel } = useApp()
+  const { channels, channelsLoading, channelsError, loadChannels, settings, favorites, toggleFavorite } = useApp()
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null)
@@ -66,21 +65,12 @@ export default function ChannelPage() {
 
     const groups = getGroupedChannels(allowed)
     const initial: Record<string, boolean> = {}
-    groups.forEach(g => { initial[g.group] = g.group !== '卫视频道' })
+    groups.forEach(g => { initial[g.group] = g.group === '央视频道' })
     setExpandedCategories(initial)
 
-    if (!selectedChannel) {
-      if (lastPlayedChannel) {
-        const saved = allowed.find(c => c.id === lastPlayedChannel)
-        if (saved) {
-          setSelectedChannel(saved)
-        }
-      } else {
-        const cctv1 = allowed.find(c => c.name.toLowerCase().includes('cctv1'))
-        if (cctv1) {
-          setSelectedChannel(cctv1)
-        }
-      }
+    const cctv1 = allowed.find(c => /^cctv1(\+?)$/i.test(c.name))
+    if (cctv1) {
+      setSelectedChannel(cctv1)
     }
   }, [channels])
 
