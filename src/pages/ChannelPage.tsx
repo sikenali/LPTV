@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '../context/AppContext'
 import { filterChannels, getGroupedChannels } from '../utils/channelFilter'
 import HlsPlayer, { type HlsPlayerRef } from '../components/Player/HlsPlayer'
-import { RiSearchLine, RiArrowDownSLine, RiArrowRightSLine, RiTvFill, RiHeartFill, RiHeartLine, RiPlayFill, RiPauseFill, RiFullscreenFill, RiFullscreenExitFill } from '@remixicon/react'
+import { RiSearchLine, RiArrowDownSLine, RiArrowRightSLine, RiTvFill, RiHeartFill, RiHeartLine, RiPlayFill, RiPauseFill } from '@remixicon/react'
 import type { Channel } from '../types'
 
 const groupIcons: Record<string, { color: string }> = {
@@ -349,9 +349,9 @@ export default function ChannelPage() {
               )}
               <button onClick={handleToggleFullscreen} className="p-2 rounded-full hover:bg-white/10 transition-colors">
                 {document.fullscreenElement ? (
-                  <RiFullscreenExitFill className="w-5 h-5 text-white" />
+                  <img src="/icon.png" alt="退出全屏" className="w-4 h-4 object-contain" />
                 ) : (
-                  <RiFullscreenFill className="w-5 h-5 text-white" />
+                  <img src="/icon.png" alt="全屏" className="w-4 h-4 object-contain" />
                 )}
               </button>
             </div>
