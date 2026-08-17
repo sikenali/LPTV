@@ -13,8 +13,8 @@ echo "Building version: $VERSION"
 cat > "$SCRIPT_DIR/package.yml" <<PKGEOF
 package: cloud.lazycat.app.lptv
 version: ${VERSION}
-name: 懒猫电视
-description: 懒猫电视，支持 IPTV 直播频道播放，内置 M3U 源解析与流媒体代理
+name: LPTV
+description: LPTV，支持 IPTV 直播频道播放，内置 M3U 源解析与流媒体代理
 author: sikenali
 license: MIT
 homepage: https://github.com/sikenali/lptv
@@ -23,8 +23,8 @@ unsupported_platforms:
   - ios
 locales:
   zh-CN:
-    name: 懒猫电视
-    description: 懒猫电视，支持 IPTV 直播频道播放
+    name: LPTV
+    description: LPTV，支持 IPTV 直播频道播放
   en:
     name: LPTV
     description: IPTV live channel player with M3U source parsing and stream proxy

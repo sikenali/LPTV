@@ -29,7 +29,7 @@ const Header: React.FC = () => {
         </div>
         <div className="flex flex-col">
           <span className="font-bold text-xl leading-tight" style={{ color: isBlack ? '#fff' : '#3d2b1f' }}>LPTV</span>
-          <span className="text-xs leading-tight text-[#c9a96e]">Unofficial Web Client-懒猫电视</span>
+          <span className="text-xs leading-tight text-[#c9a96e]">Unofficial Web Client - LPTV</span>
         </div>
       </div>
 
