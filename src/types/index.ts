@@ -27,4 +27,5 @@ export interface AppState {
   channelStatus: Record<string, 'ok' | 'error' | 'unknown'>;
   toastMessage: string | null;
   toastType: 'success' | 'error' | 'info' | null;
+  tvModeState: TvModeState;
 }
