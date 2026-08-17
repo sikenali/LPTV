@@ -10,6 +10,7 @@ const FavoritePage: React.FC = () => {
   const { settings, favorites, toggleFavorite, channels } = useApp();
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [logoErrors, setLogoErrors] = useState<Record<string, boolean>>({})
 
   const isBlack = settings.theme === 'black'
   const bgMain = isBlack ? '#0a0a0a' : '#fbf7f0'
@@ -138,12 +139,23 @@ const FavoritePage: React.FC = () => {
                         >
                           {/* 卡片缩略图 - h-160 fills with image */}
                           <div className="relative h-[160px] flex items-center justify-center" style={{ background: isBlack ? '#1a1a1a' : '#f8f3e8' }}>
-                            <div className="flex flex-col items-center gap-2">
-                              <div className="w-12 h-12 rounded flex items-center justify-center text-white font-bold" style={{ background: '#c43d3d' }}>
-                                {ch.name.substring(0, 2)}
+                            {ch.logo && !logoErrors[ch.id] ? (
+                              <img
+                                src={`/api/proxy/image?url=${encodeURIComponent(ch.logo)}&name=${encodeURIComponent(ch.name)}`}
+                                alt=""
+                                className="w-full h-full object-contain p-4"
+                                style={{ zIndex: 1 }}
+                                onError={() => setLogoErrors(prev => ({ ...prev, [ch.id]: true }))}
+                              />
+                            ) : null}
+                            {!ch.logo || logoErrors[ch.id] ? (
+                              <div className="flex flex-col items-center gap-2">
+                                <div className="w-12 h-12 rounded flex items-center justify-center text-white font-bold" style={{ background: '#c43d3d' }}>
+                                  {ch.name.substring(0, 2)}
+                                </div>
+                                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{ch.name.split('-')[0]}</span>
                               </div>
-                              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{ch.name.split('-')[0]}</span>
-                            </div>
+                            ) : null}
 
                             <div className="absolute top-2 right-2">
                               <button

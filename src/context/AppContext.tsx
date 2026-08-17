@@ -131,8 +131,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const toggleFavorite = useCallback((id: string) => {
     dispatch({ type: 'TOGGLE_FAVORITE', payload: id })
-    const isFav = state.favorites.includes(id)
-    showToast(isFav ? '已取消收藏' : '已收藏', isFav ? 'info' : 'success')
+    const wasFav = state.favorites.includes(id)
+    showToast(wasFav ? '已取消收藏' : '已收藏', wasFav ? 'info' : 'success')
   }, [state.favorites, showToast])
 
   const updateSettings = useCallback((settings: Partial<UserSettings>) => {
