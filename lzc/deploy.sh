@@ -40,14 +40,11 @@ download_lpk() {
   tmpfile=$(mktemp /tmp/lptv.XXXXXX.lpk)
   local lpk_name="cloud.lazycat.app.lptv-${version}.lpk"
   local url="https://github.com/sikenali/LPTV/releases/download/v${version}/${lpk_name}"
-  echo "Downloading $url ..."
   if ! curl -fsSL "$url" -o "$tmpfile"; then
-    echo "Error: Failed to download LPK"
     rm -f "$tmpfile"
     return 1
   fi
-  echo "Downloaded: $tmpfile ($(du -h "$tmpfile" | cut -f1))"
-  echo "$tmpfile"
+  printf '%s' "$tmpfile"
 }
 
 # Try to install via lzc-cli (works when ON the box)
@@ -140,7 +137,9 @@ echo "LPK: $LPK_NAME"
 echo ""
 
 # Download LPK
-TMPFILE=$(download_lpk "$VERSION") || exit 1
+echo "Downloading LPK..."
+TMPFILE=$(download_lpk "$VERSION") || { echo "Error: Failed to download LPK"; exit 1; }
+echo "Downloaded: $(du -h "$TMPFILE" | cut -f1)"
 
 # Deploy based on mode
 echo ""
@@ -150,40 +149,47 @@ if [ "$is_on_box" = true ]; then
   # Running directly on the LightOS box
   install_directly "$TMPFILE" && rm -f "$TMPFILE" && exit 0
 elif [ -n "$BOX" ]; then
-  # Running from container - try SSH first, then show manual instructions
-  if node /usr/local/lib/node_modules/@lazycatcloud/lzc-cli/scripts/cli.js lpk install "$TMPFILE" 2>&1; then
+  # Running from container - try direct install first
+  INSTALL_OUTPUT=$(node /usr/local/lib/node_modules/@lazycatcloud/lzc-cli/scripts/cli.js lpk install "$TMPFILE" 2>&1) || true
+  echo "$INSTALL_OUTPUT"
+  
+  # Check for actual success (not just APK task creation)
+  if echo "$INSTALL_OUTPUT" | grep -q "安装成功\|success\|installed"; then
     rm -f "$TMPFILE"
     echo "✓ Deployment successful!"
     exit 0
   fi
 
+  # Network unreachable
+  if echo "$INSTALL_OUTPUT" | grep -q "Network is unreachable\|Connection timed out\|remote command failed"; then
+    echo ""
+    echo "⚠ Box unreachable from current network (container: $(hostname -I 2>/dev/null | cut -d' ' -f1))."
+    echo ""
+    echo "Please install on the LightOS box directly:"
+    echo ""
+    echo "  Option 1: Download and install on the box"
+    echo "    wget -O /tmp/$LPK_NAME '$LPK_URL'"
+    echo "    lzc-cli lpk install /tmp/$LPK_NAME"
+    echo ""
+    echo "  Option 2: Use the pre-downloaded file"
+    echo "    lzc-cli lpk install $TMPFILE"
+    echo ""
+    echo "  Option 3: Run this deploy script FROM the box itself"
+    echo "    # SSH into the box, then:"
+    echo "    bash /path/to/deploy.sh"
+    rm -f "$TMPFILE"
+    exit 1
+  fi
+
   echo ""
-  echo "⚠ Installation from container failed (network unreachable)."
+  echo "⚠ Installation failed."
   echo ""
-  echo "Please install on the box manually:"
+  echo "Manual installation steps:"
+  echo "  1. Transfer the LPK to the box:"
+  echo "     scp $TMPFILE <user>@<box-ip>:/tmp/"
   echo ""
-  echo "  Option 1: Download and install directly on the box"
-  echo "    wget -O /tmp/$LPK_NAME '$LPK_URL'"
-  echo "    lzc-cli lpk install /tmp/$LPK_NAME"
-  echo ""
-  echo "  Option 2: Use the downloaded file (save to box first)"
-  echo "    # From this machine, transfer the file to the box:"
-  echo "    scp $TMPFILE <user>@<box-ip>:/tmp/"
-  echo "    # Then on the box:"
-  echo "    lzc-cli lpk install /tmp/$LPK_NAME"
-  echo ""
-  echo "  Option 3: Copy the content below to the box terminal"
-  echo "    cat > /tmp/install-lptv.sh << 'EOF'"
-  echo "    #!/bin/bash"
-  echo "    VERSION=$VERSION"
-  echo "    LPK_NAME='cloud.lazycat.app.lptv-\${VERSION}.lpk'"
-  echo "    LPK_URL='https://github.com/sikenali/LPTV/releases/download/v\${VERSION}/\${LPK_NAME}'"
-  echo "    wget -O /tmp/\${LPK_NAME} \"\${LPK_URL}\""
-  echo "    lzc-cli lpk install /tmp/\${LPK_NAME}"
-  echo "    EOF"
-  echo "    chmod +x /tmp/install-lptv.sh"
-  echo "    /tmp/install-lptv.sh"
-  echo ""
+  echo "  2. Install on the box:"
+  echo "     lzc-cli lpk install /tmp/$LPK_NAME"
   rm -f "$TMPFILE"
   exit 1
 fi
