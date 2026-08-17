@@ -9,7 +9,6 @@ const { M3uParser } = require('m3u-parser-generator')
 const app = express()
 const PORT = process.env.PORT || 3000
 const LOCAL_M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
-const LOCAL_M3U_FALLBACK = path.join(__dirname, '..', 'local.m3u8')
 // 开发环境本地文件不存在时的兜底源（本项目 GitHub raw 地址）
 const M3U_URL = 'https://raw.githubusercontent.com/sikenali/lptv/refs/heads/main/channels/lptv.m3u8'
 const CACHE_TTL = 4 * 60 * 60 * 1000
@@ -119,9 +118,6 @@ app.get('/api/m3u', async (req, res) => {
     if (useLocal && fs.existsSync(LOCAL_M3U_PATH)) {
       text = fs.readFileSync(LOCAL_M3U_PATH, 'utf-8')
       console.log('[m3u] loaded from local lptv.m3u8:', LOCAL_M3U_PATH)
-    } else if (useLocal && fs.existsSync(LOCAL_M3U_FALLBACK)) {
-      text = fs.readFileSync(LOCAL_M3U_FALLBACK, 'utf-8')
-      console.log('[m3u] loaded from local fallback:', LOCAL_M3U_FALLBACK)
     } else {
       const response = await fetch(M3U_URL)
       if (!response.ok) {
@@ -211,10 +207,8 @@ function getRefererFromUrl(url) {
 }
 
 const COMMON_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-const GROUP_PRIORITY = ['央视频道', '卫视频道']
-// 与 iptv.py SMART_CATEGORY_KEYWORDS + 省份频道对齐的完整分组列表
-const KNOWN_GROUP_PRIORITY = [
-  ...GROUP_PRIORITY,
+const GROUP_PRIORITY_INDEX = Object.fromEntries([
+  ['央视频道', 0], ['卫视频道', 1],
   '北京频道', '天津频道', '河北频道', '山西频道', '内蒙古频道', '辽宁频道',
   '吉林频道', '黑龙江频道', '上海频道', '江苏频道', '浙江频道', '安徽频道',
   '福建频道', '江西频道', '山东频道', '河南频道', '湖北频道', '湖南频道',
@@ -225,11 +219,7 @@ const KNOWN_GROUP_PRIORITY = [
   '广播频道', '戏曲综艺', '法治军事', '游戏电竞', '生活购物', '教育党建',
   '港澳台频道', '文旅频道',
   '其他频道', '未分类',
-]
-// 构建 group -> priority 映射，未知组排在最后
-const GROUP_PRIORITY_INDEX = Object.fromEntries(
-  KNOWN_GROUP_PRIORITY.map((g, i) => [g, i])
-)
+].flatMap((g, i) => g ? [[g, i]] : []))
 const PROBE_TIMEOUT = 3000
 const MAX_CONCURRENT = 5
 const REFERER_MAP = {
