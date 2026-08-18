@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 LPK_TAG="${LPK_VERSION:-}"
 LPK_TAG="${LPK_TAG#v}"
 if [ -z "$LPK_TAG" ]; then
@@ -24,11 +26,11 @@ if [ -z "$CLI_BIN" ] || [ ! -f "$CLI_BIN" ]; then
   exit 1
 fi
 (
-  cd "$(dirname "$0")"
+  cd "$SCRIPT_DIR"
   node "$CLI_BIN" project release -o output.lpk
 )
 
-if [ -f output.lpk ]; then
-  mv output.lpk "$LPK_NAME"
+if [ -f "$SCRIPT_DIR/output.lpk" ]; then
+  mv "$SCRIPT_DIR/output.lpk" "$SCRIPT_DIR/$LPK_NAME"
   echo "Done: $LPK_NAME"
 fi

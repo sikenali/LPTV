@@ -48,10 +48,8 @@ cp "$SCRIPT_DIR/icon.png" "$SCRIPT_DIR/_lpk_content/icon.png"
 cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
-# 將專為容器後端的 package.json 複製到部署包（只含 express/cors/m3u-parser-generator）
 cp "$SCRIPT_DIR/backend-package.json" "$SCRIPT_DIR/_lpk_content/package.json"
 cp -f "$PROJECT_ROOT/channels/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/channels/lptv.m3u8" 2>/dev/null || true
-# 如果本地 logos/ 为空，尝试从 GitHub 下载常用频道台标
 if [ -z "$(ls -A "$PROJECT_ROOT/logos/" 2>/dev/null)" ]; then
   echo "[build] logos/ empty, fetching from GitHub..."
   node "$PROJECT_ROOT/scripts/fetch-logos.cjs" 2>/dev/null || true
@@ -60,30 +58,30 @@ cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null 
 
 cat > "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh" << 'RUNNER'
 #!/bin/sh
-# 自動安裝依賴並啟動後端
-NM_DIR="/tmp/lptv-node-modules"
-if [ ! -d "$NM_DIR" ]; then
-  echo "[start] installing dependencies..."
-  npm install --prefix "$NM_DIR" express cors m3u-parser-generator --production --loglevel=error 2>&1
+BUNDLED_DEPS="/lzcapp/pkg/content/node_modules"
+FALLBACK_NM="/tmp/lptv-node-modules"
+
+# 优先使用打包内置的依赖（离线/内网部署无需联网）
+if [ -d "$BUNDLED_DEPS" ]; then
+  export NODE_PATH="$BUNDLED_DEPS"
+else
+  echo "[start] no bundled node_modules, installing..."
+  if [ ! -d "$FALLBACK_NM" ]; then
+    npm install --prefix "$FALLBACK_NM" express cors m3u-parser-generator --production --loglevel=error 2>&1 || { echo "[start] FAILED to install deps"; exit 1; }
+  fi
+  export NODE_PATH="$FALLBACK_NM/node_modules"
 fi
-export NODE_PATH="$NM_DIR/node_modules"
 exec node /lzcapp/pkg/content/scripts/proxy-server.cjs
 RUNNER
 chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh"
 
-cat > "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh" << 'RUNNER'
-#!/bin/sh
-# 若 node_modules 不存在則自動安裝依賴（容器首次啟動時執行）
-# 注意：/lzcapp/pkg 是只讀掛載，需安裝到可寫目錄
-NM_DIR="/tmp/lptv-node-modules"
-if [ ! -d "$NM_DIR" ]; then
-  echo "[start] installing dependencies to $NM_DIR..."
-  npm install --prefix "$NM_DIR" express cors m3u-parser-generator --production --loglevel=error 2>&1
-fi
-export NODE_PATH="$NM_DIR/node_modules"
-exec node /lzcapp/pkg/content/scripts/proxy-server.cjs
-RUNNER
-chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-server.sh"
+# 预装后端依赖到 lpk，使部署时免网络、内网可用
+(
+  cd "$SCRIPT_DIR/_lpk_content"
+  if [ -f package.json ]; then
+    npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 || exit 1
+  fi
+)
 
 (
   cd "$SCRIPT_DIR/_lpk_content/frontend"
@@ -106,7 +104,7 @@ set -e
 mkdir -p /app/data /app/logs
 chmod -R 777 /app/data || true
 
-/lzcapp/pkg/content/scripts/start-server.sh >>/app/logs/backend.log 2>&1 &
+/lzcapp/pkg/content/scripts/start-backend.sh >>/app/logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
 for i in $(seq 1 30); do

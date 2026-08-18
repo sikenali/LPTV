@@ -106,7 +106,7 @@ function deduplicateChannels(channels) {
   return Array.from(nameMap.values())
 }
 
-app.get('/api/m3u', async (req, res) => {
+app.get(['/api/m3u', '/m3u'], async (req, res) => {
   const forceRefresh = req.query.refresh === '1'
   const shouldValidate = req.query.validate === 'true'
   const now = Date.now()
@@ -274,7 +274,7 @@ function rewriteManifest(text, masterUrl) {
   return result.join('\n')
 }
 
-app.get('/api/proxy/stream', async (req, res) => {
+app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
   let streamUrl = req.query.url
   if (!streamUrl) return res.status(400).json({ error: 'Missing url parameter' })
 
@@ -420,7 +420,7 @@ function hashCode(s) {
   return hash
 }
 
-app.get('/api/proxy/image', async (req, res) => {
+app.get(['/api/proxy/image', '/proxy/image'], async (req, res) => {
   const imgUrl = req.query.url
   const name = req.query.name || ''
   if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
@@ -509,7 +509,7 @@ app.get('/api/proxy/image', async (req, res) => {
   }
 })
 
-app.get('/api/probe', async (req, res) => {
+app.get(['/api/probe', '/probe'], async (req, res) => {
   const url = req.query.url
   if (!url) return res.status(400).json({ error: 'Missing url parameter' })
 
