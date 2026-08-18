@@ -258,6 +258,7 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
         playsInline
         style={{ maxHeight: '100%', maxWidth: '100%' }}
         onLoadedData={() => {
+          clearAllTimers()
           isPlayingRef.current = true
           setShowPlayOverlay(false)
         }}

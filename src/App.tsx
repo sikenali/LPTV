@@ -45,7 +45,6 @@ const ThemedApp: React.FC = () => {
       style={{ background: isBlack ? '#0a0a0a' : '#fbf7f0' }}
       data-theme={isBlack ? 'black' : 'glass'}
     >
-      <Toast />
       <Routes>
         <Route 
           path="/" 

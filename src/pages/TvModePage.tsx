@@ -116,6 +116,7 @@ const TvModePage: React.FC = () => {
         setSelectedChannel(saved);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowed]);
 
   const handleChannelSelect = (channel: Channel) => {
@@ -293,7 +294,10 @@ const TvModePage: React.FC = () => {
             <RiArrowRightSLine className="w-4 h-4" />
             <span className="text-xs">切换分类</span>
           </div>
-          <div className="flex items-center gap-2 text-white/40">
+          <div
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-white/40 cursor-pointer hover:text-white/90 transition-colors"
+          >
             <RiCloseLine className="w-4 h-4" />
             <span className="text-xs">退出 TV</span>
           </div>

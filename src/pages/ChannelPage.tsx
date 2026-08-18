@@ -33,10 +33,11 @@ export default function ChannelPage() {
 
     const current = { ...channelStatus }
     let stored: string[] = []
-    try { stored = JSON.parse(localStorage.getItem(VALIDATED_URLS_KEY) || '[]') } catch {}
+    try { stored = JSON.parse(localStorage.getItem(VALIDATED_URLS_KEY) || '[]') } catch (_e) { /* ignore */ }
 
     // 并发限制：最多同时探测 5 个频道
     const MAX_CONCURRENT = 5
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let running = 0
     const queue = allowed.filter(ch => {
       if (current[ch.id] !== undefined) return false
@@ -52,7 +53,7 @@ export default function ChannelPage() {
         .then(({ ok }) => {
           if (ok) {
             stored.push(ch.url)
-            try { localStorage.setItem(VALIDATED_URLS_KEY, JSON.stringify(stored)) } catch {}
+            try { localStorage.setItem(VALIDATED_URLS_KEY, JSON.stringify(stored)) } catch (_e) { /* ignore */ }
             current[ch.id] = 'ok'
           } else {
             current[ch.id] = 'error'
@@ -69,6 +70,7 @@ export default function ChannelPage() {
     for (let i = 0; i < Math.min(MAX_CONCURRENT, queue.length); i++) {
       runProbe(queue[i])
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channels])
 
   useEffect(() => {
