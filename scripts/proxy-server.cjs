@@ -90,8 +90,10 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
     html = html.replace(/<script[^>]*>[\s\S]*?popunder[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<script[^>]*>[\s\S]*?popup[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<div class="headerNfooter"[^>]*>[\s\S]*?<\/div>/gi, '')
-    html = html.replace(/<li data-role="list-divider">[\s\S]*?<\/li>/gi, '')
-    html = html.replace(/<div class="ui-grid-a"[^>]*>[\s\S]*?<\/div>/gi, '')
+    // 只移除不包含播放器的 list-divider（保留含 <select id="playURL"> 的）
+    html = html.replace(/<li data-role="list-divider">(?!.*id=["']playURL["'])[ \s\S]*?<\/li>/gi, '')
+    // 不删除含 playURL select 的 ui-grid-a，只删除其他的
+    html = html.replace(/<div class="ui-grid-a">(?!.*id=["']playURL["'])[ \s\S]*?<\/div>/gi, '')
     html = html.replace(/<div data-role="navbar"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div align="center">[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<center>[\s\S]*?<\/center>/gi, '')

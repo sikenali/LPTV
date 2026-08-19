@@ -1,5 +1,5 @@
 package: cloud.lazycat.app.lptv
-version: 1.0.0
+version: 1.0.2
 name: LPTV
 description: LPTV，支持 IPTV 直播频道播放，通过网页嵌入方式播放
 author: sikenali
