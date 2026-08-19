@@ -90,7 +90,7 @@ const ChannelRow: React.FC<{
 
 const TvModePage: React.FC = () => {
   const navigate = useNavigate();
-  const { channels, favorites, channelStatus } = useApp();
+  const { channels, favorites, channelStatus, setTvMode } = useApp();
   const [activeCategory, setActiveCategory] = useState<string>('央视频道');
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
@@ -157,6 +157,7 @@ const TvModePage: React.FC = () => {
         }
         case 'Escape': {
           e.preventDefault();
+          setTvMode(false);
           navigate('/');
           break;
         }
@@ -278,7 +279,7 @@ const TvModePage: React.FC = () => {
       <div className="px-8 py-3 border-t border-white/10 flex items-center justify-between bg-black/80 backdrop-blur-sm">
         <div className="flex items-center gap-6">
           <div
-            onClick={() => navigate('/')}
+            onClick={() => { setTvMode(false); navigate('/'); }}
             className="flex items-center gap-2 text-white/60 hover:text-white/90 cursor-pointer transition-colors"
           >
             <RiArrowLeftSLine className="w-5 h-5" />
@@ -295,7 +296,7 @@ const TvModePage: React.FC = () => {
             <span className="text-xs">切换分类</span>
           </div>
           <div
-            onClick={() => navigate('/')}
+            onClick={() => { setTvMode(false); navigate('/'); }}
             className="flex items-center gap-2 text-white/40 cursor-pointer hover:text-white/90 transition-colors"
           >
             <RiCloseLine className="w-4 h-4" />

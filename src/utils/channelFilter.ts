@@ -19,11 +19,11 @@ export function getGroupedChannels(all: Channel[]): GroupedChannels[] {
     if (!byGroup.has(c.group)) byGroup.set(c.group, [])
     byGroup.get(c.group)!.push(c)
   }
-  // 按优先级排序：央视频道 / 卫视频道 在前，其余按字母序
-  const priority = new Set(['央视频道', '卫视频道'])
+  // 按优先级排序：卫视频道 / 央视频道 在前（用户要求卫视优先），其余按字母序
+  const priority: Record<string, number> = { '卫视频道': 0, '央视频道': 1 }
   const sorted = Array.from(byGroup.keys()).sort((a, b) => {
-    const pa = priority.has(a) ? 0 : 1
-    const pb = priority.has(b) ? 0 : 1
+    const pa = priority[a] ?? 2
+    const pb = priority[b] ?? 2
     return pa !== pb ? pa - pb : a.localeCompare(b, 'zh')
   })
   return sorted
