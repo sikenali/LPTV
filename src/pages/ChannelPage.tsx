@@ -331,7 +331,7 @@ export default function ChannelPage() {
               url={selectedChannel.url}
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(196,61,61,0.15)' }}>
                   <RiPlayFill className="w-8 h-8" style={{ color: '#c43d3d' }} />
@@ -342,6 +342,7 @@ export default function ChannelPage() {
           )}
         </div>
 
+        {/* Bottom control bar - always at the bottom */}
         {selectedChannel && (
           <div className="flex-[0_0_56px] shrink-0 flex items-center justify-between px-4" style={{ background: '#0d0a08', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="flex items-center gap-3 min-w-0 flex-1">

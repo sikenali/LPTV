@@ -49,6 +49,11 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     }
   }, [clearAllTimers])
 
+  const finishLoading = useCallback(() => {
+    loadingRef.current = false
+    setLoading(false)
+  }, [])
+
   const initHls = useCallback((src: string) => {
     destroyHls()
     if (!videoRef.current) return
@@ -90,7 +95,7 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       clearAllTimers()
-      loadingRef.current = false
+      finishLoading()
       setError(null)
       videoRef.current?.play().then(() => {
         isPlayingRef.current = true
@@ -105,30 +110,22 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     hls.on(Hls.Events.LEVEL_SWITCHED, () => {
       if (loadingRef.current) {
         clearAllTimers()
-        loadingRef.current = false
+        finishLoading()
         setError(null)
       }
     })
 
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (!data.fatal) {
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          clearAllTimers()
-          setError('网络连接失败，无法加载频道')
-          onError?.(new Error('network_error'))
-          hls.destroy()
-        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          clearAllTimers()
-          setError('播放器错误，尝试切换清晰度重试')
-          errorTypeRef.current = 'media'
+        // 非致命错误（如单个 fragment 超时/重试中）由 hls.js 自动恢复，
+        // 不销毁播放器、不提示错误，仅清理加载态避免卡死。
+        clearAllTimers()
+        finishLoading()
+        if (errorTypeRef.current === 'media') {
           retryCountRef.current++
-          if (retryCountRef.current <= MAX_RETRIES) {
-            hls.recoverMediaError()
-          } else {
+          if (retryCountRef.current > MAX_RETRIES) {
             onError?.(new Error('media_error_max_retries'))
           }
-        } else {
-          hls.recoverMediaError()
         }
         return
       }
@@ -195,12 +192,12 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     hls.on(Hls.Events.FRAG_BUFFERED, () => {
       if (loadingRef.current) {
         clearAllTimers()
-        loadingRef.current = false
+        finishLoading()
       }
     })
 
     hls.attachMedia(videoRef.current)
-  }, [destroyHls, onError, clearAllTimers])
+  }, [destroyHls, onError, clearAllTimers, finishLoading])
 
   useEffect(() => {
     if (!url) return
