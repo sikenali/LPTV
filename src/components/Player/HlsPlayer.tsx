@@ -145,9 +145,8 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (!data.fatal) {
         // 非致命错误（如单个 fragment 超时/重试中）由 hls.js 自动恢复，
-        // 不销毁播放器、不提示错误，仅清理加载态避免卡死。
+        // 不销毁播放器、不提示错误。不清理加载态——视频尚未真正播放。
         clearAllTimers()
-        finishLoading()
         if (errorTypeRef.current === 'media') {
           retryCountRef.current++
           if (retryCountRef.current > MAX_RETRIES) {
