@@ -117,20 +117,33 @@ app.get(['/api/m3u', '/m3u'], async (req, res) => {
 
   try {
     let text
-    const useLocal = process.env.USE_LOCAL_M3U !== 'false'
-    if (useLocal && fs.existsSync(LOCAL_M3U_PATH)) {
-      text = fs.readFileSync(LOCAL_M3U_PATH, 'utf-8')
-      console.log('[m3u] loaded from local lptv.m3u8:', LOCAL_M3U_PATH)
-    } else {
-      const response = await fetch(M3U_URL)
-      if (!response.ok) {
+    let loadedFrom = 'remote'
+    // 远程优先：始终从 GitHub raw 拉取最新源（定时任务每 4h 更新仓库）。
+    // 已打包的 lpk 无需重新构建即可拿到最新的频道文件。
+    try {
+      const response = await fetch(M3U_URL, {
+        headers: { 'User-Agent': COMMON_UA },
+        signal: AbortSignal.timeout(10000),
+      })
+      if (response.ok) {
+        text = await response.text()
+        console.log('[m3u] loaded from remote:', M3U_URL)
+      } else {
+        throw new Error(`remote status ${response.status}`)
+      }
+    } catch (remoteErr) {
+      // 远程不可达/超时/非 200 时，兜底使用打包内置的本地快照
+      const useLocalFallback = process.env.USE_LOCAL_M3U !== 'false'
+      if (useLocalFallback && fs.existsSync(LOCAL_M3U_PATH)) {
+        text = fs.readFileSync(LOCAL_M3U_PATH, 'utf-8')
+        loadedFrom = 'local'
+        console.log('[m3u] remote unavailable, fallback to local lptv.m3u8:', LOCAL_M3U_PATH, '(reason:', remoteErr.message + ')')
+      } else {
         if (cache.data) {
           return res.json(cache.data)
         }
-        return res.status(502).json({ error: 'M3U source unavailable', status: response.status })
+        return res.status(502).json({ error: 'M3U source unavailable', reason: remoteErr.message })
       }
-      text = await response.text()
-      console.log('[m3u] loaded from remote:', M3U_URL)
     }
     let channels = parseM3U(text)
 
