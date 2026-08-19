@@ -10,7 +10,7 @@ const app = express()
 const PORT = process.env.PORT || 3000
 const LOCAL_M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
 // 开发环境本地文件不存在时的兜底源（本项目 GitHub raw 地址）
-const M3U_URL = 'https://raw.githubusercontent.com/sikenali/lptv/refs/heads/main/channels/lptv.m3u8'
+const M3U_URL = 'https://raw.githubusercontent.com/sikenali/LPTV/refs/heads/dev/channels/lptv.m3u8'
 const CACHE_TTL = 4 * 60 * 60 * 1000
 const LOGO_DIR = path.join(__dirname, '..', 'logos')
 const STREAM_TIMEOUT = 30000

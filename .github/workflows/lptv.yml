@@ -31,8 +31,8 @@ jobs:
 
       - name: Update README.md
         run: |
-          file_link="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/channels/lptv.m3u"
-          file_link1="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/channels/lptv.m3u8"
+          file_link="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/channels/lptv.m3u"
+          file_link1="https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/channels/lptv.m3u8"
 
           if [ -f README.md ]; then
             sed -i "s|<!-- Last Run Time -->.*|<!-- Last Run Time --> ${GET_TIME}|" README.md
@@ -62,4 +62,4 @@ jobs:
           git remote set-url origin $REPO_URL
           git add README.md channels/lptv.m3u channels/lptv.m3u8 logos/
           git diff --quiet && git diff --staged --quiet || git commit -m "自动更新: ${GET_TIME}"
-          git push origin main
+          git push origin HEAD:${{ github.ref_name }}
