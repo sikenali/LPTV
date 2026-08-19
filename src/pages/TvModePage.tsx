@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  RiArrowLeftSLine, RiArrowRightSLine, RiHeartFill, RiHeartLine, RiArrowDownSLine,
-  RiArrowUpSLine, RiCloseLine, RiTvLine,
+  RiArrowLeftSLine, RiHeartFill, RiHeartLine,
+  RiArrowDownSLine, RiArrowUpSLine,
+  RiTvLine,
 } from '@remixicon/react';
-import { Channel } from '../types';
 import { useApp } from '../context/AppContext';
-import HlsPlayer from '../components/Player/HlsPlayer';
-import { filterChannels, getGroupedChannels } from '../utils/channelFilter';
+import { IptvWebPlayer } from '../components/Player';
+import { IptvChannel, cctvChannels, wsChannels } from '../data/iptvChannels';
 import Toast from '../components/Toast';
 
 const formatDate = (): string => {
@@ -23,288 +23,210 @@ const formatTime = (): string => {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 };
 
-const ChannelRow: React.FC<{
-  channel: Channel;
+type GroupKey = 'cctv' | 'ws';
+
+const groupLabels: Record<GroupKey, string> = {
+  cctv: '央视频道',
+  ws: '卫视频道',
+};
+
+const ChannelCard: React.FC<{
+  channel: IptvChannel;
   isSelected?: boolean;
   onClick?: () => void;
-  channelStatus?: Record<string, 'ok' | 'error' | 'unknown'>;
-}> = ({ channel, isSelected, onClick, channelStatus }) => {
+}> = ({ channel, isSelected, onClick }) => {
   const { favorites, toggleFavorite } = useApp();
-  const isFav = favorites.includes(channel.id);
+  const isFav = favorites.includes(`${channel.tid}-${channel.id}`);
 
   return (
-    <div
+    <button
       onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick?.(); }}
-      className={`relative w-[300px] shrink-0 rounded-xl overflow-hidden transition-all duration-200 text-left cursor-pointer ${
-        isSelected
-          ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/20'
-          : 'hover:bg-white/5'
+      className={`relative w-[200px] shrink-0 rounded-xl overflow-hidden transition-all duration-200 text-left ${
+        isSelected ? 'ring-2 ring-blue-500 shadow-lg shadow-blue-500/20' : 'hover:bg-white/5'
       }`}
     >
-      <div className="h-[114px] bg-gradient-to-br from-gray-800 to-gray-900 p-4 flex flex-col justify-between">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            {channel.logo ? (
-              <img
-                src={`/api/proxy/image?url=${encodeURIComponent(channel.logo)}&name=${encodeURIComponent(channel.name)}`}
-                alt=""
-                className="w-6 h-6 rounded object-contain shrink-0"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-              />
-            ) : null}
-            <div className="text-sm font-medium text-white truncate">{channel.name}</div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFavorite(channel.id);
-              }}
-              className="p-0.5 transition-transform active:scale-150 hover:bg-white/10 rounded"
-            >
-              {isFav ? (
-                <RiHeartFill className="w-3.5 h-3.5 text-red-400" />
-              ) : (
-                <RiHeartLine className="w-3.5 h-3.5 text-white/40 hover:text-white/70" />
-              )}
-            </button>
-            {(channelStatus?.[channel.id] === 'ok' || channelStatus?.[channel.id] === 'error') && (
-              <span className="shrink-0 w-[6px]">
-                {channelStatus[channel.id] === 'ok' && (
-                  <span className="block w-[5px] h-[5px] rounded-full bg-green-500" />
-                )}
-                {channelStatus[channel.id] === 'error' && (
-                  <span className="block w-[5px] h-[5px] rounded-full bg-red-500" />
-                )}
-              </span>
+      <div className="h-[90px] bg-gradient-to-br from-gray-800 to-gray-900 p-3 flex flex-col justify-between">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-medium text-white truncate">{channel.name}</div>
+          <span
+            onClick={(e) => { e.stopPropagation(); toggleFavorite(`${channel.tid}-${channel.id}`); }}
+            className="p-0.5"
+          >
+            {isFav ? (
+              <RiHeartFill className="w-3 h-3 text-red-400" />
+            ) : (
+              <RiHeartLine className="w-3 h-3 text-white/40 hover:text-white/70" />
             )}
-          </div>
+          </span>
         </div>
+        <div className="text-[10px] text-white/50 truncate">{channel.currentProgram}</div>
       </div>
-    </div>
+    </button>
   );
 };
 
 const TvModePage: React.FC = () => {
   const navigate = useNavigate();
-  const { channels, favorites, channelStatus, setTvMode } = useApp();
-  const [activeCategory, setActiveCategory] = useState<string>('央视频道');
-  const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [activeGroup, setActiveGroup] = useState<GroupKey>('cctv');
+  const [selectedChannel, setSelectedChannel] = useState<IptvChannel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
   const [currentDate] = useState(formatDate());
-
-  const allowed = useMemo(() => filterChannels(channels), [channels])
-  const grouped = useMemo(() => getGroupedChannels(allowed), [allowed])
+  const allChannels = useMemo(() => [...cctvChannels, ...wsChannels], []);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(formatTime());
-    }, 1000);
+    const timer = setInterval(() => setCurrentTime(formatTime()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Restore last played channel on mount
+  // Restore last played channel
   useEffect(() => {
-    if (selectedChannel || allowed.length === 0) return;
-    const savedId = localStorage.getItem('lastPlayedChannel');
+    const savedId = localStorage.getItem('lptv-last-channel');
     if (savedId) {
-      const saved = allowed.find(c => c.id === savedId);
-      if (saved) {
-        setSelectedChannel(saved);
-      }
+      const [tid, id] = savedId.split('-');
+      const ch = allChannels.find(c => c.tid === tid && c.id === id);
+      if (ch) setSelectedChannel(ch);
     }
+    if (!selectedChannel && cctvChannels[0]) setSelectedChannel(cctvChannels[0]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowed]);
+  }, []);
 
-  const handleChannelSelect = (channel: Channel) => {
-    setSelectedChannel(channel)
-    localStorage.setItem('lastPlayedChannel', channel.id)
+  const handleChannelSelect = (ch: IptvChannel) => {
+    setSelectedChannel(ch);
+    localStorage.setItem('lptv-last-channel', `${ch.tid}-${ch.id}`);
   };
 
-  const activeGroup = grouped.find(g => g.group === activeCategory)
-  const filteredChannels = activeGroup?.channels ?? []
+  const currentChannels = activeGroup === 'cctv' ? cctvChannels : wsChannels;
 
-  // Keyboard navigation for TV remote / directional pad
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const groupChannels = grouped.find(g => g.group === activeCategory)?.channels ?? [];
-      if (!groupChannels.length) return;
-
+      const idx = currentChannels.findIndex(c => c.id === selectedChannel?.id);
+      if (idx === -1) return;
       switch (e.key) {
-        case 'ArrowUp': {
+        case 'ArrowUp':
           e.preventDefault();
-          const currentIndex = groupChannels.findIndex(c => c.id === selectedChannel?.id);
-          const prevIndex = currentIndex <= 0 ? groupChannels.length - 1 : currentIndex - 1;
-          handleChannelSelect(groupChannels[prevIndex]);
+          handleChannelSelect(currentChannels[(idx - 1 + currentChannels.length) % currentChannels.length]);
           break;
-        }
-        case 'ArrowDown': {
+        case 'ArrowDown':
           e.preventDefault();
-          const currentIndex = groupChannels.findIndex(c => c.id === selectedChannel?.id);
-          const nextIndex = currentIndex >= groupChannels.length - 1 ? 0 : currentIndex + 1;
-          handleChannelSelect(groupChannels[nextIndex]);
+          handleChannelSelect(currentChannels[(idx + 1) % currentChannels.length]);
           break;
-        }
-        case 'Enter': {
-          if (!selectedChannel) {
-            e.preventDefault();
-            if (groupChannels.length > 0) handleChannelSelect(groupChannels[0]);
-          }
-          break;
-        }
-        case 'Escape': {
+        case 'Escape':
           e.preventDefault();
-          setTvMode(false);
           navigate('/');
           break;
-        }
-        case 'ArrowLeft': {
-          e.preventDefault();
-          const idx = grouped.findIndex(g => g.group === activeCategory);
-          if (idx > 0) setActiveCategory(grouped[idx - 1].group);
-          break;
-        }
-        case 'ArrowRight': {
-          e.preventDefault();
-          const idx = grouped.findIndex(g => g.group === activeCategory);
-          if (idx < grouped.length - 1) setActiveCategory(grouped[idx + 1].group);
-          break;
-        }
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedChannel, grouped, activeCategory, navigate]);
-
-  const isFavSelected = selectedChannel ? favorites.includes(selectedChannel.id) : false;
+  }, [selectedChannel, currentChannels, navigate]);
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
       <Toast />
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Top bar: channel info + date/time */}
-        <div className="px-8 pt-4 pb-2 flex items-center justify-between border-b border-white/5">
+        {/* Top bar */}
+        <div className="px-6 pt-3 pb-2 flex items-center justify-between border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center">
-              <RiTvLine className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center">
+              <RiTvLine className="w-4 h-4 text-white" />
             </div>
             <div>
               <div className="text-sm font-semibold text-white">{selectedChannel?.name || 'LPTV'}</div>
-              <div className="text-[10px] text-white/40">{selectedChannel?.group}</div>
+              <div className="text-[10px] text-white/40">{selectedChannel?.currentProgram || '选择频道开始观看'}</div>
             </div>
           </div>
           <div className="flex items-center gap-4 text-right">
             <div>
-              <div className="text-xs text-white/60">{currentDate}</div>
+              <div className="text-xs text-white/50">{currentDate}</div>
               <div className="text-lg font-bold text-white tracking-wider">{currentTime}</div>
             </div>
           </div>
         </div>
 
-        {/* Video Player Area */}
-        <div className="flex-1 relative min-h-[400px]">
+        {/* Video Player */}
+        <div className="flex-1 relative min-h-[300px]">
           {selectedChannel ? (
-            <HlsPlayer
-              url={selectedChannel.url}
+            <IptvWebPlayer
+              key={`${selectedChannel.tid}-${selectedChannel.id}`}
+              channel={selectedChannel}
+              onBack={() => navigate('/')}
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
               <div className="text-center">
                 <RiTvLine className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <p className="text-white/40">选择频道开始观看</p>
+                <p className="text-white/40 text-sm">选择频道开始观看</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Play info area */}
-        <div className="px-8 py-3 border-b border-white/5">
-          <div className="text-2xl font-bold text-white">{selectedChannel?.name || '请选择频道'}</div>
-          <div className="flex items-center gap-3 mt-3">
-            <div className="flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1">
-              {isFavSelected ? (
-                <RiHeartFill className="w-3.5 h-3.5 text-red-400" />
-              ) : (
-                <RiHeartLine className="w-3.5 h-3.5 text-white/50" />
-              )}
-              <span className="text-xs text-white/60">{isFavSelected ? '已收藏' : '收藏'}</span>
-            </div>
+        {/* Info bar */}
+        <div className="px-6 py-2 border-b border-white/5">
+          <div className="text-lg font-bold text-white">{selectedChannel?.name || '请选择频道'}</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-white/50">{selectedChannel?.currentProgram || ''}</span>
+            <span className="text-white/20">|</span>
+            <span className="text-xs text-green-400">直播中</span>
           </div>
         </div>
 
         {/* Category tabs */}
-        <div className="px-8 py-3 border-b border-white/5">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none">
-            {grouped.map((g) => {
-              const isActive = activeCategory === g.group;
-              return (
-                <button
-                  key={g.group}
-                  onClick={() => setActiveCategory(g.group)}
-                  className={`shrink-0 px-4 py-1.5 rounded-lg text-sm transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white font-medium shadow-lg shadow-blue-600/20'
-                      : 'bg-white/10 text-white/60 hover:bg-white/20 hover:text-white/80'
-                  }`}
-                >
-                  {g.group}
-                  <span className={`ml-1.5 ${isActive ? 'text-white/70' : 'text-white/40'}`}>({g.channels.length})</span>
-                </button>
-              );
-            })}
+        <div className="px-6 py-2 border-b border-white/5">
+          <div className="flex items-center gap-2">
+            {(['cctv', 'ws'] as GroupKey[]).map(key => (
+              <button
+                key={key}
+                onClick={() => setActiveGroup(key)}
+                className={`px-3 py-1 rounded-lg text-sm transition-all ${
+                  activeGroup === key
+                    ? 'bg-red-600 text-white font-medium'
+                    : 'bg-white/10 text-white/60 hover:bg-white/20'
+                }`}
+              >
+                {groupLabels[key]}
+                <span className={`ml-1.5 ${activeGroup === key ? 'text-white/70' : 'text-white/40'}`}>
+                  ({key === 'cctv' ? cctvChannels.length : wsChannels.length})
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Channel content */}
-        <div className="h-[200px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent px-8 py-4">
+        {/* Channel list */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="flex flex-wrap gap-3">
-            {filteredChannels.map((ch) => (
-              <ChannelRow
-                key={ch.id}
+            {currentChannels.map(ch => (
+              <ChannelCard
+                key={`${ch.tid}-${ch.id}`}
                 channel={ch}
-                isSelected={selectedChannel?.id === ch.id}
+                isSelected={selectedChannel?.id === ch.id && selectedChannel?.tid === ch.tid}
                 onClick={() => handleChannelSelect(ch)}
-                channelStatus={channelStatus}
               />
             ))}
           </div>
         </div>
       </div>
 
-      {/* Bottom action bar */}
-      <div className="px-8 py-3 border-t border-white/10 flex items-center justify-between bg-black/80 backdrop-blur-sm">
-        <div className="flex items-center gap-6">
+      {/* Bottom bar */}
+      <div className="px-6 py-2.5 border-t border-white/10 flex items-center justify-between bg-black/90">
+        <div className="flex items-center gap-5">
           <div
-            onClick={() => { setTvMode(false); navigate('/'); }}
-            className="flex items-center gap-2 text-white/60 hover:text-white/90 cursor-pointer transition-colors"
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-white/60 hover:text-white/90 cursor-pointer transition-colors text-xs"
           >
-            <RiArrowLeftSLine className="w-5 h-5" />
-            <span className="text-xs">返回</span>
-          </div>
-          <div className="flex items-center gap-2 text-white/40">
-            <RiArrowUpSLine className="w-4 h-4" />
-            <RiArrowDownSLine className="w-4 h-4" />
-            <span className="text-xs">切换频道</span>
-          </div>
-          <div className="flex items-center gap-2 text-white/40">
             <RiArrowLeftSLine className="w-4 h-4" />
-            <RiArrowRightSLine className="w-4 h-4" />
-            <span className="text-xs">切换分类</span>
+            <span>退出 TV</span>
           </div>
-          <div
-            onClick={() => { setTvMode(false); navigate('/'); }}
-            className="flex items-center gap-2 text-white/40 cursor-pointer hover:text-white/90 transition-colors"
-          >
-            <RiCloseLine className="w-4 h-4" />
-            <span className="text-xs">退出 TV</span>
+          <div className="flex items-center gap-1.5 text-white/40 text-xs">
+            <RiArrowUpSLine className="w-3 h-3" />
+            <RiArrowDownSLine className="w-3 h-3" />
+            <span>切换频道</span>
           </div>
         </div>
         <div className="text-white/30 text-xs">
-          {selectedChannel ? `${selectedChannel.name}` : '请选择频道'}
+          {selectedChannel ? selectedChannel.name : '请选择频道'}
         </div>
       </div>
     </div>
