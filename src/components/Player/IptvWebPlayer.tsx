@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { RiArrowLeftLine, RiRefreshLine, RiErrorWarningLine, RiPlayFill, RiFullscreenFill, RiFullscreenExitFill } from '@remixicon/react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { RiArrowLeftLine, RiRefreshLine, RiErrorWarningLine, RiPlayFill, RiPauseFill, RiFullscreenFill, RiFullscreenExitFill } from '@remixicon/react';
 import { IptvChannel } from '../../data/iptvChannels';
 
 interface IptvWebPlayerProps {
@@ -11,12 +11,21 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel, onBack }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const iframeUrl = `/api/proxy/iptv/${channel.tid}/${channel.id}`;
+
+  const clearLoadTimer = useCallback(() => {
+    if (loadTimerRef.current) {
+      clearTimeout(loadTimerRef.current);
+      loadTimerRef.current = null;
+    }
+  }, []);
 
   const handleTouch = useCallback(() => {
     setShowControls(true);
@@ -27,8 +36,10 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel, onBack }) => {
   const handleRetry = useCallback(() => {
     setIsLoading(true);
     setError(null);
+    setIsPaused(false);
+    clearLoadTimer();
     setIframeKey(prev => prev + 1);
-  }, []);
+  }, [clearLoadTimer]);
 
   const handleToggleFullscreen = useCallback(() => {
     const el = containerRef.current;
@@ -41,14 +52,31 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel, onBack }) => {
   }, []);
 
   const handleIframeLoad = useCallback(() => {
+    clearLoadTimer();
     setIsLoading(false);
     setError(null);
+  }, [clearLoadTimer]);
+
+  const handleTogglePlay = useCallback(() => {
+    setIsPaused(p => !p);
+    const iframe = iframeRef.current;
+    if (iframe?.contentWindow) {
+      try {
+        iframe.contentWindow.postMessage({ type: 'iptv:toggle' }, '*');
+      } catch { /* cross-origin, ignore */ }
+    }
   }, []);
 
-  const handleIframeError = useCallback(() => {
-    setIsLoading(false);
-    setError('频道加载失败');
-  }, []);
+  // Fallback: force hide spinner after 15s if iframe never fires onLoad
+  useEffect(() => {
+    loadTimerRef.current = setTimeout(() => {
+      if (isLoading) {
+        clearLoadTimer();
+        setIsLoading(false);
+      }
+    }, 15000);
+    return clearLoadTimer;
+  }, [channel.id]); // reset timer on channel change
 
   if (error) {
     return (
@@ -108,23 +136,14 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel, onBack }) => {
           style={{ minHeight: 'calc(100vh - 56px)' }}
           allowFullScreen
           onLoad={handleIframeLoad}
-          onError={handleIframeError}
         />
       </div>
 
       {/* Bottom control bar */}
       <div className={`absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-20 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' }}>
         <div className="flex items-center gap-1">
-          <button className="p-2 rounded-full hover:bg-white/10 transition-colors" onClick={() => {
-            const iframe = iframeRef.current;
-            if (iframe?.contentWindow) {
-              const v = iframe.contentDocument?.getElementById('vstPlayer') as HTMLVideoElement | null;
-              if (v) {
-                if (v.paused) { v.play(); } else { v.pause(); }
-              }
-            }
-          }}>
-            <RiPlayFill className="w-5 h-5 text-white" />
+          <button onClick={handleTogglePlay} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+            {isPaused ? <RiPlayFill className="w-5 h-5 text-white" /> : <RiPauseFill className="w-5 h-5 text-white" />}
           </button>
         </div>
         <div className="flex items-center gap-3">

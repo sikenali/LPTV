@@ -12,7 +12,7 @@ type Action =
   | { type: 'SET_TV_MODE'; payload: boolean }
   | { type: 'SHOW_TOAST'; payload: { message: string; type?: 'success' | 'error' | 'info' } }
   | { type: 'HIDE_TOAST' }
-  | { type: 'SET_CHANNEL_STATUS'; payload: { key: string; status: 'ok' | 'error' } };
+  | { type: 'SET_CHANNEL_STATUS'; payload: { key: string; status: 'ok' | 'error' | 'unknown' } };
 
 interface State {
   favorites: string[];
@@ -135,7 +135,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const probeChannel = useCallback((tid: string, id: string) => {
     const key = `${tid}-${id}`;
     if (state.channelStatus[key]) return;
-    dispatch({ type: 'SET_CHANNEL_STATUS', payload: { key, status: 'unknown' as any } });
+    dispatch({ type: 'SET_CHANNEL_STATUS', payload: { key, status: 'unknown' as 'unknown' } });
     fetch(getIptvUrlsUrl(tid, id))
       .then(r => r.json())
       .then(data => {
