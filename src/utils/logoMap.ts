@@ -87,7 +87,3 @@ export function getChannelLogoUrl(channel: IptvChannel): string {
   if (!logoName) return '';
   return `${LOGO_BASE}/${encodeURIComponent(logoName)}.png`;
 }
-
-export function getChannelLogoName(channel: IptvChannel): string {
-  return channelLogoMap[channel.name] || '';
-}

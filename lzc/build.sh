@@ -40,6 +40,8 @@ mkdir -p "$SCRIPT_DIR/_lpk_content/frontend"
 mkdir -p "$SCRIPT_DIR/_lpk_content/scripts"
 mkdir -p "$SCRIPT_DIR/_lpk_content/logos"
 
+cp -r "$PROJECT_ROOT/logos/." "$SCRIPT_DIR/_lpk_content/logos/"
+
 cp "$SCRIPT_DIR/icon.png" "$SCRIPT_DIR/_lpk_content/icon.png"
 
 (cd "$PROJECT_ROOT" && npm run build)
