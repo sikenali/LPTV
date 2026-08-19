@@ -21,18 +21,20 @@ function proxyUrl(url: string) {
 }
 
 const LOADING_TIMEOUT = 30000
+const MIN_LOADING_MS = 600
 
 const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showPlayOverlay, setShowPlayOverlay] = useState(false)
   const loadingRef = useRef(true)
   const errorRef = useRef<string | null>(null)
   const retryCountRef = useRef(0)
   const MAX_RETRIES = 3
   const timeoutRef = useRef<number | null>(null)
+  const minLoadingTimerRef = useRef<number | null>(null)
+  const loadingStartRef = useRef(0)
   const errorTypeRef = useRef<string | null>(null)
   const isPlayingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -46,6 +48,10 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
 
   const destroyHls = useCallback(() => {
     clearAllTimers()
+    if (minLoadingTimerRef.current) {
+      clearTimeout(minLoadingTimerRef.current)
+      minLoadingTimerRef.current = null
+    }
     if (hlsRef.current) {
       hlsRef.current.destroy()
       hlsRef.current = null
@@ -54,7 +60,38 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
 
   const finishLoading = useCallback(() => {
     loadingRef.current = false
-    setLoading(false)
+    // 加载动画至少显示 MIN_LOADING_MS，避免一闪而过看不清
+    const elapsed = Date.now() - loadingStartRef.current
+    const remain = MIN_LOADING_MS - elapsed
+    if (remain <= 0) {
+      setLoading(false)
+      return
+    }
+    if (minLoadingTimerRef.current) {
+      clearTimeout(minLoadingTimerRef.current)
+    }
+    minLoadingTimerRef.current = window.setTimeout(() => {
+      minLoadingTimerRef.current = null
+      setLoading(false)
+    }, remain)
+  }, [])
+
+  const tryPlay = useCallback(() => {
+    const v = videoRef.current
+    if (!v) return
+    // 优先有声播放（点击频道的用户激活窗口内通常会被允许）
+    v.play().then(() => {
+      isPlayingRef.current = true
+    }).catch(() => {
+      // 有声被拒（如激活过期）→ 静音兜底，保证必能自动播放
+      v.muted = true
+      setIsMuted(true)
+      v.play().then(() => {
+        isPlayingRef.current = true
+      }).catch(() => {
+        isPlayingRef.current = false
+      })
+    })
   }, [])
 
   const initHls = useCallback((src: string) => {
@@ -100,27 +137,16 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
       clearAllTimers()
       retryCountRef.current = 0
       errorTypeRef.current = null
-      loadingRef.current = false
-      setLoading(false)
+      finishLoading()
       setError(null)
       errorRef.current = null
-      videoRef.current?.play().then(() => {
-        isPlayingRef.current = true
-        setShowPlayOverlay(false)
-        // 初始静音播放已通过浏览器策略，此处尝试取消静音
-        if (videoRef.current?.muted) {
-          videoRef.current.muted = false
-        }
-      }).catch(() => {
-        setShowPlayOverlay(true)
-      })
+      tryPlay()
     })
 
     hls.on(Hls.Events.LEVEL_SWITCHED, () => {
       if (loadingRef.current) {
         clearAllTimers()
-        loadingRef.current = false
-        setLoading(false)
+        finishLoading()
         setError(null)
       }
     })
@@ -219,12 +245,13 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     })
 
     hls.attachMedia(videoRef.current)
-  }, [destroyHls, onError, clearAllTimers, finishLoading])
+  }, [destroyHls, onError, clearAllTimers, finishLoading, tryPlay])
 
   useEffect(() => {
     if (!url) return
     setLoading(true)
     loadingRef.current = true
+    loadingStartRef.current = Date.now()
     setError(null)
     errorRef.current = null
     initHls(url)
@@ -237,21 +264,18 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     errorRef.current = null
     setLoading(true)
     loadingRef.current = true
+    loadingStartRef.current = Date.now()
     initHls(url)
   }
 
   const pause = useCallback(() => {
     videoRef.current?.pause()
     isPlayingRef.current = false
-    setShowPlayOverlay(false)
   }, [])
 
   const resume = useCallback(() => {
-    videoRef.current?.play().then(() => {
-      isPlayingRef.current = true
-      setShowPlayOverlay(false)
-    }).catch(() => setShowPlayOverlay(true))
-  }, [])
+    tryPlay()
+  }, [tryPlay])
 
   const [videoVolume, setVideoVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
@@ -296,49 +320,22 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
         ref={videoRef}
         className="w-full h-full object-contain"
         playsInline
-        muted
         style={{ maxHeight: '100%', maxWidth: '100%' }}
         onLoadedData={() => {
           clearAllTimers()
           isPlayingRef.current = true
-          setShowPlayOverlay(false)
         }}
         onClick={() => {
           if (videoRef.current) {
             if (isPlayingRef.current) {
               videoRef.current.pause()
+              isPlayingRef.current = false
             } else {
-              videoRef.current.play()
-                .then(() => {
-                  isPlayingRef.current = true
-                  setShowPlayOverlay(false)
-                })
-                .catch(() => setShowPlayOverlay(true))
+              tryPlay()
             }
           }
         }}
       />
-      {showPlayOverlay && !error && (
-        <button
-          onClick={() => {
-            if (videoRef.current) {
-              videoRef.current.play()
-                .then(() => {
-                  isPlayingRef.current = true
-                  setShowPlayOverlay(false)
-                })
-                .catch(() => setShowPlayOverlay(true))
-            }
-          }}
-          className="absolute inset-0 w-full h-full flex items-center justify-center bg-transparent cursor-pointer"
-        >
-          <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm hover:bg-black/70 transition-colors">
-            <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-          </div>
-        </button>
-      )}
       {loading && !error && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex items-center gap-1">

@@ -340,23 +340,22 @@ export default function ChannelPage() {
               </div>
             </div>
           )}
-        </div>
 
-        {/* Bottom control bar - always at the bottom */}
-        {selectedChannel && (
-          <div className="flex-[0_0_56px] shrink-0 flex items-center justify-between px-4" style={{ background: '#0d0a08', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="flex items-center gap-1 shrink-0">
-              {isPaused ? (
-                <button onClick={handlePlay} className="p-2 rounded-full hover:bg-white/10 transition-colors">
-                  <RiPlayFill className="w-5 h-5 text-white" />
-                </button>
-              ) : (
-                <button onClick={handlePause} className="p-2 rounded-full hover:bg-white/10 transition-colors">
-                  <RiPauseFill className="w-5 h-5 text-white" />
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
+          {/* Bottom control bar - overlay on top of player, always visible */}
+          {selectedChannel && (
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-10" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.35) 60%, transparent)' }}>
+              <div className="flex items-center gap-1 shrink-0">
+                {isPaused ? (
+                  <button onClick={handlePlay} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                    <RiPlayFill className="w-5 h-5 text-white" />
+                  </button>
+                ) : (
+                  <button onClick={handlePause} className="p-2 rounded-full hover:bg-white/10 transition-colors">
+                    <RiPauseFill className="w-5 h-5 text-white" />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => {
                   const muted = playerRef.current?.mute ?? false
@@ -395,6 +394,7 @@ export default function ChannelPage() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }
