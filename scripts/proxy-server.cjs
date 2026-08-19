@@ -21,6 +21,7 @@ const pendingStreamRequests = []
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
 let cache = { data: null, timestamp: 0 }
+let iptvUrlCache = new Map()
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173']
 const corsOptions = {
@@ -584,6 +585,121 @@ app.get(['/api/probe', '/probe'], async (req, res) => {
     bestStatus = r.code || bestStatus
   }
   res.json({ status: 'error', code: bestStatus || firstResult?.code || 0, probedUrls: urls.length })
+})
+
+// iptv345.com 解密常量（从页面 JS 提取）
+const IPTV345_KRKAN = '5da54036e952163d967d08b3a76c2aa3'
+const IPTV345_ARNAK = 'aFLwGcEVodnyaUMmZlnv9Y4j'
+const IPTV345_NBYSB = '4d236f8f9f07cdb6fe127f8c8301700a'
+const IPTV345_TOKEN_ORIG = '79e9e4ac43fa67c36a3236b7ae8a2027'
+const IPTV345_TOKEN_NEW = IPTV345_ARNAK
+
+// Base64 解码（标准）
+function base64Decode(str) {
+  const keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+  let result = ''
+  for (let i = 0; i < str.length; i += 4) {
+    const h1 = keyStr.indexOf(str.charAt(i))
+    const h2 = keyStr.indexOf(str.charAt(i + 1))
+    const h3 = keyStr.indexOf(str.charAt(i + 2))
+    const h4 = keyStr.indexOf(str.charAt(i + 3))
+    const bits = h1 << 18 | h2 << 12 | h3 << 6 | h4
+    result += String.fromCharCode(bits >> 16 & 0xff)
+    if (h3 !== 64) result += String.fromCharCode(bits >> 8 & 0xff)
+    if (h4 !== 64) result += String.fromCharCode(bits & 0xff)
+  }
+  return result
+}
+
+// XOR 解密 + 双层 Base64
+function xorDecrypt(encrypted, key) {
+  const decoded = base64Decode(encrypted)
+  const fullKey = key + 'da49c0eebfeaaa3e'
+  let result = ''
+  for (let i = 0; i < decoded.length; i++) {
+    result += String.fromCharCode(decoded.charCodeAt(i) ^ fullKey.charCodeAt(i % fullKey.length))
+  }
+  return base64Decode(result)
+}
+
+// 完整解密（对应前端 vpxuv 函数）
+function decryptIptvUrl(encoded) {
+  let result = encoded.split('').reverse().join('')
+  result = xorDecrypt(result, IPTV345_KRKAN)
+  result = result.replace('token=' + IPTV345_NBYSB, 'token=' + IPTV345_TOKEN_NEW)
+  result = result.replace(IPTV345_KRKAN, '')
+  return result
+}
+
+// 从 HTML 中提取加密的选项值
+function extractEncodedUrls(html) {
+  const match = html.match(/id=["']playURL["'][^>]*>([\s\S]*?)<\/select>/)
+  if (!match) return []
+  const values = match[1].match(/value="([^"]+)"/g) || []
+  return values.map(v => v.replace(/value="|"|'/g, ''))
+}
+
+app.get('/api/iptv/urls/:tid/:id', async (req, res) => {
+  const { tid, id } = req.params
+  const cacheKey = `iptv_urls_${tid}_${id}`
+  const now = Date.now()
+
+  // 5 分钟缓存
+  if (iptvUrlCache.has(cacheKey)) {
+    const cached = iptvUrlCache.get(cacheKey)
+    if (now - cached.time < 5 * 60 * 1000) {
+      return res.json(cached.data)
+    }
+    iptvUrlCache.delete(cacheKey)
+  }
+
+  const token = IPTV345_TOKEN_ORIG
+  const targetUrl = `https://iptv345.com/?act=play&token=${token}&tid=${tid}&id=${id}`
+
+  try {
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `HTTP ${response.status}`, urls: [] })
+    }
+
+    const html = await response.text()
+    const encodedUrls = extractEncodedUrls(html)
+
+    if (encodedUrls.length === 0) {
+      return res.json({ error: '未找到频道线路', urls: [] })
+    }
+
+    const decryptedUrls = encodedUrls.map(u => decryptIptvUrl(u)).filter(Boolean)
+    const data = { urls: decryptedUrls, count: decryptedUrls.length }
+
+    iptvUrlCache.set(cacheKey, { data, time: now })
+    res.json(data)
+  } catch (err) {
+    console.error('[iptv/urls] Error:', err.message)
+    res.status(502).json({ error: err.message, urls: [] })
+  }
+})
+
+// 兼容旧路径
+app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
+  const { tid, id } = req.params
+  try {
+    const r = await fetch(`/api/iptv/urls/${tid}/${id}`, {
+      headers: { 'Accept': 'application/json' },
+    })
+    const data = await r.json()
+    res.json(data)
+  } catch (err) {
+    res.status(502).json({ error: err.message, urls: [] })
+  }
 })
 
 app.get('/health', (req, res) => {
