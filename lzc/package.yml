@@ -1,7 +1,7 @@
 package: cloud.lazycat.app.lptv
-version: 1.0.5
+version: 1.0.0
 name: LPTV
-description: LPTV，支持 IPTV 直播频道播放，内置 M3U 源解析与流媒体代理
+description: LPTV，支持 IPTV 直播频道播放，通过网页嵌入方式播放
 author: sikenali
 license: MIT
 homepage: https://github.com/sikenali/lptv
@@ -14,7 +14,7 @@ locales:
     description: LPTV，支持 IPTV 直播频道播放
   en:
     name: LPTV
-    description: IPTV live channel player with M3U source parsing and stream proxy
+    description: IPTV live channel player via web embedding
 permissions:
   required:
     - net.internet

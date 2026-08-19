@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RiHeartFill, RiTvLine, RiSearchLine, RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react';
 import { useApp } from '../context/AppContext';
 import { IptvChannel, cctvChannels, wsChannels } from '../data/iptvChannels';
+import { getChannelLogoUrl } from '../utils/logoMap';
 
 const allChannels: IptvChannel[] = [...cctvChannels, ...wsChannels];
 
 const FavoritePage: React.FC = () => {
   const navigate = useNavigate();
-  const { settings, favorites, toggleFavorite } = useApp();
+  const { settings, favorites, toggleFavorite, channelStatus, probeChannel } = useApp();
+  const probedRef = useRef<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
 
   const isBlack = settings.theme === 'black';
@@ -40,6 +42,22 @@ const FavoritePage: React.FC = () => {
   }, [filteredFavs]);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const toProbe = favChs.filter(ch => {
+      const key = `${ch.tid}-${ch.id}`;
+      if (probedRef.current.has(key)) return false;
+      probedRef.current.add(key);
+      return true;
+    });
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i >= toProbe.length) { clearInterval(timer); return; }
+      probeChannel(toProbe[i].tid, toProbe[i].id);
+      i++;
+    }, 200);
+    return () => clearInterval(timer);
+  }, [favChs, probeChannel]);
 
   const toggleGroup = (group: string) => {
     setExpandedGroups(prev => ({ ...prev, [group]: !prev[group] }));
@@ -136,8 +154,20 @@ const FavoritePage: React.FC = () => {
                             style={{ background: cardBk, border: `1px solid ${borderCol}` }}
                           >
                             <div className="relative h-[120px] flex items-center justify-center" style={{ background: isBlack ? '#1a1a1a' : '#f8f3e8' }}>
-                              <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ background: '#c43d3d' }}>
-                                {ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 2)}
+                              <div className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden bg-black/5">
+                                <img
+                                  src={getChannelLogoUrl(ch)}
+                                  alt={ch.name}
+                                  className="w-10 h-10 object-contain"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                  }}
+                                />
+                                <span className="hidden text-white text-xs font-bold">
+                                  {ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 2)}
+                                </span>
                               </div>
                               <div className="absolute top-2 right-2">
                                 <button
@@ -149,7 +179,18 @@ const FavoritePage: React.FC = () => {
                               </div>
                             </div>
                             <div className="p-3">
-                              <div className="font-semibold text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="font-semibold text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
+                                {channelStatus[`${ch.tid}-${ch.id}`] === 'ok' && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                                )}
+                                {channelStatus[`${ch.tid}-${ch.id}`] === 'error' && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                                )}
+                                {!channelStatus[`${ch.tid}-${ch.id}`] && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                                )}
+                              </div>
                               <div className="text-xs mt-0.5 truncate" style={{ color: subTxt }}>{ch.currentProgram}</div>
                             </div>
                           </div>

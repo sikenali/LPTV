@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../context/AppContext';
 import { IptvWebPlayer } from '../components/Player';
@@ -8,6 +8,7 @@ import {
   RiPlayFill, RiPauseFill, RiFullscreenFill, RiFullscreenExitFill,
 } from '@remixicon/react';
 import { IptvChannel, cctvChannels, wsChannels } from '../data/iptvChannels';
+import { getChannelLogoUrl } from '../utils/logoMap';
 
 type GroupKey = 'cctv' | 'ws';
 
@@ -17,7 +18,8 @@ const groupConfig: Record<GroupKey, { label: string; channels: IptvChannel[]; co
 };
 
 export default function ChannelPage() {
-  const { settings, favorites, toggleFavorite } = useApp();
+  const { settings, favorites, toggleFavorite, channelStatus, probeChannel } = useApp();
+  const probedRef = useRef<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [selectedChannel, setSelectedChannel] = useState<IptvChannel | null>(null);
@@ -81,6 +83,24 @@ export default function ChannelPage() {
   const toggleGroup = (key: GroupKey) => {
     setExpandedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  useEffect(() => {
+    const all = [...cctvChannels, ...wsChannels];
+    const toProbe = all.filter(ch => {
+      const key = `${ch.tid}-${ch.id}`;
+      if (probedRef.current.has(key)) return false;
+      if (!expandedGroups[ch.tid === 'ys' ? 'cctv' : 'ws'] && !debouncedQuery.trim()) return false;
+      probedRef.current.add(key);
+      return true;
+    });
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i >= toProbe.length) { clearInterval(timer); return; }
+      probeChannel(toProbe[i].tid, toProbe[i].id);
+      i++;
+    }, 200);
+    return () => clearInterval(timer);
+  }, [expandedGroups, debouncedQuery, probeChannel]);
 
   const selectChannel = (ch: IptvChannel) => {
     setSelectedChannel(ch);
@@ -183,17 +203,29 @@ export default function ChannelPage() {
                               >
                                 <div className="flex items-center gap-3 pl-2 pr-2 flex-1 min-w-0">
                                   <div
-                                    className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-bold"
-                                    style={{ background: isSelected ? color : `${color}30` }}
+                                    className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center overflow-hidden bg-black/10"
+                                    style={{ border: isSelected ? `2px solid ${color}` : '2px solid transparent' }}
                                   >
-                                    {ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 2)}
+                                    <img
+                                      src={getChannelLogoUrl(ch)}
+                                      alt={ch.name}
+                                      className="w-7 h-7 object-contain"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                      }}
+                                    />
+                                    <span className="hidden text-white text-xs font-bold">
+                                      {ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 2)}
+                                    </span>
                                   </div>
                                   <div className="flex-1 text-left min-w-0">
                                     <div className="font-medium text-sm truncate" style={{ color: textPri }}>{ch.name}</div>
                                     <div className="text-xs truncate" style={{ color: textSec }}>{ch.currentProgram}</div>
                                   </div>
                                 </div>
-                                <div className="shrink-0">
+                                <div className="flex items-center gap-1 shrink-0">
                                   <span
                                     onClick={(e) => { e.stopPropagation(); toggleFavorite(`${ch.tid}-${ch.id}`); }}
                                     className="p-1.5 cursor-pointer rounded hover:bg-white/10 transition-colors"
@@ -202,6 +234,17 @@ export default function ChannelPage() {
                                       <RiHeartFill className="w-4 h-4" style={{ color: '#c43d3d' }} />
                                     ) : (
                                       <RiHeartLine className="w-4 h-4" style={{ color: subTxt }} />
+                                    )}
+                                  </span>
+                                  <span className="flex items-center">
+                                    {channelStatus[`${ch.tid}-${ch.id}`] === 'ok' && (
+                                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                                    )}
+                                    {channelStatus[`${ch.tid}-${ch.id}`] === 'error' && (
+                                      <span className="w-2 h-2 rounded-full bg-red-500" />
+                                    )}
+                                    {!channelStatus[`${ch.tid}-${ch.id}`] && (
+                                      <span className="w-2 h-2 rounded-full bg-gray-400" />
                                     )}
                                   </span>
                                 </div>

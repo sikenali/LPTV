@@ -14,7 +14,7 @@ cat > "$SCRIPT_DIR/package.yml" <<PKGEOF
 package: cloud.lazycat.app.lptv
 version: ${VERSION}
 name: LPTV
-description: LPTV，支持 IPTV 直播频道播放，内置 M3U 源解析与流媒体代理
+description: LPTV，支持 IPTV 直播频道播放，通过网页嵌入方式播放
 author: sikenali
 license: MIT
 homepage: https://github.com/sikenali/lptv
@@ -27,7 +27,7 @@ locales:
     description: LPTV，支持 IPTV 直播频道播放
   en:
     name: LPTV
-    description: IPTV live channel player with M3U source parsing and stream proxy
+    description: IPTV live channel player via web embedding
 permissions:
   required:
     - net.internet
@@ -38,7 +38,6 @@ PKGEOF
 rm -rf "$SCRIPT_DIR/_lpk_content"
 mkdir -p "$SCRIPT_DIR/_lpk_content/frontend"
 mkdir -p "$SCRIPT_DIR/_lpk_content/scripts"
-mkdir -p "$SCRIPT_DIR/_lpk_content/channels"
 mkdir -p "$SCRIPT_DIR/_lpk_content/logos"
 
 cp "$SCRIPT_DIR/icon.png" "$SCRIPT_DIR/_lpk_content/icon.png"
@@ -49,25 +48,18 @@ cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
 cp "$SCRIPT_DIR/backend-package.json" "$SCRIPT_DIR/_lpk_content/package.json"
-cp -f "$PROJECT_ROOT/channels/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/channels/lptv.m3u8" 2>/dev/null || true
-if [ -z "$(ls -A "$PROJECT_ROOT/logos/" 2>/dev/null)" ]; then
-  echo "[build] logos/ empty, fetching from GitHub..."
-  node "$PROJECT_ROOT/scripts/fetch-logos.cjs" 2>/dev/null || true
-fi
-cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null || true
 
 cat > "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh" << 'RUNNER'
 #!/bin/sh
 BUNDLED_DEPS="/lzcapp/pkg/content/node_modules"
 FALLBACK_NM="/tmp/lptv-node-modules"
 
-# 优先使用打包内置的依赖（离线/内网部署无需联网）
 if [ -d "$BUNDLED_DEPS" ]; then
   export NODE_PATH="$BUNDLED_DEPS"
 else
   echo "[start] no bundled node_modules, installing..."
   if [ ! -d "$FALLBACK_NM" ]; then
-    npm install --prefix "$FALLBACK_NM" express cors m3u-parser-generator --production --loglevel=error 2>&1 || { echo "[start] FAILED to install deps"; exit 1; }
+    npm install --prefix "$FALLBACK_NM" express cors --production --loglevel=error 2>&1 || { echo "[start] FAILED to install deps"; exit 1; }
   fi
   export NODE_PATH="$FALLBACK_NM/node_modules"
 fi
@@ -75,7 +67,7 @@ exec node /lzcapp/pkg/content/scripts/proxy-server.cjs
 RUNNER
 chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh"
 
-# 预装后端依赖到 lpk，使部署时免网络、内网可用
+# 预装后端依赖到 lpk
 (
   cd "$SCRIPT_DIR/_lpk_content"
   if [ -f package.json ]; then

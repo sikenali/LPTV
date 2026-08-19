@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   RiArrowLeftSLine, RiHeartFill, RiHeartLine,
@@ -8,6 +8,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { IptvWebPlayer } from '../components/Player';
 import { IptvChannel, cctvChannels, wsChannels } from '../data/iptvChannels';
+import { getChannelLogoUrl } from '../utils/logoMap';
 import Toast from '../components/Toast';
 
 const formatDate = (): string => {
@@ -35,7 +36,7 @@ const ChannelCard: React.FC<{
   isSelected?: boolean;
   onClick?: () => void;
 }> = ({ channel, isSelected, onClick }) => {
-  const { favorites, toggleFavorite } = useApp();
+  const { favorites, toggleFavorite, channelStatus } = useApp();
   const isFav = favorites.includes(`${channel.tid}-${channel.id}`);
 
   return (
@@ -47,10 +48,38 @@ const ChannelCard: React.FC<{
     >
       <div className="h-[90px] bg-gradient-to-br from-gray-800 to-gray-900 p-3 flex flex-col justify-between">
         <div className="flex items-center justify-between">
-          <div className="text-xs font-medium text-white truncate">{channel.name}</div>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-full shrink-0 overflow-hidden bg-black/20 flex items-center justify-center">
+              <img
+                src={getChannelLogoUrl(channel)}
+                alt={channel.name}
+                className="w-6 h-6 object-contain"
+                loading="lazy"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                  (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <span className="hidden text-white/70 text-[10px] font-bold">
+                {channel.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 2)}
+              </span>
+            </div>
+            <div className="text-xs font-medium text-white truncate flex items-center gap-1">
+              {channel.name}
+              {channelStatus[`${channel.tid}-${channel.id}`] === 'ok' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+              )}
+              {channelStatus[`${channel.tid}-${channel.id}`] === 'error' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+              )}
+              {!channelStatus[`${channel.tid}-${channel.id}`] && (
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+              )}
+            </div>
+          </div>
           <span
             onClick={(e) => { e.stopPropagation(); toggleFavorite(`${channel.tid}-${channel.id}`); }}
-            className="p-0.5"
+            className="p-0.5 shrink-0"
           >
             {isFav ? (
               <RiHeartFill className="w-3 h-3 text-red-400" />
@@ -67,6 +96,8 @@ const ChannelCard: React.FC<{
 
 const TvModePage: React.FC = () => {
   const navigate = useNavigate();
+  const { probeChannel } = useApp();
+  const probedRef = useRef<Set<string>>(new Set());
   const [activeGroup, setActiveGroup] = useState<GroupKey>('cctv');
   const [selectedChannel, setSelectedChannel] = useState<IptvChannel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
@@ -89,6 +120,23 @@ const TvModePage: React.FC = () => {
     if (!selectedChannel && cctvChannels[0]) setSelectedChannel(cctvChannels[0]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const currentChs = activeGroup === 'cctv' ? cctvChannels : wsChannels;
+    const toProbe = currentChs.filter(ch => {
+      const key = `${ch.tid}-${ch.id}`;
+      if (probedRef.current.has(key)) return false;
+      probedRef.current.add(key);
+      return true;
+    });
+    let i = 0;
+    const timer = setInterval(() => {
+      if (i >= toProbe.length) { clearInterval(timer); return; }
+      probeChannel(toProbe[i].tid, toProbe[i].id);
+      i++;
+    }, 200);
+    return () => clearInterval(timer);
+  }, [activeGroup, probeChannel]);
 
   const handleChannelSelect = (ch: IptvChannel) => {
     setSelectedChannel(ch);
