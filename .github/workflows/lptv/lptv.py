@@ -30,6 +30,7 @@ def normalize_text_for_match(text: str) -> str:
 CONFIG = {
     "timeout": 10,
     "max_parallel": 30,
+    "max_retries": 3,
     "output_file": "channels/lptv.m3u",
 }
 
@@ -622,17 +623,22 @@ def extract_urls_from_m3u(content):
 
 async def test_stream(session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, url: str):
     async with semaphore:
-        start_time = time.time()
-        try:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=CONFIG["timeout"])) as response:
-                if response.status == 200:
-                    elapsed_time = time.time() - start_time
-                    return True, elapsed_time
-                return False, None
-        except asyncio.TimeoutError:
-            return False, None
-        except Exception:
-            return False, None
+        for attempt in range(CONFIG["max_retries"]):
+            start_time = time.time()
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=CONFIG["timeout"])) as response:
+                    if response.status == 200:
+                        elapsed_time = time.time() - start_time
+                        return True, elapsed_time
+                    return False, None
+            except asyncio.TimeoutError:
+                if attempt == CONFIG["max_retries"] - 1:
+                    return False, None
+                await asyncio.sleep(0.5 * (attempt + 1))
+            except Exception:
+                if attempt == CONFIG["max_retries"] - 1:
+                    return False, None
+                await asyncio.sleep(0.5 * (attempt + 1))
 
 
 async def test_multiple_streams(session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, entries: Iterable[Dict[str, Any]]):
@@ -801,11 +807,11 @@ async def main(file_urls, cctv_channel_file, province_channel_files):
     all_channels = generate_sorted_m3u(best_entries, cctv_channels, province_channels, CONFIG["output_file"])
     print(f"Generated sorted M3U file: {CONFIG['output_file']}")
 
-    # 下载台标
-    semaphore = asyncio.Semaphore(CONFIG["max_parallel"])
-    connector = aiohttp.TCPConnector(limit=CONFIG["max_parallel"] * 2)
-    async with aiohttp.ClientSession(cookie_jar=None, timeout=timeout, connector=connector) as session:
-        await download_logos(all_channels, semaphore, session)
+    # 下载台标（复用同一 session 减少连接开销）
+    logo_semaphore = asyncio.Semaphore(CONFIG["max_parallel"])
+    logo_connector = aiohttp.TCPConnector(limit=CONFIG["max_parallel"] * 2)
+    async with aiohttp.ClientSession(cookie_jar=None, timeout=aiohttp.ClientTimeout(total=10), connector=logo_connector) as logo_session:
+        await download_logos(all_channels, logo_semaphore, logo_session)
 
 
 if __name__ == "__main__":

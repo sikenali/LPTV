@@ -10,6 +10,9 @@ export interface HlsPlayerRef {
   pause: () => void
   resume: () => void
   toggleFullscreen: () => void
+  setVolume: (v: number) => void
+  volume: number
+  mute: boolean
 }
 
 function proxyUrl(url: string) {
@@ -95,22 +98,29 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       clearAllTimers()
-      finishLoading()
+      retryCountRef.current = 0
+      errorTypeRef.current = null
+      loadingRef.current = false
+      setLoading(false)
       setError(null)
+      errorRef.current = null
       videoRef.current?.play().then(() => {
         isPlayingRef.current = true
         setShowPlayOverlay(false)
+        // 初始静音播放已通过浏览器策略，此处尝试取消静音
+        if (videoRef.current?.muted) {
+          videoRef.current.muted = false
+        }
       }).catch(() => {
         setShowPlayOverlay(true)
       })
-      retryCountRef.current = 0
-      errorTypeRef.current = null
     })
 
     hls.on(Hls.Events.LEVEL_SWITCHED, () => {
       if (loadingRef.current) {
         clearAllTimers()
-        finishLoading()
+        loadingRef.current = false
+        setLoading(false)
         setError(null)
       }
     })
@@ -132,11 +142,23 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
 
       switch (data.details) {
         case Hls.ErrorDetails.MANIFEST_PARSING_ERROR:
-        case Hls.ErrorDetails.MANIFEST_LOAD_ERROR:
           clearAllTimers()
           setError('无法加载频道列表，该源可能已失效')
           onError?.(new Error('manifest_error'))
           hls.destroy()
+          break
+        case Hls.ErrorDetails.MANIFEST_LOAD_ERROR:
+          clearAllTimers()
+          // 网络抖动导致的临时失败，不立即销毁播放器，由 hls.js 自动重试 manifest 拉取
+          if (retryCountRef.current < MAX_RETRIES) {
+            retryCountRef.current++
+            errorTypeRef.current = 'manifest'
+          } else {
+            errorRef.current = 'manifest_load_error'
+            setError('网络连接失败，无法加载频道')
+            onError?.(new Error('manifest_load_error_max_retries'))
+            hls.destroy()
+          }
           break
         case Hls.ErrorDetails.LEVEL_LOAD_ERROR:
         case Hls.ErrorDetails.LEVEL_PARSING_ERROR:
@@ -231,6 +253,9 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     }).catch(() => setShowPlayOverlay(true))
   }, [])
 
+  const [videoVolume, setVideoVolume] = useState(1)
+  const [isMuted, setIsMuted] = useState(false)
+
   const toggleFullscreen = useCallback(() => {
     const el = containerRef.current
     if (!el) return
@@ -241,18 +266,37 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
     }
   }, [])
 
+  const setVolume = useCallback((v: number) => {
+    if (videoRef.current) {
+      videoRef.current.volume = Math.max(0, Math.min(1, v))
+      setVideoVolume(v)
+      setIsMuted(v === 0)
+    }
+  }, [])
+
   useImperativeHandle(ref, () => ({
     pause,
     resume,
     toggleFullscreen,
-  }), [pause, resume, toggleFullscreen])
+    setVolume,
+    get volume() { return videoVolume },
+    get mute() { return isMuted },
+  }), [pause, resume, toggleFullscreen, setVolume, videoVolume, isMuted])
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-black" style={{ height: '100%', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <>
+      <style>{`
+        @keyframes lptv-color-1 { 0%,100%{color:#ffffff} 50%{color:#f97316} }
+        @keyframes lptv-color-2 { 0%,100%{color:#ffffff} 50%{color:#ef4444} }
+        @keyframes lptv-color-3 { 0%,100%{color:#ffffff} 50%{color:#3b82f6} }
+        @keyframes lptv-color-4 { 0%,100%{color:#ffffff} 50%{color:#22c55e} }
+      `}</style>
+      <div ref={containerRef} className="relative w-full h-full bg-black" style={{ height: '100%', minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <video
         ref={videoRef}
         className="w-full h-full object-contain"
         playsInline
+        muted
         style={{ maxHeight: '100%', maxWidth: '100%' }}
         onLoadedData={() => {
           clearAllTimers()
@@ -296,8 +340,13 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
         </button>
       )}
       {loading && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <div className="text-white text-lg">加载中...</div>
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="flex items-center gap-1">
+            <span className="text-4xl font-black tracking-widest" style={{ animation: 'lptv-color-1 1.2s ease-in-out infinite' }}>L</span>
+            <span className="text-4xl font-black tracking-widest" style={{ animation: 'lptv-color-2 1.2s ease-in-out infinite 0.15s' }}>P</span>
+            <span className="text-4xl font-black tracking-widest" style={{ animation: 'lptv-color-3 1.2s ease-in-out infinite 0.3s' }}>T</span>
+            <span className="text-4xl font-black tracking-widest" style={{ animation: 'lptv-color-4 1.2s ease-in-out infinite 0.45s' }}>V</span>
+          </div>
         </div>
       )}
       {error && (
@@ -312,6 +361,7 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
         </div>
       )}
     </div>
+    </>
   )
 })
 
