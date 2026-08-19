@@ -14,8 +14,20 @@ export interface GroupedChannels {
 }
 
 export function getGroupedChannels(all: Channel[]): GroupedChannels[] {
-  return DISPLAY_GROUPS
-    .map(group => ({ group, channels: all.filter(c => c.group === group) }))
+  const byGroup = new Map<string, Channel[]>()
+  for (const c of all) {
+    if (!byGroup.has(c.group)) byGroup.set(c.group, [])
+    byGroup.get(c.group)!.push(c)
+  }
+  // 按优先级排序：央视频道 / 卫视频道 在前，其余按字母序
+  const priority = new Set(['央视频道', '卫视频道'])
+  const sorted = Array.from(byGroup.keys()).sort((a, b) => {
+    const pa = priority.has(a) ? 0 : 1
+    const pb = priority.has(b) ? 0 : 1
+    return pa !== pb ? pa - pb : a.localeCompare(b, 'zh')
+  })
+  return sorted
+    .map(group => ({ group, channels: byGroup.get(group)! }))
     .filter(g => g.channels.length > 0)
 }
 

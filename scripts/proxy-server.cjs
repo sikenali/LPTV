@@ -21,6 +21,27 @@ const pendingStreamRequests = []
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
 let cache = { data: null, timestamp: 0 }
+// 维护 "频道url -> 该频道所有源" 索引，用于 manifest 层 failover：当主源失效时，
+// 自动切换到同频道其他源，避免前端反复重试/播放中断。
+const channelSourceIndex = new Map()
+
+function rebuildChannelSourceIndex(channels) {
+  channelSourceIndex.clear()
+  for (const ch of channels || []) {
+    const urls = ch.urls && ch.urls.length > 0 ? ch.urls : (ch.url ? [ch.url] : [])
+    for (const u of urls) {
+      if (!channelSourceIndex.has(u)) channelSourceIndex.set(u, { sources: urls, ch: ch })
+    }
+  }
+  console.log(`[m3u] channel source index built: ${channelSourceIndex.size} urls / ${(channels || []).length} channels`)
+}
+
+// 找到某 url 对应的同频道全部源（仅当前缓存里映射的），用于代理 failover
+function getChannelSources(url) {
+  const entry = channelSourceIndex.get(url)
+  if (entry) return entry.sources
+  return [url]
+}
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173']
 const corsOptions = {
@@ -39,16 +60,51 @@ const corsOptions = {
 app.use(cors(corsOptions))
 app.use(express.json())
 
+function normalizeChannelName(name) {
+  return String(name || '').toLowerCase().replace(/[\s\-_（）()，,。.·]+/g, '').trim()
+}
+
 function parseM3U(text) {
   const parser = new M3uParser()
   const playlist = parser.parse(text)
-  return (playlist.medias || []).map(m => ({
-    id: `${m.attributes?.['group-title'] || '未分类'}-${m.attributes?.['tvg-name'] || m.name}`,
-    name: m.name,
-    logo: m.attributes?.['tvg-logo'] || '',
-    group: m.attributes?.['group-title'] || '未分类',
-    url: m.location,
-  }))
+  const map = new Map()
+
+  for (const m of playlist.medias || []) {
+    const name = m.name
+    const group = m.attributes?.['group-title'] || '未分类'
+    const logo = m.attributes?.['tvg-logo'] || ''
+    const url = m.location
+    const key = normalizeChannelName(name) || normalizeChannelName(m.attributes?.['tvg-name'] || '')
+
+    if (!map.has(key)) {
+      const baseId = `${group}-${name}`
+      map.set(key, {
+        id: baseId,
+        name,
+        logo,
+        group,
+        url,
+        urls: [url],
+      })
+      continue
+    }
+
+    const existing = map.get(key)
+    // 收集同一频道的所有源，去重相同 url
+    if (!existing.urls.includes(url)) existing.urls.push(url)
+    // 若这条的来源优先级更高（更低数值 = 更主流的分组），则用这条作为展示名称/分组
+    const existingPriority = GROUP_PRIORITY_INDEX[existing.group] ?? 999
+    const newPriority = GROUP_PRIORITY_INDEX[group] ?? 999
+    if (newPriority < existingPriority) {
+      existing.name = name
+      existing.group = group
+      existing.logo = logo
+      existing.id = `${group}-${name}`
+      existing.url = url
+    }
+  }
+
+  return Array.from(map.values())
 }
 
 async function probeUrl(url) {
@@ -82,28 +138,6 @@ async function filterValidChannels(channels) {
   }
 
   return results.filter(c => c !== null)
-}
-
-function deduplicateChannels(channels) {
-  const nameMap = new Map()
-
-  for (const channel of channels) {
-    const key = channel.name.toLowerCase()
-    if (!nameMap.has(key)) {
-      nameMap.set(key, channel)
-      continue
-    }
-
-    const existing = nameMap.get(key)
-    const existingPriority = GROUP_PRIORITY_INDEX[existing.group] ?? 999
-    const newPriority = GROUP_PRIORITY_INDEX[channel.group] ?? 999
-
-    if (newPriority > existingPriority) {
-      nameMap.set(key, channel)
-    }
-  }
-
-  return Array.from(nameMap.values())
 }
 
 app.get(['/api/m3u', '/m3u'], async (req, res) => {
@@ -153,12 +187,10 @@ app.get(['/api/m3u', '/m3u'], async (req, res) => {
 
       channels = await filterValidChannels(channels)
       console.log(`[m3u] validation complete: ${before} -> ${channels.length} valid channels`)
-
-      channels = deduplicateChannels(channels)
-      console.log(`[m3u] deduplication complete: ${before} -> ${channels.length} channels after dedup`)
     }
 
     cache = { data: channels, timestamp: now }
+    rebuildChannelSourceIndex(channels)
     res.json(channels)
   } catch (err) {
     if (cache.data) {
@@ -251,7 +283,7 @@ function getSmartReferer(url) {
     for (const [key, referer] of Object.entries(REFERER_MAP)) {
       if (host.includes(key)) return referer
     }
-  } catch {}
+  } catch (_e) { /* ignore */ }
   return `https://${new URL(url).hostname}/`
 }
 
@@ -338,70 +370,96 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
     }
   }
 
+  const isManifestRequest = streamUrl.endsWith('.m3u8') || streamUrl.includes('m3u8')
+  // 候选取源：manifest 请求命中频道多源时可 failover；否则（分片等）只用请求自身的 url
+  const candidateSources = isManifestRequest ? getChannelSources(streamUrl) : [streamUrl]
+
+  const fetchSource = (url) => new Promise((resolve, reject) => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT)
+
+    fetch(url, {
+      headers: {
+        'User-Agent': COMMON_UA,
+        'Referer': referer,
+        'Origin': referer,
+      },
+      signal: controller.signal,
+    }).then(async response => {
+      clearTimeout(timeoutId)
+      resolve({ ok: response.ok, status: response.status, response })
+    }).catch(err => {
+      clearTimeout(timeoutId)
+      reject(err)
+    })
+  })
+
   function handleStreamFetch(finish) {
     return new Promise((resolve, reject) => {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT)
+      (async () => {
+        let lastError = null
+        let lastStatus = 502
+        for (const candidate of candidateSources) {
+          try {
+            const { ok, status, response } = await fetchSource(candidate)
+            setStreamCORS()
 
-      fetch(streamUrl, {
-        headers: {
-          'User-Agent': COMMON_UA,
-          'Referer': referer,
-          'Origin': referer,
-        },
-        signal: controller.signal,
-      }).then(async response => {
-        clearTimeout(timeoutId)
+            if (!ok) {
+              lastError = new Error(`HTTP ${status}`)
+              lastStatus = status
+              console.log(`[proxy/stream] source ${status} failed for ${candidate}, trying next channel source...`)
+              // 非真错误响应体不需读取，直接回落
+              try { response.body?.cancel() } catch (_e) { /* ignore */ }
+              continue
+            }
 
-        if (!response.ok) {
-          finish()
-          return resolve(res.status(response.status).json({
-            error: 'Stream fetch failed',
-            status: response.status,
-            url: streamUrl,
-          }))
-        }
+            const contentType = response.headers.get('content-type') || ''
 
-        const contentType = response.headers.get('content-type') || ''
+            const isManifest = contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || candidate.endsWith('.m3u8')
 
-        if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
-          const text = await response.text()
+            if (isManifest) {
+              const text = await response.text()
+              if (candidateSources.length > 1 && candidate !== candidateSources[0]) {
+                console.log(`[proxy/stream] failover to alternate source succeeded: ${candidate}`)
+              }
 
-          const isMasterPlaylist = text.includes('#EXT-X-STREAM-INF')
+              // 始终改写 manifest（含 master playlist），让所有变体和分段 URL 走代理，
+              // 避免浏览器直接请求 CDN 导致 CORS 拦截。
+              let rewritten = rewriteManifest(text, candidate)
 
-          // 始终改写 manifest（含 master playlist），让所有变体和分段 URL 走代理，
-          // 避免浏览器直接请求 CDN 导致 CORS 拦截。
-          // 不再使用 redirect 选清晰度——让 hls.js 自行根据带宽自适应切换。
-          let rewritten = rewriteManifest(text, streamUrl)
+              const acceptEncoding = req.headers['accept-encoding'] || ''
+              const shouldCompress = rewritten.length > 1024 && (acceptEncoding.includes('gzip') || acceptEncoding.includes('deflate'))
 
-          const acceptEncoding = req.headers['accept-encoding'] || ''
-          const shouldCompress = rewritten.length > 1024 && (acceptEncoding.includes('gzip') || acceptEncoding.includes('deflate'))
+              if (shouldCompress) {
+                const compressed = zlib.gzipSync(Buffer.from(rewritten, 'utf-8'))
+                res.set('Content-Encoding', 'gzip')
+                res.set('Content-Type', 'application/vnd.apple.mpegurl')
+                res.set('Content-Length', compressed.length.toString())
+                finish()
+                return resolve(res.send(compressed))
+              }
 
-          setStreamCORS()
-
-          if (shouldCompress) {
-            const compressed = zlib.gzipSync(Buffer.from(rewritten, 'utf-8'))
-            res.set('Content-Encoding', 'gzip')
-            res.set('Content-Type', 'application/vnd.apple.mpegurl')
-            res.set('Content-Length', compressed.length.toString())
-            finish()
-            return resolve(res.send(compressed))
+              res.set('Content-Type', 'application/vnd.apple.mpegurl')
+              finish()
+              return resolve(res.send(rewritten))
+            } else {
+              // 分片/媒体数据：直接透传
+              const arrayBuffer = await response.arrayBuffer()
+              res.end(Buffer.from(arrayBuffer))
+              finish()
+              return resolve()
+            }
+          } catch (err) {
+            lastError = err
+            console.log(`[proxy/stream] source error: ${err.message} for ${candidate}, trying next channel source...`)
           }
-
-          res.set('Content-Type', 'application/vnd.apple.mpegurl')
-          finish()
-          return resolve(res.send(rewritten))
-        } else {
-          setStreamCORS()
-          const arrayBuffer = await response.arrayBuffer()
-          res.end(Buffer.from(arrayBuffer))
-          finish()
         }
-      }).catch(err => {
-        clearTimeout(timeoutId)
+
         finish()
+        const err = lastError || new Error('All sources failed')
+        err.status = lastStatus
         reject(err)
-      })
+      })().catch(reject)
     })
   }
 
@@ -413,7 +471,8 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
     })
   } catch (err) {
     console.error('[proxy/stream] Error:', err.message, 'URL:', streamUrl)
-    res.status(502).json({ error: 'Proxy stream error', url: streamUrl })
+    const status = err.status && err.status !== 502 ? err.status : 502
+    res.status(status).json({ error: 'Proxy stream error', url: streamUrl })
   }
 })
 
@@ -524,18 +583,49 @@ app.get(['/api/proxy/image', '/proxy/image'], async (req, res) => {
 
 app.get(['/api/probe', '/probe'], async (req, res) => {
   const url = req.query.url
-  if (!url) return res.status(400).json({ error: 'Missing url parameter' })
+  const urlsParam = req.query.urls
+  if (!url && !urlsParam) return res.status(400).json({ error: 'Missing url parameter' })
 
-  try {
-    const resp = await fetch(url, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(5000),
-      headers: { 'User-Agent': COMMON_UA },
-    })
-    res.json({ status: resp.ok ? 'ok' : 'error', code: resp.status })
-  } catch (err) {
-    res.json({ status: 'error', code: 0 })
+  const urls = urlsParam
+    ? String(urlsParam).split(',').map(s => s.trim()).filter(Boolean)
+    : [String(url || '')]
+
+  // 逐个源探测：能成功拉取并解析出 m3u8 清单才算可用（HEAD 可能被反爬拦截/误报）
+  const probeOne = async (u) => {
+    if (!u) return { ok: false, code: 0 }
+    try {
+      const resp = await fetch(u, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+        headers: {
+          'User-Agent': COMMON_UA,
+          'Referer': getSmartReferer(u),
+        },
+      })
+      if (!resp.ok) return { ok: false, code: resp.status }
+
+      const contentType = resp.headers.get('content-type') || ''
+      if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || u.endsWith('.m3u8')) {
+        const text = await resp.text()
+        const isPlaylist = text.includes('#EXTM3U')
+        return { ok: isPlaylist, code: resp.status, isPlaylist }
+      }
+      // 非 m3u8（如直连 mp4/flv）：HTTP 200 即视为可用
+      return { ok: true, code: resp.status }
+    } catch (err) {
+      return { ok: false, code: 0 }
+    }
   }
+
+  let firstResult = null
+  let bestStatus = 0
+  for (const u of urls) {
+    const r = await probeOne(u)
+    if (!firstResult) firstResult = r
+    if (r.ok) return res.json({ status: 'ok', code: r.code, probedUrls: urls.length })
+    bestStatus = r.code || bestStatus
+  }
+  res.json({ status: 'error', code: bestStatus || firstResult?.code || 0, probedUrls: urls.length })
 })
 
 app.get('/health', (req, res) => {

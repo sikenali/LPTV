@@ -4,6 +4,7 @@ export interface Channel {
   logo: string;
   group: string;
   url: string;
+  urls?: string[];
 }
 
 export interface UserSettings {

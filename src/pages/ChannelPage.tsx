@@ -26,7 +26,6 @@ export default function ChannelPage() {
   const [isPaused, setIsPaused] = useState(false)
   const playerRef = useRef<HlsPlayerRef>(null)
   const location = useLocation()
-
   useEffect(() => {
     const allowed = filterChannels(channels)
     if (allowed.length === 0) return
@@ -46,13 +45,16 @@ export default function ChannelPage() {
 
     const runProbe = (ch: Channel) => {
       running++
-      const signal = AbortSignal.timeout(3000)
-      fetch(`/api/probe?url=${encodeURIComponent(ch.url)}`, { signal })
+      const urls = ch.urls && ch.urls.length > 0 ? ch.urls : [ch.url]
+      const signal = AbortSignal.timeout(15000)
+      fetch(`/api/probe?urls=${encodeURIComponent(urls.join(','))}`, { signal })
         .then(resp => resp.json().then(d => ({ ok: d.status === 'ok' })))
         .catch(() => ({ ok: false }))
         .then(({ ok }) => {
           if (ok) {
-            stored.push(ch.url)
+            for (const u of urls) {
+              if (!stored.includes(u)) stored.push(u)
+            }
             try { localStorage.setItem(VALIDATED_URLS_KEY, JSON.stringify(stored)) } catch (_e) { /* ignore */ }
             current[ch.id] = 'ok'
           } else {
@@ -89,13 +91,13 @@ export default function ChannelPage() {
 
     const cctv1 = allowed.find(c => /^cctv1(\+?)$/i.test(c.name))
     if (cctv1) {
-      setSelectedChannel(cctv1)
+      selectChannel(cctv1)
     }
 
     // Handle channel selection from favorites navigation
     const state = location.state as { selectChannel?: Channel } | null
     if (state?.selectChannel) {
-      setSelectedChannel(state.selectChannel)
+      selectChannel(state.selectChannel)
       window.history.replaceState({}, '')
     }
   }, [channels, location])
@@ -103,10 +105,22 @@ export default function ChannelPage() {
   const filtered = useMemo(() => {
     const allowed = filterChannels(channels)
     if (!debouncedQuery.trim()) return allowed
-    return allowed.filter(c => c.name.toLowerCase().includes(debouncedQuery.toLowerCase()))
+    // 搜索时跨越全部频道（不只央/卫视两个展示分组），让结果更全
+    const q = debouncedQuery.toLowerCase()
+    return channels.filter(c => c.name.toLowerCase().includes(q) || (c.group || '').toLowerCase().includes(q))
   }, [channels, debouncedQuery])
 
   const grouped = useMemo(() => getGroupedChannels(filtered), [filtered])
+
+  // 搜索时自动展开所有命中的分组，确保结果可见
+  useEffect(() => {
+    if (!debouncedQuery.trim()) return
+    setExpandedCategories(prev => {
+      const next = { ...prev }
+      grouped.forEach(g => { next[g.group] = true })
+      return next
+    })
+  }, [debouncedQuery, grouped])
 
   const toggleCategory = (group: string) => {
     setExpandedCategories(prev => ({ ...prev, [group]: !prev[group] }))
@@ -120,6 +134,33 @@ export default function ChannelPage() {
   const handlePlay = () => {
     playerRef.current?.resume()
     setIsPaused(false)
+  }
+
+  // 当前频道播放失败时的多源 failover：依次尝试该频道的其他源，
+  // 全部失败则回到第一个源并强制重建播放器（配合后端 manifest 层切换）。
+  const [playAttempt, setPlayAttempt] = useState(0)
+  const activeUrl = useMemo(() => {
+    if (!selectedChannel) return ''
+    const urls = selectedChannel.urls && selectedChannel.urls.length > 0 ? selectedChannel.urls : [selectedChannel.url]
+    return urls[playAttempt % urls.length]
+  }, [selectedChannel, playAttempt])
+
+  const handleChannelPlayError = (ch: Channel) => {
+    const urls = ch.urls && ch.urls.length > 0 ? ch.urls : [ch.url]
+    // 尚有未尝试的源 → 切到下一个源并重建播放器
+    if (playAttempt + 1 < urls.length) {
+      setPlayAttempt(prev => prev + 1)
+      setIsPaused(false)
+      return
+    }
+    // 全部源都已尝试 → 重置为第一源，由后端 manifest failover 兜底
+    setPlayAttempt(0)
+    setIsPaused(false)
+  }
+
+  const selectChannel = (ch: Channel | null) => {
+    setPlayAttempt(0)
+    setSelectedChannel(ch)
   }
 
   const handleToggleFullscreen = () => {
@@ -237,7 +278,7 @@ export default function ChannelPage() {
                             return (
                               <motion.button
                                 key={ch.id}
-                                onClick={() => setSelectedChannel(ch)}
+                                onClick={() => selectChannel(ch)}
                                 whileTap={{ scale: 0.97 }}
                                 whileHover={{ x: 3 }}
                                 animate={isSelected
@@ -323,15 +364,17 @@ export default function ChannelPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden" style={{ background: '#1a1410' }}>
-        <div className="flex-1 min-h-0 relative bg-[#0d0a08] overflow-hidden">
+      <div className="flex-1 min-h-0 relative overflow-hidden" style={{ background: '#1a1410' }}>
+        <div className="absolute inset-0">
           {selectedChannel ? (
             <HlsPlayer
+              key={`${selectedChannel.id}-${playAttempt}`}
               ref={playerRef}
-              url={selectedChannel.url}
+              url={activeUrl}
+              onError={() => handleChannelPlayError(selectedChannel)}
             />
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-full h-full flex items-center justify-center">
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(196,61,61,0.15)' }}>
                   <RiPlayFill className="w-8 h-8" style={{ color: '#c43d3d' }} />
@@ -340,10 +383,11 @@ export default function ChannelPage() {
               </div>
             </div>
           )}
+        </div>
 
-          {/* Bottom control bar - overlay on top of player, always visible */}
-          {selectedChannel && (
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-10" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.35) 60%, transparent)' }}>
+        {/* Bottom control bar - overlay on top of player, always visible */}
+        {selectedChannel && (
+          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-20" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.35) 60%, transparent)' }}>
               <div className="flex items-center gap-1 shrink-0">
                 {isPaused ? (
                   <button onClick={handlePlay} className="p-2 rounded-full hover:bg-white/10 transition-colors">
@@ -394,7 +438,6 @@ export default function ChannelPage() {
           </div>
         )}
       </div>
-    </div>
     </div>
   )
 }

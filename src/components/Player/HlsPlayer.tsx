@@ -137,18 +137,9 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
       clearAllTimers()
       retryCountRef.current = 0
       errorTypeRef.current = null
-      finishLoading()
       setError(null)
       errorRef.current = null
       tryPlay()
-    })
-
-    hls.on(Hls.Events.LEVEL_SWITCHED, () => {
-      if (loadingRef.current) {
-        clearAllTimers()
-        finishLoading()
-        setError(null)
-      }
     })
 
     hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -324,6 +315,11 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError }, re
         onLoadedData={() => {
           clearAllTimers()
           isPlayingRef.current = true
+        }}
+        onPlaying={() => {
+          clearAllTimers()
+          isPlayingRef.current = true
+          finishLoading()
         }}
         onClick={() => {
           if (videoRef.current) {
