@@ -1,0 +1,25 @@
+application:
+  subdomain: lptv
+  background_task: true
+  # 必须显式指定自带 node 的镜像：本地 lpk install 不解析 package.yml 的 runtime: node
+  image: registry.lazycat.cloud/lzc-music/server:1.0.2
+  routes:
+    - /=file:///lzcapp/pkg/content/frontend
+  upstreams:
+    - location: /api/
+      backend: http://127.0.0.1:8080/
+      # 默认转发会去掉 location 前缀（/api/m3u -> /m3u），导致后端 404。
+      # 保留前缀，使后端收到的仍是 /api/m3u（需 lzcos v1.3.9+）
+      disable_trim_location: true
+      backend_launch_command: /lzcapp/pkg/content/scripts/start-backend.sh
+      workdir: /lzcapp/pkg/content/scripts
+  environment:
+    BACKEND_PORT: "8080"
+    FRONTEND_PORT: "5173"
+    DATA_DIR: /lzcapp/var/data
+    PORT: "8080"
+    NODE_ENV: production
+  health_check:
+    test_url: http://127.0.0.1:8080/health
+    start_period: 120s
+    timeout: 10s
