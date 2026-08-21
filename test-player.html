@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XGPlayer 测试 - LPTV</title>
+  <link rel="stylesheet" href="http://localhost:5173/src/index.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0f172a; color: #fff; font-family: sans-serif; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 20px; font-size: 20px; color: #f87171; }
+    .player-wrap { max-width: 900px; margin: 0 auto 20px; }
+    #player-container { width: 100%; aspect-ratio: 16/9; background: #000; }
+    .controls { max-width: 900px; margin: 0 auto; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    select, button { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; }
+    select { background: #1e293b; color: #fff; flex: 1; }
+    button { background: #dc2626; color: #fff; }
+    button:hover { background: #ef4444; }
+    .status { max-width: 900px; margin: 10px auto; padding: 10px; border-radius: 8px; font-size: 13px; }
+    .status.ok { background: #166534; color: #86efac; }
+    .status.err { background: #991b1b; color: #fca5a5; }
+    .status.info { background: #1e293b; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <h1>XGPlayer 测试 (LPTV)</h1>
+  <div class="player-wrap">
+    <div id="player-container"></div>
+  </div>
+  <div class="controls">
+    <select id="channelSelect">
+      <option value="">选择频道...</option>
+    </select>
+    <button id="playBtn">播放</button>
+    <button id="pauseBtn">暂停</button>
+  </div>
+  <div class="status info" id="status">就绪，请选择频道</div>
+
+  <script type="module">
+    import Player from 'https://unpkg.com/xgplayer@3.0.26/es/index.js'
+    import HlsPlugin from 'https://unpkg.com/xgplayer-hls@3.0.26/es/index.js'
+
+    let player = null
+    const statusEl = document.getElementById('status')
+    const channelSelect = document.getElementById('channelSelect')
+    const playBtn = document.getElementById('playBtn')
+    const pauseBtn = document.getElementById('pauseBtn')
+
+    function setStatus(msg, type = 'info') {
+      statusEl.textContent = msg
+      statusEl.className = 'status ' + type
+    }
+
+    // 加载频道列表
+    fetch('http://localhost:3000/api/m3u')
+      .then(r => r.json())
+      .then(channels => {
+        const groups = {}
+        channels.slice(0, 50).forEach(ch => {
+          const g = ch.group || ch.category || '其他'
+          if (!groups[g]) groups[g] = []
+          groups[g].push(ch)
+        })
+        for (const [group, chs] of Object.entries(groups)) {
+          const optgroup = document.createElement('optgroup')
+          optgroup.label = group
+          chs.forEach(ch => {
+            const opt = document.createElement('option')
+            opt.value = JSON.stringify({ url: ch.url, name: ch.name })
+            opt.textContent = ch.name
+            optgroup.appendChild(opt)
+          })
+          channelSelect.appendChild(optgroup)
+        }
+        setStatus(`已加载 ${channels.length} 个频道`)
+      })
+      .catch(e => setStatus('加载频道失败: ' + e.message, 'err'))
+
+    // 播放
+    playBtn.onclick = async () => {
+      const val = channelSelect.value
+      if (!val) { setStatus('请先选择频道', 'err'); return }
+      const { url, name } = JSON.parse(val)
+
+      if (player) { player.destroy(); player = null }
+
+      setStatus(`正在加载: ${name}...`, 'info')
+
+      try {
+        player = new Player({
+          id: 'xg-test-player',
+          el: document.getElementById('player-container'),
+          url: 'http://localhost:3000/api/proxy/stream?url=' + encodeURIComponent(url),
+          autoplay: true,
+          autoplayMuted: false,
+          lang: 'zh-cn',
+          plugins: [HlsPlugin],
+          volume: 0.8,
+        })
+
+        player.on('play', () => setStatus(`✅ ${name} 播放中`, 'ok'))
+        player.on('playing', () => {})
+        player.on('waiting', () => setStatus('⏳ 缓冲中...', 'info'))
+        player.on('pause', () => setStatus(`⏸ ${name} 已暂停`, 'info'))
+        player.on('error', (e) => setStatus('❌ 播放失败: ' + (e?.message || '未知错误'), 'err'))
+      } catch (err) {
+        setStatus('❌ 初始化失败: ' + err.message, 'err')
+      }
+    }
+
+    pauseBtn.onclick = () => {
+      if (player) {
+        player.pause()
+        setStatus('⏸ 已暂停', 'info')
+      }
+    }
+  </script>
+</body>
+</html>
