@@ -4,14 +4,9 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 const zlib = require('zlib')
-const { M3uParser } = require('m3u-parser-generator')
 
 const app = express()
 const PORT = process.env.PORT || 3000
-const LOCAL_M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
-// 开发环境本地文件不存在时的兜底源（本项目 GitHub raw 地址）
-const M3U_URL = 'https://raw.githubusercontent.com/sikenali/LPTV/refs/heads/dev/channels/lptv.m3u8'
-const CACHE_TTL = 4 * 60 * 60 * 1000
 const LOGO_DIR = path.join(__dirname, '..', 'logos')
 const STREAM_TIMEOUT = 30000
 const maxConcurrentStreams = 10
@@ -20,20 +15,16 @@ const pendingStreamRequests = []
 
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
-let cache = { data: null, timestamp: 0 }
-let iptvUrlCache = new Map()
 let iptvCache = new Map()
+let channelTokenCache = null
+let channelTokenCacheTime = 0
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173']
 const corsOptions = {
   origin: (origin, callback) => {
-    // 允许无 Origin 请求（如 Service Worker、某些移动端容器）
     if (!origin) return callback(null, true)
-    // 开发环境：允许任意 origin
     if (process.env.NODE_ENV !== 'production') return callback(null, true)
-    // 生产环境：检查白名单或回显 origin
     if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
-    // 允许与当前请求 origin 匹配（支持动态部署）
     callback(null, true)
   },
   credentials: true,
@@ -41,655 +32,9 @@ const corsOptions = {
 app.use(cors(corsOptions))
 app.use(express.json())
 
-function normalizeChannelName(name) {
-  let n = String(name || '').toLowerCase().trim()
-  // 去除常见画质后缀（如 "东方卫视4K" → "dongfangweishi"）
-  n = n.replace(/(高清|超清|蓝光|4k|8k|hd|uhd|fhd|sd|Plus|\+|版|version|ver)\b/g, '')
-  // 去除分隔符
-  n = n.replace(/[\s\-_（）()，,。.·]+/g, '')
-  return n
-}
+// ── iptv345.com iframe 播放页代理 ───────────────────────────────────────
+const IPTV345_TOKEN = '79e9e4ac43fa67c36a3236b7ae8a2027'
 
-function parseM3U(text) {
-  const parser = new M3uParser()
-  const playlist = parser.parse(text)
-  const map = new Map()
-
-  for (const m of playlist.medias || []) {
-    const name = m.name
-    const group = m.attributes?.['group-title'] || '未分类'
-    const logo = m.attributes?.['tvg-logo'] || ''
-    const url = m.location
-    const key = normalizeChannelName(name) || normalizeChannelName(m.attributes?.['tvg-name'] || '')
-
-    if (!map.has(key)) {
-      const baseId = `${group}-${name}`
-      map.set(key, {
-        id: baseId,
-        name,
-        logo,
-        group,
-        url,
-        urls: [url],
-      })
-      continue
-    }
-
-    const existing = map.get(key)
-    // 收集同一频道的所有源，去重相同 url
-    if (!existing.urls.includes(url)) existing.urls.push(url)
-    // 若这条的来源优先级更高（更低数值 = 更主流的分组），则用这条作为展示名称/分组
-    const existingPriority = GROUP_PRIORITY_INDEX[existing.group] ?? 999
-    const newPriority = GROUP_PRIORITY_INDEX[group] ?? 999
-    if (newPriority < existingPriority) {
-      existing.name = name
-      existing.group = group
-      existing.logo = logo
-      existing.id = `${group}-${name}`
-      existing.url = url
-    }
-  }
-
-  return Array.from(map.values())
-}
-
-async function probeUrl(url) {
-  try {
-    const resp = await fetch(url, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT),
-      headers: { 'User-Agent': COMMON_UA },
-    })
-    return resp.status < 400
-  } catch {
-    return false
-  }
-}
-
-async function filterValidChannels(channels) {
-  const results = new Array(channels.length)
-  let index = 0
-
-  async function probeBatch(batch) {
-    const promises = batch.map(async (channel, i) => {
-      const valid = await probeUrl(channel.url)
-      results[index + i] = valid ? channel : null
-    })
-    await Promise.all(promises)
-  }
-
-  for (let i = 0; i < channels.length; i += MAX_CONCURRENT) {
-    const batch = channels.slice(i, i + MAX_CONCURRENT)
-    await probeBatch(batch)
-  }
-
-  return results.filter(c => c !== null)
-}
-
-app.get(['/api/m3u', '/m3u'], async (req, res) => {
-  const forceRefresh = req.query.refresh === '1'
-  const shouldValidate = req.query.validate === 'true'
-  const now = Date.now()
-
-  if (!forceRefresh && !shouldValidate && cache.data && now - cache.timestamp < CACHE_TTL) {
-    return res.json(cache.data)
-  }
-
-  try {
-    let text
-    let loadedFrom = 'remote'
-    // 远程优先：始终从 GitHub raw 拉取最新源（定时任务每 4h 更新仓库）。
-    // 已打包的 lpk 无需重新构建即可拿到最新的频道文件。
-    try {
-      const response = await fetch(M3U_URL, {
-        headers: { 'User-Agent': COMMON_UA },
-        signal: AbortSignal.timeout(10000),
-      })
-      if (response.ok) {
-        text = await response.text()
-        console.log('[m3u] loaded from remote:', M3U_URL)
-      } else {
-        throw new Error(`remote status ${response.status}`)
-      }
-    } catch (remoteErr) {
-      // 远程不可达/超时/非 200 时，兜底使用打包内置的本地快照
-      const useLocalFallback = process.env.USE_LOCAL_M3U !== 'false'
-      if (useLocalFallback && fs.existsSync(LOCAL_M3U_PATH)) {
-        text = fs.readFileSync(LOCAL_M3U_PATH, 'utf-8')
-        loadedFrom = 'local'
-        console.log('[m3u] remote unavailable, fallback to local lptv.m3u8:', LOCAL_M3U_PATH, '(reason:', remoteErr.message + ')')
-      } else {
-        if (cache.data) {
-          return res.json(cache.data)
-        }
-        return res.status(502).json({ error: 'M3U source unavailable', reason: remoteErr.message })
-      }
-    }
-    let channels = parseM3U(text)
-
-    if (shouldValidate) {
-      console.log(`[m3u] validating ${channels.length} channels...`)
-      const before = channels.length
-
-      channels = await filterValidChannels(channels)
-      console.log(`[m3u] validation complete: ${before} -> ${channels.length} valid channels`)
-    }
-
-    cache = { data: channels, timestamp: now }
-    res.json(channels)
-  } catch (err) {
-    if (cache.data) {
-      return res.json(cache.data)
-    }
-    res.status(502).json({ error: 'Failed to fetch M3U source' })
-  }
-})
-
-function extractBaseUrl(url) {
-  try {
-    const u = new URL(url)
-    return `${u.protocol}//${u.host}`
-  } catch {
-    return ''
-  }
-}
-
-function extractBaseAndPath(url) {
-  try {
-    const u = new URL(url)
-    const base = `${u.protocol}//${u.host}`
-    let pathPart = u.pathname + u.search + u.hash
-    return { base, pathPart }
-  } catch {
-    return { base: '', pathPart: '' }
-  }
-}
-
-function resolveUrl(base, relative) {
-  if (!base || !relative) return relative
-
-  if (relative.startsWith('http://') || relative.startsWith('https://')) {
-    return relative
-  }
-
-  if (relative.startsWith('//')) {
-    const parsed = new URL(relative, 'https://')
-    return `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`
-  }
-
-  if (relative.startsWith('/')) {
-    const parsed = new URL(relative, base)
-    return parsed.toString()
-  }
-
-  try {
-    const resolved = new URL(relative, base)
-    return resolved.toString()
-  } catch {
-    return relative
-  }
-}
-
-function getRefererFromUrl(url) {
-  try {
-    const u = new URL(url)
-    return `${u.protocol}//${u.host}/`
-  } catch {
-    return ''
-  }
-}
-
-const COMMON_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-const GROUP_PRIORITY_INDEX = Object.fromEntries([
-  ['央视频道', 0], ['卫视频道', 1],
-  '北京频道', '天津频道', '河北频道', '山西频道', '内蒙古频道', '辽宁频道',
-  '吉林频道', '黑龙江频道', '上海频道', '江苏频道', '浙江频道', '安徽频道',
-  '福建频道', '江西频道', '山东频道', '河南频道', '湖北频道', '湖南频道',
-  '广东频道', '广西频道', '海南频道', '四川频道', '贵州频道', '云南频道',
-  '西藏频道', '陕西频道', '甘肃频道', '青海频道', '宁夏频道', '新疆频道',
-  '香港频道', '澳门频道', '台湾频道',
-  '新闻频道', '体育频道', '影视频道', '少儿动漫', '纪录人文', '音乐频道',
-  '广播频道', '戏曲综艺', '法治军事', '游戏电竞', '生活购物', '教育党建',
-  '港澳台频道', '文旅频道',
-  '其他频道', '未分类',
-].flatMap((g, i) => g ? [[g, i]] : []))
-const PROBE_TIMEOUT = 3000
-const MAX_CONCURRENT = 5
-const REFERER_MAP = {
-  'm3u.81diangao.com': 'https://m3u.81diangao.com/',
-  'live-trac': 'https://live-trac.tv/',
-  'hls': 'https://www.hls.tv/',
-  'iqilu': 'https://www.iqilu.com/',
-}
-
-function getSmartReferer(url) {
-  try {
-    const host = new URL(url).hostname.toLowerCase()
-    for (const [key, referer] of Object.entries(REFERER_MAP)) {
-      if (host.includes(key)) return referer
-    }
-  } catch (_e) { /* ignore */ }
-  return `https://${new URL(url).hostname}/`
-}
-
-function rewriteManifest(text, masterUrl) {
-  const lines = text.split('\n')
-  const result = []
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const trimmed = line.trim()
-
-    if (!trimmed || trimmed.startsWith('#')) {
-      if (trimmed.startsWith('#EXT-X-STREAM-INF') || trimmed.startsWith('#EXT-X-MEDIA:')) {
-        const nextLine = lines[i + 1]
-        if (nextLine && !nextLine.trim().startsWith('#')) {
-          const resolved = resolveUrl(masterUrl, nextLine.trim())
-          if (resolved.endsWith('.m3u8') || resolved.includes('m3u8')) {
-            result.push(trimmed)
-            result.push(`/api/proxy/stream?url=${encodeURIComponent(resolved)}`)
-            i++
-            continue
-          }
-        }
-      }
-      result.push(line)
-      continue
-    }
-
-    const resolved = resolveUrl(masterUrl, trimmed)
-    result.push(`/api/proxy/stream?url=${encodeURIComponent(resolved)}`)
-  }
-
-  return result.join('\n')
-}
-
-app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
-  let streamUrl = req.query.url
-  if (!streamUrl) return res.status(400).json({ error: 'Missing url parameter' })
-
-  streamUrl = String(streamUrl).trim()
-
-  try {
-    const parsed = new URL(streamUrl)
-    // SSRF 防护：仅允许 https 协议，阻止内网/本地地址
-    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-      return res.status(400).json({ error: 'Only http/https URLs are allowed' })
-    }
-    const hostname = parsed.hostname.toLowerCase()
-    const privatePrefixes = ['localhost', '127.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '192.168.', '169.254.']
-    if (privatePrefixes.some(p => hostname.startsWith(p) || hostname === 'localhost')) {
-      return res.status(403).json({ error: 'Internal IPs are not allowed' })
-    }
-  } catch {
-    return res.status(400).json({ error: 'Invalid stream URL' })
-  }
-
-  const referer = getSmartReferer(streamUrl)
-
-  function setStreamCORS() {
-    const reqOrigin = req.headers.origin
-    // 回显请求 Origin 以支持 credentials 模式
-    res.set('Access-Control-Allow-Origin', reqOrigin || '*')
-    res.set('Access-Control-Allow-Credentials', 'true')
-    res.set('Vary', 'Origin')
-  }
-
-  function enqueueStream(cb) {
-    if (activeStreams < maxConcurrentStreams) {
-      activeStreams++
-      cb(() => { activeStreams-- ; dequeueStream() })
-    } else {
-      pendingStreamRequests.push(() => {
-        activeStreams++
-        cb(() => { activeStreams-- ; dequeueStream() })
-      })
-    }
-  }
-
-  function dequeueStream() {
-    while (pendingStreamRequests.length > 0 && activeStreams < maxConcurrentStreams) {
-      const next = pendingStreamRequests.shift()
-      activeStreams++
-      next(() => { activeStreams-- ; dequeueStream() })
-    }
-  }
-
-  function handleStreamFetch(finish) {
-    return new Promise((resolve, reject) => {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), STREAM_TIMEOUT)
-
-      fetch(streamUrl, {
-        headers: {
-          'User-Agent': COMMON_UA,
-          'Referer': referer,
-          'Origin': referer,
-        },
-        signal: controller.signal,
-      }).then(async response => {
-        clearTimeout(timeoutId)
-
-        if (!response.ok) {
-          finish()
-          return resolve(res.status(response.status).json({
-            error: 'Stream fetch failed',
-            status: response.status,
-            url: streamUrl,
-          }))
-        }
-
-        const contentType = response.headers.get('content-type') || ''
-
-        if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
-          const text = await response.text()
-
-          const isMasterPlaylist = text.includes('#EXT-X-STREAM-INF')
-
-          // 始终改写 manifest（含 master playlist），让所有变体和分段 URL 走代理，
-          // 避免浏览器直接请求 CDN 导致 CORS 拦截。
-          // 不再使用 redirect 选清晰度——让 hls.js 自行根据带宽自适应切换。
-          let rewritten = rewriteManifest(text, streamUrl)
-
-          const acceptEncoding = req.headers['accept-encoding'] || ''
-          const shouldCompress = rewritten.length > 1024 && (acceptEncoding.includes('gzip') || acceptEncoding.includes('deflate'))
-
-          setStreamCORS()
-
-          if (shouldCompress) {
-            const compressed = zlib.gzipSync(Buffer.from(rewritten, 'utf-8'))
-            res.set('Content-Encoding', 'gzip')
-            res.set('Content-Type', 'application/vnd.apple.mpegurl')
-            res.set('Content-Length', compressed.length.toString())
-            finish()
-            return resolve(res.send(compressed))
-          }
-
-          res.set('Content-Type', 'application/vnd.apple.mpegurl')
-          finish()
-          return resolve(res.send(rewritten))
-        } else {
-          setStreamCORS()
-          const arrayBuffer = await response.arrayBuffer()
-          res.end(Buffer.from(arrayBuffer))
-          finish()
-        }
-      }).catch(err => {
-        clearTimeout(timeoutId)
-        finish()
-        reject(err)
-      })
-    })
-  }
-
-  try {
-    await new Promise((resolve, reject) => {
-      enqueueStream((done) => {
-        handleStreamFetch(done).then(resolve).catch(reject)
-      })
-    })
-  } catch (err) {
-    console.error('[proxy/stream] Error:', err.message, 'URL:', streamUrl)
-    res.status(502).json({ error: 'Proxy stream error', url: streamUrl })
-  }
-})
-
-
-
-function generateLogoSvg(name) {
-  const colors = ['#3b82f6','#8b5cf6','#ef4444','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16']
-  const color = colors[Math.abs(hashCode(name)) % colors.length]
-  const letter = name.charAt(0).toUpperCase()
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-    <rect width="80" height="80" rx="12" fill="${color}" opacity="0.8"/>
-    <text x="40" y="44" text-anchor="middle" fill="white" font-size="28" font-weight="bold" font-family="sans-serif">${letter}</text>
-  </svg>`
-}
-
-function hashCode(s) {
-  let hash = 0
-  for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash) + s.charCodeAt(i)
-  return hash
-}
-
-app.get(['/api/proxy/image', '/proxy/image'], async (req, res) => {
-  const imgUrl = req.query.url
-  const name = req.query.name || ''
-  if (!imgUrl) return res.status(400).json({ error: 'Missing url parameter' })
-
-  const BASE_DIR = path.join(__dirname, '..')
-  const LOGO_DIR = path.resolve(BASE_DIR, 'logos')
-  const ext = path.extname(imgUrl) || '.png'
-  // imgUrl 格式为 "logos/CCTV1.png"，提取文件名部分
-  const fileName = path.basename(imgUrl.replace(/^.*[\\/]/, ''))
-  const localPath = path.resolve(LOGO_DIR, fileName)
-  // 路径遍历防护：确保解析后的路径仍在 LOGO_DIR 下
-  if (!localPath.startsWith(LOGO_DIR + path.sep) && localPath !== LOGO_DIR) {
-    return res.status(403).json({ error: 'Access denied' })
-  }
-
-  if (fs.existsSync(localPath)) {
-    const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
-    const imgOrigin = req.headers.origin
-    res.set({
-      'Access-Control-Allow-Origin': imgOrigin || '*',
-      'Access-Control-Allow-Credentials': 'true',
-      'Cache-Control': 'public, max-age=86400',
-      'Content-Type': contentType,
-    })
-    return res.send(fs.readFileSync(localPath))
-  }
-
-  // 远程台标 fallback：hash 缓存到 logos/hash.png
-  const hash = crypto.createHash('md5').update(imgUrl).digest('hex')
-  const hashPath = path.join(LOGO_DIR, hash + ext)
-
-  if (fs.existsSync(hashPath)) {
-    const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
-    const imgOrigin = req.headers.origin
-    res.set({
-      'Access-Control-Allow-Origin': imgOrigin || '*',
-      'Access-Control-Allow-Credentials': 'true',
-      'Cache-Control': 'public, max-age=86400',
-      'Content-Type': contentType,
-    })
-    return res.send(fs.readFileSync(hashPath))
-  }
-
-  try {
-    // SSRF 防护：远程台标 fetch 也需校验
-    const imgParsed = new URL(imgUrl)
-    if (imgParsed.protocol !== 'https:' && imgParsed.protocol !== 'http:') {
-      throw new Error('Invalid protocol')
-    }
-    const imgHost = imgParsed.hostname.toLowerCase()
-    const privatePrefixes = ['localhost', '127.', '10.', '172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.', '192.168.', '169.254.']
-    if (privatePrefixes.some(p => imgHost.startsWith(p) || imgHost === 'localhost')) {
-      throw new Error('Internal IP blocked')
-    }
-
-    const response = await fetch(imgUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(8000),
-    })
-    if (!response.ok) throw new Error('Fetch failed')
-
-    const buffer = Buffer.from(await response.arrayBuffer())
-    fs.mkdirSync(LOGO_DIR, { recursive: true })
-    fs.writeFileSync(localPath, buffer)
-    fs.writeFileSync(hashPath, buffer)
-    res.set({
-      'Access-Control-Allow-Origin': '*',
-      'Content-Type': response.headers.get('content-type') || 'image/png',
-      'Cache-Control': 'public, max-age=86400',
-    })
-    res.send(buffer)
-  } catch (err) {
-    // 远程获取失败，尝试读 hash 缓存
-    if (fs.existsSync(hashPath)) {
-      const contentType = ext === '.svg' ? 'image/svg+xml' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'image/png'
-      res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': contentType })
-      return res.send(fs.readFileSync(hashPath))
-    }
-    const svg = generateLogoSvg(name)
-    res.set({
-      'Access-Control-Allow-Origin': '*',
-      'Content-Type': 'image/svg+xml',
-      'Cache-Control': 'public, max-age=86400',
-    })
-    res.send(svg)
-  }
-})
-
-app.get(['/api/probe', '/probe'], async (req, res) => {
-  const url = req.query.url
-  const urlsParam = req.query.urls
-  if (!url && !urlsParam) return res.status(400).json({ error: 'Missing url parameter' })
-
-  const urls = urlsParam
-    ? String(urlsParam).split(',').map(s => s.trim()).filter(Boolean)
-    : [String(url || '')]
-
-  // 逐个源探测：能成功拉取并解析出 m3u8 清单才算可用（HEAD 可能被反爬拦截/误报）
-  const probeOne = async (u) => {
-    if (!u) return { ok: false, code: 0 }
-    try {
-      const resp = await fetch(u, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000),
-        headers: {
-          'User-Agent': COMMON_UA,
-          'Referer': getSmartReferer(u),
-        },
-      })
-      if (!resp.ok) return { ok: false, code: resp.status }
-
-      const contentType = resp.headers.get('content-type') || ''
-      if (contentType.includes('mpegurl') || contentType.includes('x-mpegurl') || u.endsWith('.m3u8')) {
-        const text = await resp.text()
-        const isPlaylist = text.includes('#EXTM3U')
-        return { ok: isPlaylist, code: resp.status, isPlaylist }
-      }
-      // 非 m3u8（如直连 mp4/flv）：HTTP 200 即视为可用
-      return { ok: true, code: resp.status }
-    } catch (err) {
-      return { ok: false, code: 0 }
-    }
-  }
-
-  let firstResult = null
-  let bestStatus = 0
-  for (const u of urls) {
-    const r = await probeOne(u)
-    if (!firstResult) firstResult = r
-    if (r.ok) return res.json({ status: 'ok', code: r.code, probedUrls: urls.length })
-    bestStatus = r.code || bestStatus
-  }
-  res.json({ status: 'error', code: bestStatus || firstResult?.code || 0, probedUrls: urls.length })
-})
-
-// iptv345.com 解密常量（从页面 JS 提取）
-const IPTV345_KRKAN = '5da54036e952163d967d08b3a76c2aa3'
-const IPTV345_ARNAK = 'aFLwGcEVodnyaUMmZlnv9Y4j'
-const IPTV345_NBYSB = '4d236f8f9f07cdb6fe127f8c8301700a'
-const IPTV345_TOKEN_ORIG = '79e9e4ac43fa67c36a3236b7ae8a2027'
-const IPTV345_TOKEN_NEW = IPTV345_ARNAK
-
-// Base64 解码（标准）
-function base64Decode(str) {
-  const keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
-  let result = ''
-  for (let i = 0; i < str.length; i += 4) {
-    const h1 = keyStr.indexOf(str.charAt(i))
-    const h2 = keyStr.indexOf(str.charAt(i + 1))
-    const h3 = keyStr.indexOf(str.charAt(i + 2))
-    const h4 = keyStr.indexOf(str.charAt(i + 3))
-    const bits = h1 << 18 | h2 << 12 | h3 << 6 | h4
-    result += String.fromCharCode(bits >> 16 & 0xff)
-    if (h3 !== 64) result += String.fromCharCode(bits >> 8 & 0xff)
-    if (h4 !== 64) result += String.fromCharCode(bits & 0xff)
-  }
-  return result
-}
-
-// XOR 解密 + 双层 Base64
-function xorDecrypt(encrypted, key) {
-  const decoded = base64Decode(encrypted)
-  const fullKey = key + 'da49c0eebfeaaa3e'
-  let result = ''
-  for (let i = 0; i < decoded.length; i++) {
-    result += String.fromCharCode(decoded.charCodeAt(i) ^ fullKey.charCodeAt(i % fullKey.length))
-  }
-  return base64Decode(result)
-}
-
-// 完整解密（对应前端 vpxuv 函数）
-function decryptIptvUrl(encoded) {
-  let result = encoded.split('').reverse().join('')
-  result = xorDecrypt(result, IPTV345_KRKAN)
-  result = result.replace('token=' + IPTV345_NBYSB, 'token=' + IPTV345_TOKEN_NEW)
-  result = result.replace(IPTV345_KRKAN, '')
-  return result
-}
-
-// 从 HTML 中提取加密的选项值
-function extractEncodedUrls(html) {
-  const match = html.match(/id=["']playURL["'][^>]*>([\s\S]*?)<\/select>/)
-  if (!match) return []
-  const values = match[1].match(/value="([^"]+)"/g) || []
-  return values.map(v => v.replace(/value="|"|'/g, ''))
-}
-
-app.get('/api/iptv/urls/:tid/:id', async (req, res) => {
-  const { tid, id } = req.params
-  const cacheKey = `iptv_urls_${tid}_${id}`
-  const now = Date.now()
-
-  // 5 分钟缓存
-  if (iptvUrlCache.has(cacheKey)) {
-    const cached = iptvUrlCache.get(cacheKey)
-    if (now - cached.time < 5 * 60 * 1000) {
-      return res.json(cached.data)
-    }
-    iptvUrlCache.delete(cacheKey)
-  }
-
-  const token = IPTV345_TOKEN_ORIG
-  const targetUrl = `https://iptv345.com/?act=play&token=${token}&tid=${tid}&id=${id}`
-
-  try {
-    const response = await fetch(targetUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      },
-      signal: AbortSignal.timeout(15000),
-    })
-
-    if (!response.ok) {
-      return res.status(response.status).json({ error: `HTTP ${response.status}`, urls: [] })
-    }
-
-    const html = await response.text()
-    const encodedUrls = extractEncodedUrls(html)
-
-    if (encodedUrls.length === 0) {
-      return res.json({ error: '未找到频道线路', urls: [] })
-    }
-
-    const decryptedUrls = encodedUrls.map(u => decryptIptvUrl(u)).filter(Boolean)
-    const data = { urls: decryptedUrls, count: decryptedUrls.length }
-
-    iptvUrlCache.set(cacheKey, { data, time: now })
-    res.json(data)
-  } catch (err) {
-    console.error('[iptv/urls] Error:', err.message)
-    res.status(502).json({ error: err.message, urls: [] })
-  }
-})
-
-// ── iptv345.com iframe 播放页代理（web 资源模式）──
 app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
   const { tid, id } = req.params
   const cacheKey = `iptv_iframe_${tid}_${id}`
@@ -706,7 +51,7 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
     iptvCache.delete(cacheKey)
   }
 
-  const targetUrl = `https://iptv345.com/?act=play&token=${IPTV345_TOKEN_ORIG}&tid=${tid}&id=${id}`
+  const targetUrl = `https://iptv345.com/?act=play&token=${IPTV345_TOKEN}&tid=${tid}&id=${id}`
 
   try {
     const response = await fetch(targetUrl, {
@@ -723,6 +68,7 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
       return res.status(response.status).send(`Failed: HTTP ${response.status}`)
     }
 
+    // 正确处理响应体（服务器错误标记 Brotli 但实际未压缩）
     const buf = Buffer.from(await response.arrayBuffer())
     let html
     if (buf[0] === 0x1f && buf[1] === 0x8b) {
@@ -733,27 +79,47 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
       html = buf.toString('utf8')
     }
 
-    // ── 清理广告和无关内容 ──
-    html = html.replace(/<script[^>]*src=["'][^"']*alwaysmulticulturallanding[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["']popunder[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["']popup[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["']https:\/\/www\.googletagmanager[^"']*["'][^>]*><\/script>/gi, '')
+    // ── 清理广告和无关内容（保留播放核心：hls.js/mpegts.js/jquery/播放器脚本）────────
+    // 使用 tokenizer 方式精确过滤脚本标签
+    const AD_SRC_KW = [
+      'alwaysmulticulturallanding', 'popunder', 'popup',
+      'n6wxm.com', 'cdn-cgi', '51\\.la', 'googletagmanager', 'gtag'
+    ]
+    const AD_INLINE_KW = [
+      'n6wxm.com/vignette', 'sdk.51.la/js-sdk-pro',
+      'gtag(', 'dataLayer', '__CF'
+    ]
+    const scriptParts = html.split(/(<script[^>]*>[\s\S]*?<\/script>)/gi)
+    const cleanParts = []
+    for (const part of scriptParts) {
+      if (!part.startsWith('<script')) { cleanParts.push(part); continue }
+      const srcMatch = part.match(/src=["']([^"']+)["']/)
+      const srcVal = srcMatch ? srcMatch[1] : ''
+      const isAdSrc = AD_SRC_KW.some(kw => srcVal.includes(kw.replace('\\.', '.')))
+      if (isAdSrc) continue
+      const isAdInline = AD_INLINE_KW.some(kw => part.includes(kw))
+      if (isAdInline) continue
+      cleanParts.push(part)
+    }
+    html = cleanParts.join('')
+
     html = html.replace(/<div id="ad-container"[^>]*>[\s\S]*?<\/div>/gi, '')
-    html = html.replace(/<script[^>]*data-cfasync[^>]*>[\s\S]*?<\/script>/gi, '')
-    html = html.replace(/<script[^>]*>[\s\S]*?cfasync[\s\S]*?<\/script>/gi, '')
-    html = html.replace(/<script[^>]*>[\s\S]*?popunder[\s\S]*?<\/script>/gi, '')
-    html = html.replace(/<script[^>]*>[\s\S]*?popup[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<div class="headerNfooter"[^>]*>[\s\S]*?<\/div>/gi, '')
-    // 只移除不含播放器的 list-divider（保留含 <select id="playURL"> 的）—— d6e084f 修复点
-    html = html.replace(/<li data-role="list-divider">(?!.*id=["']playURL["'])[ \s\S]*?<\/li>/gi, '')
-    // 不删除含 playURL select 的 ui-grid-a，只删除其他的
-    html = html.replace(/<div class="ui-grid-a">(?!.*id=["']playURL["'])[ \s\S]*?<\/div>/gi, '')
     html = html.replace(/<div data-role="navbar"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div align="center">[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<center>[\s\S]*?<\/center>/gi, '')
     html = html.replace(/<div id="errorTip"[^>]*>[\s\S]*?<\/div>/gi, '')
+    // 移除节目单 listview（iframe 内不显示，由前端 EPG 面板替代）
+    html = html.replace(/<ul[^>]*id=["']myEpg["'][^>]*>[\s\S]*?<\/ul>/gi, '')
+    // 移除广告域名 favicon / 下载提示
+    html = html.replace(/<a[^>]*href=["']https:\/\/d\.2026016\.xyz[^>]*>[\s\S]*?<\/a>/gi, '')
+    html = html.replace(/<link[^>]*href=["']https:\/\/d\.2026016\.xyz[^"']*[^>]*>/gi, '')
+    // 移除 jQuery Mobile CSS（不需要，用我们的 overlay）
+    html = html.replace(/<link[^>]*href=["'][^"']*jquerymobile[^"']*["'][^>]*>/gi, '')
+    // 移除底部版权
+    html = html.replace(/<div data-role="footer"[^>]*>[\s\S]*?<\/div>/gi, '')
 
-    // ── 注入播放器通信脚本（通知父页面已播放 + 响应播放/暂停切换）──
+    // ── 注入播放器通信脚本 ──
     const injectScript = `<script>
 (function() {
   function notifyPlay() {
@@ -767,26 +133,20 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
   setTimeout(notifyPlay, 8000);
   setTimeout(notifyPlay, 20000);
   document.addEventListener('DOMContentLoaded', notifyPlay);
-  window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'iptv:toggle') {
-      var v = document.getElementById('vstPlayer');
-      if (!v) return;
-      if (v.paused) { try { v.play(); } catch(err) {} }
-      else { try { v.pause(); } catch(err) {} }
-    }
-  });
 })();
 </script>`
     html = html.replace('</head>', injectScript + '</head>')
 
-    // ── 全屏播放器样式 ──
+    // ── 全屏播放器样式：仅保留 video，隐藏所有 UI ──
     const customStyle = `<style>
   html, body { margin: 0; padding: 0; background: #000; overflow: hidden; height: 100%; }
   [data-role="page"] { min-height: 100vh; margin: 0; }
   #vstPlayer { width: 100%!important; height: 100vh!important; aspect-ratio: unset!important; }
   video#vstPlayer { width: 100%!important; height: 100%!important; object-fit: contain; }
   .headerNfooter, [data-role="navbar"], .ui-grid-a, #ad-container, #errorTip,
-  [data-role="list-divider"] { display: none !important; }
+  [data-role="list-divider"], [data-role="listview"], .ui-listview,
+  select#playURL, .ui-select, .ui-btn, button, a[href],
+  script, .ui-link, center, div[align] { display: none !important; }
 </style>`
     html = html.replace('<head>', '<head>' + customStyle)
 
@@ -803,13 +163,449 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
   }
 })
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+// ── iptv345 播放页 URL 解密（动态解析页面中的加密脚本）──────────────────
+/** base64 decode（含 +/= 填充，兼容 -/_ URL-safe） */
+function decodeBase64(input) {
+  let str = String(input).replace(/-/g, '+').replace(/_/g, '/')
+  while (str.length % 4) str += '='
+  return Buffer.from(str, 'base64').toString('utf8')
+}
+
+/** hacew: 原页面 base64 decode 函数 */
+function hacew(str) {
+  if (!str) return str
+  str += ''
+  const keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+  let i = 0, ac = 0, dec = '', tmp_arr = []
+  do {
+    const h1 = keyStr.indexOf(str.charAt(i++))
+    const h2 = keyStr.indexOf(str.charAt(i++))
+    const h3 = keyStr.indexOf(str.charAt(i++))
+    const h4 = keyStr.indexOf(str.charAt(i++))
+    const bits = h1 << 18 | h2 << 12 | h3 << 6 | h4
+    const a1 = bits >> 16 & 0xff
+    const a2 = bits >> 8 & 0xff
+    const a3 = bits & 0xff
+    if (h3 == 64) { tmp_arr[ac++] = String.fromCharCode(a1) }
+    else if (h4 == 64) { tmp_arr[ac++] = String.fromCharCode(a1, a2) }
+    else { tmp_arr[ac++] = String.fromCharCode(a1, a2, a3) }
+  } while (i < str.length)
+  return tmp_arr.join('')
+}
+
+/** 从页面 HTML 中提取加密变量 */
+function extractEncryptVars(html) {
+  // 匹配 var xxx = ""; var yyy ="...";var zzz = ""; var www ="..."; xxx = yyy; ... = zzz;
+  // 模式1: var name = ""; var raw ="...拼接..."; var name2 = ""; var raw2 ="...拼接..."; name = raw; ... = raw2;
+  const varPattern = /var\s+(\w+)\s*=\s*""\s*;\s*var\s+(\w+)\s*=\s*([^;]+);var\s+(\w+)\s*=\s*""\s*;\s*var\s+(\w+)\s*=\s*([^;]+);(?:\s*\w+\s*=\s*\w+\s*;){2,}/
+  const m = html.match(varPattern)
+  if (m) {
+    const keyRaw = m[3].replace(/;$/, '').trim()
+    const tokenRaw = m[5].replace(/;$/, '').trim()
+    // 解析拼接表达式（如 "abc"+"def".split("").reverse().join("")+...）
+    const evalKey = `(${keyRaw})`
+    const evalToken = `(${tokenRaw})`
+    try {
+      const keyVal = eval(evalKey)
+      const tokenVal = eval(evalToken)
+      // 找 token 替换值（lzusq = "..." 或类似）
+      const tokenReplace = html.match(/;\s*(\w+)\s*=\s*"([a-f0-9]{32})"\s*;/)
+      const oldToken = tokenReplace ? tokenReplace[2] : ''
+      // 找 XOR 后缀（key + "..."）
+      const suffixMatch = html.match(/key\s*=\s*key\s*\+\s*"([a-f0-9]+)"/)
+      const suffix = suffixMatch ? suffixMatch[1] : ''
+      return { key: keyVal, token: tokenVal, oldToken, suffix }
+    } catch (e) { /* fallback */ }
+  }
+  return null
+}
+
+let encryptVars = null
+
+/** 解密单个 URL */
+function decryptUrl(enc, vars) {
+  if (!vars) return enc
+  let led = enc.split('').reverse().join('')
+  // bihpe/vawbl 等价于 hacew → xor with key+suffix → hacew
+  const decoded = hacew(led)
+  const fullKey = vars.key + vars.suffix
+  let code = ''
+  for (let i = 0; i < decoded.length; i++) {
+    code += String.fromCharCode(decoded.charCodeAt(i) ^ fullKey.charCodeAt(i % fullKey.length))
+  }
+  led = hacew(code)
+  if (vars.oldToken) led = led.replace('token=' + vars.oldToken, 'token=' + vars.token)
+  led = led.replace(vars.key, '')
+  return led.trim()
+}
+
+// ── IPTV Info API（结构化数据：明码URL + EPG + 线路列表）─────────────────
+app.get('/api/iptv/info/:tid/:id', async (req, res) => {
+  const { tid, id } = req.params
+  const cacheKey = `iptv_info_${tid}_${id}`
+  const now = Date.now()
+
+  if (iptvCache.has(cacheKey)) {
+    const cached = iptvCache.get(cacheKey)
+    if (now - cached.time < 5 * 60 * 1000) {
+      return res.json(cached.data)
+    }
+    iptvCache.delete(cacheKey)
+  }
+
+  const targetUrl = `https://iptv345.com/?act=play&token=${IPTV345_TOKEN}&tid=${tid}&id=${id}`
+
+  try {
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'identity',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!response.ok) return res.status(response.status).json({ error: `HTTP ${response.status}` })
+
+    let buf = Buffer.from(await response.arrayBuffer())
+    let html
+    if (buf[0] === 0x1f && buf[1] === 0x8b) html = zlib.gunzipSync(buf).toString('utf8')
+    else if (buf[0] === 0x28 && buf[1] === 0xCA) html = zlib.brotliDecompressSync(buf).toString('utf8')
+    else html = buf.toString('utf8')
+
+    // ── 提取线路标签（URL 解密不稳定，仅返回标签）─────────────────────
+    const lines = []
+    const lineRegex = /<option\s+value="([^"]+)"[^>]*>([^<]+)<\/option>/g
+    let m
+    while ((m = lineRegex.exec(html)) !== null) {
+      const label = m[2].trim()
+      if (label) lines.push({ label })
+    }
+
+    // ── 提取 EPG ──
+    const epg = []
+    const epgLiRegex = /<li[^>]*>(?:<div[^>]*><div[^>]*><a[^>]*href="([^"]*)"[^>]*>[^<]*<\/a><\/div><\/div>)?(?:<span[^>]*>([^<]*)<\/span>)?(?:<span[^>]*class="ui-li-count[^"]*"[^>]*>([^<]*)<\/span>)?<\/li>/gi
+    // Simpler: just grab visible text from li elements in #myEpg
+    const epgSection = html.match(/<ul[^>]*id=["']myEpg["'][^>]*>([\s\S]*?)<\/ul>/i)
+    if (epgSection) {
+      const liBlocks = epgSection[1].match(/<li[^>]*>[\s\S]*?<\/li>/gi) || []
+      for (const li of liBlocks) {
+        const timeMatch = li.match(/>(\d{2}:\d{2})\s/)
+        // 提取完整标题：去掉所有标签后取文本，再清理多余空白
+        const rawText = li.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        const titleMatch = rawText.match(/^\d{2}:\d{2}\s+(.+)$/)
+        const countMatch = li.match(/ui-li-count[^>]*>([^<]+)<\/span>/)
+        const hrefMatch = li.match(/href="([^"]*)"/)
+        if (timeMatch && titleMatch) {
+          // 从标题中去掉"直播中"/"回看"等标签文字
+          let title = titleMatch[1].trim()
+          if (countMatch) title = title.replace(countMatch[1], '').trim()
+          epg.push({
+            time: timeMatch[1],
+            title,
+            isLive: countMatch && countMatch[1] === '直播中',
+            isLookback: countMatch && countMatch[1] === '回看',
+            lookbackUrl: hrefMatch ? hrefMatch[1] : null,
+          })
+        }
+      }
+    }
+
+    // ── 提取日期导航 ──
+    const dateLinks = []
+    const navbarMatch = html.match(/<div\s+data-role=["']navbar["'][^>]*>[\s\S]*?<\/div>/i)
+    if (navbarMatch) {
+      const btnRegex = /<a[^>]*href="([^"]*)"[^>]*>\s*<span[^>]*>(\d{4}-\d{2}-\d{2})<\/span>/g
+      let bm
+      while ((bm = btnRegex.exec(navbarMatch[0])) !== null) {
+        dateLinks.push({ date: bm[2], url: bm[1] })
+      }
+    }
+
+    // 频道名称从 channel data 推断
+    const allChannels = [...cctvChannelsProxy, ...wsChannelsProxy]
+    const ch = allChannels.find(c => c.tid === tid && c.id === id)
+    const channelName = ch?.name || `${tid}-${id}`
+
+    const info = {
+      channelName,
+      tid,
+      id,
+      lines,
+      epg,
+      dateLinks,
+    }
+
+    iptvCache.set(cacheKey, { data: info, time: now })
+    res.json(info)
+  } catch (err) {
+    console.error('[proxy/iptv/info] Error:', err.message)
+    res.status(502).json({ error: '获取频道信息失败', message: err.message })
+  }
 })
 
+// 本地频道名映射（用于 info API）
+const cctvChannelsProxy = [
+  { id: '1', name: 'CCTV1 综合', tid: 'ys' }, { id: '2', name: 'CCTV2 财经', tid: 'ys' },
+  { id: '3', name: 'CCTV3 综艺', tid: 'ys' }, { id: '4', name: 'CCTV4 中文国际', tid: 'ys' },
+  { id: '5', name: 'CCTV5 体育', tid: 'ys' }, { id: '6', name: 'CCTV5+ 体育赛事', tid: 'ys' },
+  { id: '7', name: 'CCTV6 电影', tid: 'ys' }, { id: '8', name: 'CCTV7 国防军事', tid: 'ys' },
+  { id: '9', name: 'CCTV8 电视剧', tid: 'ys' }, { id: '10', name: 'CCTV9 纪录', tid: 'ys' },
+  { id: '11', name: 'CCTV10 科教', tid: 'ys' }, { id: '12', name: 'CCTV11 戏曲', tid: 'ys' },
+  { id: '13', name: 'CCTV12 社会与法', tid: 'ys' }, { id: '14', name: 'CCTV13 新闻', tid: 'ys' },
+  { id: '15', name: 'CCTV14 少儿', tid: 'ys' }, { id: '16', name: 'CCTV15 音乐', tid: 'ys' },
+  { id: '17', name: 'CCTV16 奥林匹克', tid: 'ys' }, { id: '18', name: 'CCTV17 农业农村', tid: 'ys' },
+  { id: '19', name: 'CCTV4K 高清', tid: 'ys' }, { id: '20', name: 'CCTV8K 高清', tid: 'ys' },
+  { id: '21', name: 'CCTV4 欧洲 HD', tid: 'ys' }, { id: '22', name: 'CCTV4 美洲 HD', tid: 'ys' },
+  { id: '23', name: 'CGTN', tid: 'ys' }, { id: '24', name: 'CGTN 纪录', tid: 'ys' },
+  { id: '25', name: 'CCTV 阿拉伯语', tid: 'ys' }, { id: '26', name: 'CCTV 法语', tid: 'ys' },
+  { id: '27', name: 'CCTV 西班牙语', tid: 'ys' }, { id: '28', name: 'CCTV 俄语', tid: 'ys' },
+  { id: '29', name: 'CETV-1', tid: 'ys' }, { id: '30', name: 'CETV-2', tid: 'ys' },
+  { id: '31', name: 'CETV-3', tid: 'ys' }, { id: '32', name: 'CETV-4', tid: 'ys' },
+  { id: '33', name: 'CCTV 兵器科技', tid: 'ys' }, { id: '34', name: 'CCTV 怀旧剧场', tid: 'ys' },
+  { id: '35', name: 'CCTV 第一剧场', tid: 'ys' }, { id: '36', name: 'CCTV 风云剧场', tid: 'ys' },
+  { id: '37', name: 'CCTV 风云音乐', tid: 'ys' }, { id: '38', name: 'CCTV 风云足球', tid: 'ys' },
+  { id: '39', name: 'CCTV 世界地理', tid: 'ys' }, { id: '40', name: 'CCTV 文化精品', tid: 'ys' },
+  { id: '41', name: 'CCTV 央视台球', tid: 'ys' }, { id: '42', name: 'CCTV 高尔夫网球', tid: 'ys' },
+  { id: '43', name: 'CCTV 女性时尚', tid: 'ys' },
+]
+const wsChannelsProxy = [
+  { id: '1', name: '湖南卫视', tid: 'ws' }, { id: '2', name: '江苏卫视', tid: 'ws' },
+  { id: '3', name: '浙江卫视', tid: 'ws' }, { id: '4', name: '东方卫视', tid: 'ws' },
+  { id: '5', name: '北京卫视', tid: 'ws' }, { id: '6', name: '深圳卫视', tid: 'ws' },
+  { id: '7', name: '广东卫视', tid: 'ws' }, { id: '8', name: '安徽卫视', tid: 'ws' },
+  { id: '9', name: '东南卫视', tid: 'ws' }, { id: '10', name: '河北卫视', tid: 'ws' },
+  { id: '11', name: '黑龙江卫视', tid: 'ws' }, { id: '12', name: '湖北卫视', tid: 'ws' },
+  { id: '13', name: '江西卫视', tid: 'ws' }, { id: '14', name: '辽宁卫视', tid: 'ws' },
+  { id: '15', name: '海南卫视', tid: 'ws' }, { id: '16', name: '山东卫视', tid: 'ws' },
+  { id: '17', name: '四川卫视', tid: 'ws' }, { id: '18', name: '天津卫视', tid: 'ws' },
+  { id: '19', name: '重庆卫视', tid: 'ws' }, { id: '20', name: '贵州卫视', tid: 'ws' },
+  { id: '21', name: '吉林卫视', tid: 'ws' }, { id: '22', name: '广西卫视', tid: 'ws' },
+  { id: '23', name: '河南卫视', tid: 'ws' }, { id: '24', name: '甘肃卫视', tid: 'ws' },
+  { id: '25', name: '青海卫视', tid: 'ws' }, { id: '26', name: '云南卫视', tid: 'ws' },
+  { id: '27', name: '内蒙古卫视', tid: 'ws' }, { id: '28', name: '山西卫视', tid: 'ws' },
+  { id: '29', name: '陕西卫视', tid: 'ws' }, { id: '30', name: '兵团卫视', tid: 'ws' },
+  { id: '31', name: '新疆卫视', tid: 'ws' }, { id: '32', name: '西藏卫视', tid: 'ws' },
+  { id: '33', name: '宁夏卫视', tid: 'ws' }, { id: '34', name: '延边卫视', tid: 'ws' },
+  { id: '35', name: '康巴卫视', tid: 'ws' }, { id: '36', name: '大湾区卫视', tid: 'ws' },
+  { id: '37', name: '广东珠江频道', tid: 'ws' }, { id: '38', name: '厦门卫视', tid: 'ws' },
+  { id: '39', name: '安多卫视', tid: 'ws' }, { id: '40', name: '农林卫视', tid: 'ws' },
+  { id: '41', name: '三沙卫视', tid: 'ws' },
+]
+
+// ── Logo Proxy ──────────────────────────────────────────────────────────
+function generateLogoSvg(name) {
+  const colors = ['#3b82f6','#8b5cf6','#ef4444','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16']
+  const color = colors[Math.abs(hashCode(name)) % colors.length]
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" rx="12" fill="${color}" opacity="0.8"/><text x="40" y="44" text-anchor="middle" fill="white" font-size="28" font-weight="bold" font-family="sans-serif">${name.charAt(0).toUpperCase()}</text></svg>`
+}
+function hashCode(s) { let h = 0; for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i); return h }
+
+app.get(['/api/proxy/image', '/proxy/image'], async (req, res) => {
+  const imgUrl = req.query.url, name = req.query.name || ''
+  if (!imgUrl) return res.status(400).json({ error: 'Missing url' })
+  const dir = path.resolve(path.join(__dirname, '..', 'logos'))
+  const ext = path.extname(imgUrl) || '.png'
+  const fileName = path.basename(imgUrl.replace(/^.*[\\/]/, ''))
+  const localPath = path.resolve(dir, fileName)
+  if (!localPath.startsWith(dir + path.sep) && localPath !== dir) return res.status(403).json({ error: 'Denied' })
+  if (fs.existsSync(localPath)) {
+    const ct = ext === '.svg' ? 'image/svg+xml' : (ext === '.jpg' || ext === '.jpeg') ? 'image/jpeg' : 'image/png'
+    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': ct })
+    return res.send(fs.readFileSync(localPath))
+  }
+  const hash = crypto.createHash('md5').update(imgUrl).digest('hex')
+  const hashPath = path.join(dir, hash + ext)
+  if (fs.existsSync(hashPath)) {
+    const ct = ext === '.svg' ? 'image/svg+xml' : 'image/png'
+    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': ct })
+    return res.send(fs.readFileSync(hashPath))
+  }
+  try {
+    const p = new URL(imgUrl)
+    if (p.protocol !== 'https:' && p.protocol !== 'http:') throw new Error('bad proto')
+    const resp = await fetch(imgUrl, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) })
+    if (!resp.ok) throw new Error('fetch failed')
+    const buf = Buffer.from(await resp.arrayBuffer())
+    fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(localPath, buf); fs.writeFileSync(hashPath, buf)
+    res.set({ 'Access-Control-Allow-Origin': '*', 'Content-Type': resp.headers.get('content-type') || 'image/png', 'Cache-Control': 'public, max-age=86400' })
+    res.send(buf)
+  } catch {
+    if (fs.existsSync(hashPath)) {
+      res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': 'image/png' })
+      return res.send(fs.readFileSync(hashPath))
+    }
+    const svg = generateLogoSvg(name)
+    res.set({ 'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' })
+    res.send(svg)
+  }
+})
+
+// ── Local Logo 服务 ──────────────────────────────────────────────────────
+app.get('/api/proxy/logo/:name', (req, res) => {
+  const LOGO_DIR = path.join(__dirname, '..', 'logos')
+  const name = req.params.name
+  const safeName = path.basename(name.replace(/[^a-zA-Z0-9\u4e00-\u9fa5+\- .]/g, ''))
+  const logoPath = path.resolve(LOGO_DIR, safeName)
+  if (!logoPath.startsWith(path.resolve(LOGO_DIR) + path.sep)) {
+    return res.status(403).end()
+  }
+  if (fs.existsSync(logoPath)) {
+    const ext = path.extname(logoPath).toLowerCase()
+    const ct = ext === '.svg' ? 'image/svg+xml' : (ext === '.jpg' || ext === '.jpeg') ? 'image/jpeg' : 'image/png'
+    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=86400', 'Content-Type': ct })
+    return res.send(fs.readFileSync(logoPath))
+  }
+  const fallback = generateLogoSvg(path.basename(name, path.extname(name)))
+  res.set({ 'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=3600' })
+  res.send(fallback)
+})
+
+// ── Stream Proxy（保留给 HlsPlayer 使用）────────────────────────────────
+const COMMON_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+const REFERER_MAP = { 'm3u.81diangao.com': 'https://m3u.81diangao.com/', 'live-trac': 'https://live-trac.tv/', 'hls': 'https://www.hls.tv/', 'iqilu': 'https://www.iqilu.com/' }
+
+function getSmartReferer(url) {
+  try { const host = new URL(url).hostname.toLowerCase()
+    for (const [key, referer] of Object.entries(REFERER_MAP)) if (host.includes(key)) return referer
+  } catch {}
+  return `https://${new URL(url).hostname}/`
+}
+
+function resolveUrl(base, relative) {
+  if (!base || !relative) return relative
+  if (relative.startsWith('http://') || relative.startsWith('https://')) return relative
+  if (relative.startsWith('//')) { const u = new URL(relative, 'https://'); return `${u.protocol}//${u.host}${u.pathname}${u.search}${u.hash}` }
+  if (relative.startsWith('/')) return new URL(relative, base).toString()
+  try { return new URL(relative, base).toString() } catch { return relative }
+}
+
+function rewriteManifest(text, masterUrl) {
+  const lines = text.split('\n'), result = []
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (!trimmed || trimmed.startsWith('#')) {
+      if (trimmed.startsWith('#EXT-X-STREAM-INF') || trimmed.startsWith('#EXT-X-MEDIA:')) {
+        const next = lines[i + 1]
+        if (next && !next.trim().startsWith('#')) {
+          const resolved = resolveUrl(masterUrl, next.trim())
+          if (resolved.endsWith('.m3u8') || resolved.includes('m3u8')) {
+            result.push(trimmed); result.push(`/api/proxy/stream?url=${encodeURIComponent(resolved)}`); i++; continue
+          }
+        }
+      }
+      result.push(trimmed); continue
+    }
+    result.push(`/api/proxy/stream?url=${encodeURIComponent(resolveUrl(masterUrl, trimmed))}`)
+  }
+  return result.join('\n')
+}
+
+app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
+  let streamUrl = req.query.url
+  if (!streamUrl) return res.status(400).json({ error: 'Missing url' })
+  streamUrl = String(streamUrl).trim()
+  try {
+    const parsed = new URL(streamUrl)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return res.status(400).json({ error: 'Only http/https' })
+    const hostname = parsed.hostname.toLowerCase()
+    const priv = ['localhost','127.','10.','172.16.','172.17.','172.18.','172.19.','172.20.','172.21.','172.22.','172.23.','172.24.','172.25.','172.26.','172.27.','172.28.','172.29.','172.30.','172.31.','192.168.','169.254.']
+    if (priv.some(p => hostname.startsWith(p) || hostname === 'localhost')) return res.status(403).json({ error: 'Internal IP' })
+  } catch { return res.status(400).json({ error: 'Invalid URL' }) }
+
+  const referer = getSmartReferer(streamUrl)
+  function setCors() {
+    res.set('Access-Control-Allow-Origin', req.headers.origin || '*')
+    res.set('Access-Control-Allow-Credentials', 'true')
+    res.set('Vary', 'Origin')
+  }
+  function enqueue(cb) {
+    if (activeStreams < maxConcurrentStreams) { activeStreams++; cb(() => { activeStreams--; dequeue() }) }
+    else { pendingStreamRequests.push(() => { activeStreams++; cb(() => { activeStreams--; dequeue() }) }) }
+  }
+  function dequeue() {
+    while (pendingStreamRequests.length > 0 && activeStreams < maxConcurrentStreams) {
+      const next = pendingStreamRequests.shift(); activeStreams++; next(() => { activeStreams--; dequeue() })
+    }
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      enqueue((done) => {
+        const ctrl = new AbortController()
+        const tid = setTimeout(() => ctrl.abort(), STREAM_TIMEOUT)
+        fetch(streamUrl, { headers: { 'User-Agent': COMMON_UA, 'Referer': referer, 'Origin': referer }, signal: ctrl.signal })
+          .then(async resp => {
+            clearTimeout(tid); if (!resp.ok) { done(); return resolve(res.status(resp.status).json({ error: 'fetch failed', status: resp.status })) }
+            const ct = resp.headers.get('content-type') || ''
+            if (ct.includes('mpegurl') || ct.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
+              const text = await resp.text()
+              let rewritten = rewriteManifest(text, streamUrl)
+              const ae = req.headers['accept-encoding'] || ''
+              const compress = rewritten.length > 1024 && (ae.includes('gzip') || ae.includes('deflate'))
+              setCors()
+              if (compress) {
+                const gz = zlib.gzipSync(Buffer.from(rewritten, 'utf-8'))
+                res.set('Content-Encoding', 'gzip'); res.set('Content-Type', 'application/vnd.apple.mpegurl')
+                res.set('Content-Length', gz.length.toString()); done(); return resolve(res.send(gz))
+              }
+              res.set('Content-Type', 'application/vnd.apple.mpegurl'); done(); return resolve(res.send(rewritten))
+            } else {
+              setCors(); const ab = await resp.arrayBuffer(); res.end(Buffer.from(ab)); done()
+            }
+          }).catch(err => { clearTimeout(tid); done(); reject(err) })
+      })
+    })
+  } catch (err) {
+    console.error('[proxy/stream] Error:', err.message)
+    res.status(502).json({ error: 'Proxy stream error', url: streamUrl })
+  }
+})
+
+// ── Get channel URLs (映射前端 tid/id 到 iptv345.com 播放地址) ──────────
+app.get('/api/iptv/urls/:tid/:id', async (req, res) => {
+  const { tid, id } = req.params
+  try {
+    const now = Date.now()
+    if (!channelTokenCache || now - channelTokenCacheTime > 10 * 60 * 1000) {
+      const resp = await fetch('https://api.2026016.xyz/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(10000),
+      })
+      const html = await resp.text()
+      const channels = {}
+      const re = /href="\?act=play&token=([a-f0-9]+)&id=(\d+)"/g
+      let m
+      while ((m = re.exec(html)) !== null) {
+        channels[m[2]] = m[1]
+      }
+      channelTokenCache = channels
+      channelTokenCacheTime = now
+    }
+
+    let apiId = id
+    if (tid === 'ws') {
+      const wsOffset = parseInt(id) + 26
+      apiId = wsOffset.toString()
+    }
+
+    const token = channelTokenCache[apiId]
+    if (!token) {
+      return res.status(404).json({ error: '频道未找到', urls: [] })
+    }
+
+    const playUrl = `https://iptv345.com/?act=play&token=${token}&id=${apiId}`
+    res.json({ urls: [playUrl] })
+  } catch (err) {
+    console.error('[iptv/urls] Error:', err.message)
+    res.status(502).json({ error: '获取频道地址失败', urls: [] })
+  }
+})
+
+app.get('/health', (req, res) => { res.json({ status: 'ok', timestamp: new Date().toISOString() }) })
+
 app.listen(PORT, () => {
-  const preferLocal = process.env.USE_LOCAL_M3U !== 'false'
   console.log(`LPTV proxy server running on port ${PORT}`)
-  console.log(`[startup] M3U source: ${preferLocal ? 'local lptv.m3u8 (auto)' : 'remote'}`)
-  console.log(`[startup] CORS allowed origins: ${ALLOWED_ORIGINS.join(', ')}`)
+  console.log(`[startup] CORS allowed: ${ALLOWED_ORIGINS.join(', ')}`)
 })
