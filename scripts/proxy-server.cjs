@@ -119,6 +119,15 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
     // 移除底部版权
     html = html.replace(/<div data-role="footer"[^>]*>[\s\S]*?<\/div>/gi, '')
 
+    // ── 阻止 jQuery Mobile 自动初始化（必须在其他脚本前注入）────────────────
+    const blockJqmScript = '<scr' + 'ipt>(window.__LPTV_JQM_BLOCK=true);'
+      + 'if(typeof jQuery!=="undefined"&&jQuery.mobile){'
+      + '  jQuery.mobile.autoInitializePage=function(){};'
+      + '  jQuery.mobile._enablePageTransitionDelay=false;'
+      + '}'
+      + '</scr' + 'ipt>'
+    html = html.replace('<head>', '<head>' + blockJqmScript)
+
     // ── 注入播放器通信脚本 ──
     const injectScript = `<script>
 (function() {
@@ -146,7 +155,7 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
   .headerNfooter, [data-role="navbar"], .ui-grid-a, #ad-container, #errorTip,
   [data-role="list-divider"], [data-role="listview"], .ui-listview,
   select#playURL, .ui-select, .ui-btn, button, a[href],
-  script, .ui-link, center, div[align] { display: none !important; }
+  .ui-link, center, div[align] { display: none !important; }
 </style>`
     html = html.replace('<head>', '<head>' + customStyle)
 
