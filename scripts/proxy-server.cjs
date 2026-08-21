@@ -79,30 +79,42 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
       html = buf.toString('utf8')
     }
 
-    // ── 清理广告和无关内容 ──
-    // 移除所有 script 标签
-    html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    // 移除外部广告脚本（双重保险）
-    html = html.replace(/<script[^>]*src=["'][^"']*(?:alwaysmulticulturallanding|popunder|popup|n6wxm|cdn-cgi|51\.la|gtag)[^"']*["'][^>]*><\/script>/gi, '')
+    // ── 清理广告和无关内容（保留播放核心：hls.js/mpegts.js/jquery/播放器脚本）────────
+    // 使用 tokenizer 方式精确过滤脚本标签
+    const AD_SRC_KW = [
+      'alwaysmulticulturallanding', 'popunder', 'popup',
+      'n6wxm.com', 'cdn-cgi', '51\\.la', 'googletagmanager', 'gtag'
+    ]
+    const AD_INLINE_KW = [
+      'n6wxm.com/vignette', 'sdk.51.la/js-sdk-pro',
+      'gtag(', 'dataLayer', '__CF'
+    ]
+    const scriptParts = html.split(/(<script[^>]*>[\s\S]*?<\/script>)/gi)
+    const cleanParts = []
+    for (const part of scriptParts) {
+      if (!part.startsWith('<script')) { cleanParts.push(part); continue }
+      const srcMatch = part.match(/src=["']([^"']+)["']/)
+      const srcVal = srcMatch ? srcMatch[1] : ''
+      const isAdSrc = AD_SRC_KW.some(kw => srcVal.includes(kw.replace('\\.', '.')))
+      if (isAdSrc) continue
+      const isAdInline = AD_INLINE_KW.some(kw => part.includes(kw))
+      if (isAdInline) continue
+      cleanParts.push(part)
+    }
+    html = cleanParts.join('')
+
     html = html.replace(/<div id="ad-container"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div class="headerNfooter"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div data-role="navbar"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div align="center">[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<center>[\s\S]*?<\/center>/gi, '')
     html = html.replace(/<div id="errorTip"[^>]*>[\s\S]*?<\/div>/gi, '')
-    // 移除所有 listview / li / select / button / a 链接
-    html = html.replace(/<ul[^>]*data-role=["']listview["'][^>]*>[\s\S]*?<\/ul>/gi, '')
-    html = html.replace(/<li[^>]*>[\s\S]*?<\/li>/gi, '')
-    html = html.replace(/<select[^>]*>[\s\S]*?<\/select>/gi, '')
-    html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '')
-    html = html.replace(/<a[^>]*>[\s\S]*?<\/a>/gi, '')
-    html = html.replace(/<div class="ui-grid-a"[^>]*>[\s\S]*?<\/div>/gi, '')
-    html = html.replace(/<div class="ui-select"[^>]*>[\s\S]*?<\/div>/gi, '')
-    html = html.replace(/<div class="ui-btn[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    // 移除节目单 listview（iframe 内不显示，由前端 EPG 面板替代）
+    html = html.replace(/<ul[^>]*id=["']myEpg["'][^>]*>[\s\S]*?<\/ul>/gi, '')
     // 移除广告域名 favicon / 下载提示
-    html = html.replace(/<link[^>]*href=["']https:\/\/d\.2026016\.xyz[^"']*[^>]*>/gi, '')
     html = html.replace(/<a[^>]*href=["']https:\/\/d\.2026016\.xyz[^>]*>[\s\S]*?<\/a>/gi, '')
-    // 移除 jQuery CSS（不需要）
+    html = html.replace(/<link[^>]*href=["']https:\/\/d\.2026016\.xyz[^"']*[^>]*>/gi, '')
+    // 移除 jQuery Mobile CSS（不需要，用我们的 overlay）
     html = html.replace(/<link[^>]*href=["'][^"']*jquerymobile[^"']*["'][^>]*>/gi, '')
     // 移除底部版权
     html = html.replace(/<div data-role="footer"[^>]*>[\s\S]*?<\/div>/gi, '')
