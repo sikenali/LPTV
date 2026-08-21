@@ -80,34 +80,32 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
     }
 
     // ── 清理广告和无关内容 ──
-    html = html.replace(/<script[^>]*src=["'][^"']*alwaysmulticulturallanding[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["']popunder[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["']popup[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["']https:\/\/www\.googletagmanager[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["'][^"']*n6wxm\.com[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["'][^"']*cdn-cgi[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["'][^"']*51\.la[^"']*["'][^>]*><\/script>/gi, '')
-    html = html.replace(/<script[^>]*src=["'][^"']*gtag[^"']*["'][^>]*><\/script>/gi, '')
+    // 移除所有 script 标签
+    html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    // 移除外部广告脚本（双重保险）
+    html = html.replace(/<script[^>]*src=["'][^"']*(?:alwaysmulticulturallanding|popunder|popup|n6wxm|cdn-cgi|51\.la|gtag)[^"']*["'][^>]*><\/script>/gi, '')
     html = html.replace(/<div id="ad-container"[^>]*>[\s\S]*?<\/div>/gi, '')
-    html = html.replace(/<script[^>]*data-cfasync[^>]*>[\s\S]*?<\/script>/gi, '')
-    html = html.replace(/<script[^>]*>[\s\S]*?cfasync[\s\S]*?<\/script>/gi, '')
-    html = html.replace(/<script[^>]*>[\s\S]*?popunder[\s\S]*?<\/script>/gi, '')
-    html = html.replace(/<script[^>]*>[\s\S]*?popup[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<div class="headerNfooter"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div data-role="navbar"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div align="center">[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<center>[\s\S]*?<\/center>/gi, '')
     html = html.replace(/<div id="errorTip"[^>]*>[\s\S]*?<\/div>/gi, '')
-    // 移除所有 listview / li 元素（保留 video 标签）
+    // 移除所有 listview / li / select / button / a 链接
     html = html.replace(/<ul[^>]*data-role=["']listview["'][^>]*>[\s\S]*?<\/ul>/gi, '')
     html = html.replace(/<li[^>]*>[\s\S]*?<\/li>/gi, '')
-    // 移除 jQuery UI 相关
+    html = html.replace(/<select[^>]*>[\s\S]*?<\/select>/gi, '')
+    html = html.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '')
+    html = html.replace(/<a[^>]*>[\s\S]*?<\/a>/gi, '')
     html = html.replace(/<div class="ui-grid-a"[^>]*>[\s\S]*?<\/div>/gi, '')
-    html = html.replace(/<select[^>]*id=["']playURL["'][^>]*>[\s\S]*?<\/select>/gi, '')
     html = html.replace(/<div class="ui-select"[^>]*>[\s\S]*?<\/div>/gi, '')
-    // 移除顶部提示信息
-    html = html.replace(/<div[^>]*align=["']center[^>]*>[\s\S]*?<\/div>/gi, '')
+    html = html.replace(/<div class="ui-btn[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    // 移除广告域名 favicon / 下载提示
+    html = html.replace(/<link[^>]*href=["']https:\/\/d\.2026016\.xyz[^"']*[^>]*>/gi, '')
     html = html.replace(/<a[^>]*href=["']https:\/\/d\.2026016\.xyz[^>]*>[\s\S]*?<\/a>/gi, '')
+    // 移除 jQuery CSS（不需要）
+    html = html.replace(/<link[^>]*href=["'][^"']*jquerymobile[^"']*["'][^>]*>/gi, '')
+    // 移除底部版权
+    html = html.replace(/<div data-role="footer"[^>]*>[\s\S]*?<\/div>/gi, '')
 
     // ── 注入播放器通信脚本 ──
     const injectScript = `<script>
