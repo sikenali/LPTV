@@ -84,20 +84,30 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
     html = html.replace(/<script[^>]*src=["']popunder[^"']*["'][^>]*><\/script>/gi, '')
     html = html.replace(/<script[^>]*src=["']popup[^"']*["'][^>]*><\/script>/gi, '')
     html = html.replace(/<script[^>]*src=["']https:\/\/www\.googletagmanager[^"']*["'][^>]*><\/script>/gi, '')
+    html = html.replace(/<script[^>]*src=["'][^"']*n6wxm\.com[^"']*["'][^>]*><\/script>/gi, '')
+    html = html.replace(/<script[^>]*src=["'][^"']*cdn-cgi[^"']*["'][^>]*><\/script>/gi, '')
+    html = html.replace(/<script[^>]*src=["'][^"']*51\.la[^"']*["'][^>]*><\/script>/gi, '')
+    html = html.replace(/<script[^>]*src=["'][^"']*gtag[^"']*["'][^>]*><\/script>/gi, '')
     html = html.replace(/<div id="ad-container"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<script[^>]*data-cfasync[^>]*>[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<script[^>]*>[\s\S]*?cfasync[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<script[^>]*>[\s\S]*?popunder[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<script[^>]*>[\s\S]*?popup[\s\S]*?<\/script>/gi, '')
     html = html.replace(/<div class="headerNfooter"[^>]*>[\s\S]*?<\/div>/gi, '')
-    // 只移除不包含播放器的 list-divider（保留含 <select id="playURL"> 的）
-    html = html.replace(/<li data-role="list-divider">(?!.*id=["']playURL["'])[ \s\S]*?<\/li>/gi, '')
-    // 不删除含 playURL select 的 ui-grid-a，只删除其他的
-    html = html.replace(/<div class="ui-grid-a">(?!.*id=["']playURL["'])[ \s\S]*?<\/div>/gi, '')
     html = html.replace(/<div data-role="navbar"[^>]*>[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<div align="center">[\s\S]*?<\/div>/gi, '')
     html = html.replace(/<center>[\s\S]*?<\/center>/gi, '')
     html = html.replace(/<div id="errorTip"[^>]*>[\s\S]*?<\/div>/gi, '')
+    // 移除所有 listview / li 元素（保留 video 标签）
+    html = html.replace(/<ul[^>]*data-role=["']listview["'][^>]*>[\s\S]*?<\/ul>/gi, '')
+    html = html.replace(/<li[^>]*>[\s\S]*?<\/li>/gi, '')
+    // 移除 jQuery UI 相关
+    html = html.replace(/<div class="ui-grid-a"[^>]*>[\s\S]*?<\/div>/gi, '')
+    html = html.replace(/<select[^>]*id=["']playURL["'][^>]*>[\s\S]*?<\/select>/gi, '')
+    html = html.replace(/<div class="ui-select"[^>]*>[\s\S]*?<\/div>/gi, '')
+    // 移除顶部提示信息
+    html = html.replace(/<div[^>]*align=["']center[^>]*>[\s\S]*?<\/div>/gi, '')
+    html = html.replace(/<a[^>]*href=["']https:\/\/d\.2026016\.xyz[^>]*>[\s\S]*?<\/a>/gi, '')
 
     // ── 注入播放器通信脚本 ──
     const injectScript = `<script>
@@ -117,14 +127,16 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
 </script>`
     html = html.replace('</head>', injectScript + '</head>')
 
-    // ── 全屏播放器样式 ──
+    // ── 全屏播放器样式：仅保留 video，隐藏所有 UI ──
     const customStyle = `<style>
   html, body { margin: 0; padding: 0; background: #000; overflow: hidden; height: 100%; }
   [data-role="page"] { min-height: 100vh; margin: 0; }
   #vstPlayer { width: 100%!important; height: 100vh!important; aspect-ratio: unset!important; }
   video#vstPlayer { width: 100%!important; height: 100%!important; object-fit: contain; }
   .headerNfooter, [data-role="navbar"], .ui-grid-a, #ad-container, #errorTip,
-  [data-role="list-divider"] { display: none !important; }
+  [data-role="list-divider"], [data-role="listview"], .ui-listview,
+  select#playURL, .ui-select, .ui-btn, button, a[href],
+  script, .ui-link, center, div[align] { display: none !important; }
 </style>`
     html = html.replace('<head>', '<head>' + customStyle)
 
@@ -270,13 +282,18 @@ app.get('/api/iptv/info/:tid/:id', async (req, res) => {
       const liBlocks = epgSection[1].match(/<li[^>]*>[\s\S]*?<\/li>/gi) || []
       for (const li of liBlocks) {
         const timeMatch = li.match(/>(\d{2}:\d{2})\s/)
-        const titleMatch = li.match(/>[^<]*(?:<a[^>]*>[^<]*<\/a>)?([^<]{2,})/i)
+        // 提取完整标题：去掉所有标签后取文本，再清理多余空白
+        const rawText = li.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+        const titleMatch = rawText.match(/^\d{2}:\d{2}\s+(.+)$/)
         const countMatch = li.match(/ui-li-count[^>]*>([^<]+)<\/span>/)
         const hrefMatch = li.match(/href="([^"]*)"/)
         if (timeMatch && titleMatch) {
+          // 从标题中去掉"直播中"/"回看"等标签文字
+          let title = titleMatch[1].trim()
+          if (countMatch) title = title.replace(countMatch[1], '').trim()
           epg.push({
             time: timeMatch[1],
-            title: titleMatch[1].trim(),
+            title,
             isLive: countMatch && countMatch[1] === '直播中',
             isLookback: countMatch && countMatch[1] === '回看',
             lookbackUrl: hrefMatch ? hrefMatch[1] : null,
