@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../context/AppContext';
-import { IptvWebPlayer } from '../components/Player';
+import { IptvPlayer } from '../components/Player';
 import {
   RiSearchLine, RiArrowDownSLine, RiArrowRightSLine,
   RiTvFill, RiHeartFill, RiHeartLine,
@@ -272,9 +272,11 @@ export default function ChannelPage() {
       <div className="flex-1 min-h-0 relative overflow-hidden" style={{ background: '#0a0a0a' }}>
         <div className="absolute inset-0">
           {selectedChannel ? (
-            <IptvWebPlayer
+            <IptvPlayer
               key={`${selectedChannel.tid}-${selectedChannel.id}`}
-              channel={selectedChannel}
+              tid={selectedChannel.tid}
+              id={selectedChannel.id}
+              channelName={selectedChannel.name}
               onBack={() => {}}
             />
           ) : (

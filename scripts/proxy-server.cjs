@@ -141,6 +141,232 @@ app.get('/api/proxy/iptv/:tid/:id', async (req, res) => {
   }
 })
 
+// ── iptv345 播放页 URL 解密（动态解析页面中的加密脚本）──────────────────
+/** base64 decode（含 +/= 填充，兼容 -/_ URL-safe） */
+function decodeBase64(input) {
+  let str = String(input).replace(/-/g, '+').replace(/_/g, '/')
+  while (str.length % 4) str += '='
+  return Buffer.from(str, 'base64').toString('utf8')
+}
+
+/** hacew: 原页面 base64 decode 函数 */
+function hacew(str) {
+  if (!str) return str
+  str += ''
+  const keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/='
+  let i = 0, ac = 0, dec = '', tmp_arr = []
+  do {
+    const h1 = keyStr.indexOf(str.charAt(i++))
+    const h2 = keyStr.indexOf(str.charAt(i++))
+    const h3 = keyStr.indexOf(str.charAt(i++))
+    const h4 = keyStr.indexOf(str.charAt(i++))
+    const bits = h1 << 18 | h2 << 12 | h3 << 6 | h4
+    const a1 = bits >> 16 & 0xff
+    const a2 = bits >> 8 & 0xff
+    const a3 = bits & 0xff
+    if (h3 == 64) { tmp_arr[ac++] = String.fromCharCode(a1) }
+    else if (h4 == 64) { tmp_arr[ac++] = String.fromCharCode(a1, a2) }
+    else { tmp_arr[ac++] = String.fromCharCode(a1, a2, a3) }
+  } while (i < str.length)
+  return tmp_arr.join('')
+}
+
+/** 从页面 HTML 中提取加密变量 */
+function extractEncryptVars(html) {
+  // 匹配 var xxx = ""; var yyy ="...";var zzz = ""; var www ="..."; xxx = yyy; ... = zzz;
+  // 模式1: var name = ""; var raw ="...拼接..."; var name2 = ""; var raw2 ="...拼接..."; name = raw; ... = raw2;
+  const varPattern = /var\s+(\w+)\s*=\s*""\s*;\s*var\s+(\w+)\s*=\s*([^;]+);var\s+(\w+)\s*=\s*""\s*;\s*var\s+(\w+)\s*=\s*([^;]+);(?:\s*\w+\s*=\s*\w+\s*;){2,}/
+  const m = html.match(varPattern)
+  if (m) {
+    const keyRaw = m[3].replace(/;$/, '').trim()
+    const tokenRaw = m[5].replace(/;$/, '').trim()
+    // 解析拼接表达式（如 "abc"+"def".split("").reverse().join("")+...）
+    const evalKey = `(${keyRaw})`
+    const evalToken = `(${tokenRaw})`
+    try {
+      const keyVal = eval(evalKey)
+      const tokenVal = eval(evalToken)
+      // 找 token 替换值（lzusq = "..." 或类似）
+      const tokenReplace = html.match(/;\s*(\w+)\s*=\s*"([a-f0-9]{32})"\s*;/)
+      const oldToken = tokenReplace ? tokenReplace[2] : ''
+      // 找 XOR 后缀（key + "..."）
+      const suffixMatch = html.match(/key\s*=\s*key\s*\+\s*"([a-f0-9]+)"/)
+      const suffix = suffixMatch ? suffixMatch[1] : ''
+      return { key: keyVal, token: tokenVal, oldToken, suffix }
+    } catch (e) { /* fallback */ }
+  }
+  return null
+}
+
+let encryptVars = null
+
+/** 解密单个 URL */
+function decryptUrl(enc, vars) {
+  if (!vars) return enc
+  let led = enc.split('').reverse().join('')
+  // bihpe/vawbl 等价于 hacew → xor with key+suffix → hacew
+  const decoded = hacew(led)
+  const fullKey = vars.key + vars.suffix
+  let code = ''
+  for (let i = 0; i < decoded.length; i++) {
+    code += String.fromCharCode(decoded.charCodeAt(i) ^ fullKey.charCodeAt(i % fullKey.length))
+  }
+  led = hacew(code)
+  if (vars.oldToken) led = led.replace('token=' + vars.oldToken, 'token=' + vars.token)
+  led = led.replace(vars.key, '')
+  return led.trim()
+}
+
+// ── IPTV Info API（结构化数据：明码URL + EPG + 线路列表）─────────────────
+app.get('/api/iptv/info/:tid/:id', async (req, res) => {
+  const { tid, id } = req.params
+  const cacheKey = `iptv_info_${tid}_${id}`
+  const now = Date.now()
+
+  if (iptvCache.has(cacheKey)) {
+    const cached = iptvCache.get(cacheKey)
+    if (now - cached.time < 5 * 60 * 1000) {
+      return res.json(cached.data)
+    }
+    iptvCache.delete(cacheKey)
+  }
+
+  const targetUrl = `https://iptv345.com/?act=play&token=${IPTV345_TOKEN}&tid=${tid}&id=${id}`
+
+  try {
+    const response = await fetch(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'identity',
+      },
+      signal: AbortSignal.timeout(15000),
+    })
+
+    if (!response.ok) return res.status(response.status).json({ error: `HTTP ${response.status}` })
+
+    let buf = Buffer.from(await response.arrayBuffer())
+    let html
+    if (buf[0] === 0x1f && buf[1] === 0x8b) html = zlib.gunzipSync(buf).toString('utf8')
+    else if (buf[0] === 0x28 && buf[1] === 0xCA) html = zlib.brotliDecompressSync(buf).toString('utf8')
+    else html = buf.toString('utf8')
+
+    // ── 提取线路标签（URL 解密不稳定，仅返回标签）─────────────────────
+    const lines = []
+    const lineRegex = /<option\s+value="([^"]+)"[^>]*>([^<]+)<\/option>/g
+    let m
+    while ((m = lineRegex.exec(html)) !== null) {
+      const label = m[2].trim()
+      if (label) lines.push({ label })
+    }
+
+    // ── 提取 EPG ──
+    const epg = []
+    const epgLiRegex = /<li[^>]*>(?:<div[^>]*><div[^>]*><a[^>]*href="([^"]*)"[^>]*>[^<]*<\/a><\/div><\/div>)?(?:<span[^>]*>([^<]*)<\/span>)?(?:<span[^>]*class="ui-li-count[^"]*"[^>]*>([^<]*)<\/span>)?<\/li>/gi
+    // Simpler: just grab visible text from li elements in #myEpg
+    const epgSection = html.match(/<ul[^>]*id=["']myEpg["'][^>]*>([\s\S]*?)<\/ul>/i)
+    if (epgSection) {
+      const liBlocks = epgSection[1].match(/<li[^>]*>[\s\S]*?<\/li>/gi) || []
+      for (const li of liBlocks) {
+        const timeMatch = li.match(/>(\d{2}:\d{2})\s/)
+        const titleMatch = li.match(/>[^<]*(?:<a[^>]*>[^<]*<\/a>)?([^<]{2,})/i)
+        const countMatch = li.match(/ui-li-count[^>]*>([^<]+)<\/span>/)
+        const hrefMatch = li.match(/href="([^"]*)"/)
+        if (timeMatch && titleMatch) {
+          epg.push({
+            time: timeMatch[1],
+            title: titleMatch[1].trim(),
+            isLive: countMatch && countMatch[1] === '直播中',
+            isLookback: countMatch && countMatch[1] === '回看',
+            lookbackUrl: hrefMatch ? hrefMatch[1] : null,
+          })
+        }
+      }
+    }
+
+    // ── 提取日期导航 ──
+    const dateLinks = []
+    const navbarMatch = html.match(/<div\s+data-role=["']navbar["'][^>]*>[\s\S]*?<\/div>/i)
+    if (navbarMatch) {
+      const btnRegex = /<a[^>]*href="([^"]*)"[^>]*>\s*<span[^>]*>(\d{4}-\d{2}-\d{2})<\/span>/g
+      let bm
+      while ((bm = btnRegex.exec(navbarMatch[0])) !== null) {
+        dateLinks.push({ date: bm[2], url: bm[1] })
+      }
+    }
+
+    // 频道名称从 channel data 推断
+    const allChannels = [...cctvChannelsProxy, ...wsChannelsProxy]
+    const ch = allChannels.find(c => c.tid === tid && c.id === id)
+    const channelName = ch?.name || `${tid}-${id}`
+
+    const info = {
+      channelName,
+      tid,
+      id,
+      lines,
+      epg,
+      dateLinks,
+    }
+
+    iptvCache.set(cacheKey, { data: info, time: now })
+    res.json(info)
+  } catch (err) {
+    console.error('[proxy/iptv/info] Error:', err.message)
+    res.status(502).json({ error: '获取频道信息失败', message: err.message })
+  }
+})
+
+// 本地频道名映射（用于 info API）
+const cctvChannelsProxy = [
+  { id: '1', name: 'CCTV1 综合', tid: 'ys' }, { id: '2', name: 'CCTV2 财经', tid: 'ys' },
+  { id: '3', name: 'CCTV3 综艺', tid: 'ys' }, { id: '4', name: 'CCTV4 中文国际', tid: 'ys' },
+  { id: '5', name: 'CCTV5 体育', tid: 'ys' }, { id: '6', name: 'CCTV5+ 体育赛事', tid: 'ys' },
+  { id: '7', name: 'CCTV6 电影', tid: 'ys' }, { id: '8', name: 'CCTV7 国防军事', tid: 'ys' },
+  { id: '9', name: 'CCTV8 电视剧', tid: 'ys' }, { id: '10', name: 'CCTV9 纪录', tid: 'ys' },
+  { id: '11', name: 'CCTV10 科教', tid: 'ys' }, { id: '12', name: 'CCTV11 戏曲', tid: 'ys' },
+  { id: '13', name: 'CCTV12 社会与法', tid: 'ys' }, { id: '14', name: 'CCTV13 新闻', tid: 'ys' },
+  { id: '15', name: 'CCTV14 少儿', tid: 'ys' }, { id: '16', name: 'CCTV15 音乐', tid: 'ys' },
+  { id: '17', name: 'CCTV16 奥林匹克', tid: 'ys' }, { id: '18', name: 'CCTV17 农业农村', tid: 'ys' },
+  { id: '19', name: 'CCTV4K 高清', tid: 'ys' }, { id: '20', name: 'CCTV8K 高清', tid: 'ys' },
+  { id: '21', name: 'CCTV4 欧洲 HD', tid: 'ys' }, { id: '22', name: 'CCTV4 美洲 HD', tid: 'ys' },
+  { id: '23', name: 'CGTN', tid: 'ys' }, { id: '24', name: 'CGTN 纪录', tid: 'ys' },
+  { id: '25', name: 'CCTV 阿拉伯语', tid: 'ys' }, { id: '26', name: 'CCTV 法语', tid: 'ys' },
+  { id: '27', name: 'CCTV 西班牙语', tid: 'ys' }, { id: '28', name: 'CCTV 俄语', tid: 'ys' },
+  { id: '29', name: 'CETV-1', tid: 'ys' }, { id: '30', name: 'CETV-2', tid: 'ys' },
+  { id: '31', name: 'CETV-3', tid: 'ys' }, { id: '32', name: 'CETV-4', tid: 'ys' },
+  { id: '33', name: 'CCTV 兵器科技', tid: 'ys' }, { id: '34', name: 'CCTV 怀旧剧场', tid: 'ys' },
+  { id: '35', name: 'CCTV 第一剧场', tid: 'ys' }, { id: '36', name: 'CCTV 风云剧场', tid: 'ys' },
+  { id: '37', name: 'CCTV 风云音乐', tid: 'ys' }, { id: '38', name: 'CCTV 风云足球', tid: 'ys' },
+  { id: '39', name: 'CCTV 世界地理', tid: 'ys' }, { id: '40', name: 'CCTV 文化精品', tid: 'ys' },
+  { id: '41', name: 'CCTV 央视台球', tid: 'ys' }, { id: '42', name: 'CCTV 高尔夫网球', tid: 'ys' },
+  { id: '43', name: 'CCTV 女性时尚', tid: 'ys' },
+]
+const wsChannelsProxy = [
+  { id: '1', name: '湖南卫视', tid: 'ws' }, { id: '2', name: '江苏卫视', tid: 'ws' },
+  { id: '3', name: '浙江卫视', tid: 'ws' }, { id: '4', name: '东方卫视', tid: 'ws' },
+  { id: '5', name: '北京卫视', tid: 'ws' }, { id: '6', name: '深圳卫视', tid: 'ws' },
+  { id: '7', name: '广东卫视', tid: 'ws' }, { id: '8', name: '安徽卫视', tid: 'ws' },
+  { id: '9', name: '东南卫视', tid: 'ws' }, { id: '10', name: '河北卫视', tid: 'ws' },
+  { id: '11', name: '黑龙江卫视', tid: 'ws' }, { id: '12', name: '湖北卫视', tid: 'ws' },
+  { id: '13', name: '江西卫视', tid: 'ws' }, { id: '14', name: '辽宁卫视', tid: 'ws' },
+  { id: '15', name: '海南卫视', tid: 'ws' }, { id: '16', name: '山东卫视', tid: 'ws' },
+  { id: '17', name: '四川卫视', tid: 'ws' }, { id: '18', name: '天津卫视', tid: 'ws' },
+  { id: '19', name: '重庆卫视', tid: 'ws' }, { id: '20', name: '贵州卫视', tid: 'ws' },
+  { id: '21', name: '吉林卫视', tid: 'ws' }, { id: '22', name: '广西卫视', tid: 'ws' },
+  { id: '23', name: '河南卫视', tid: 'ws' }, { id: '24', name: '甘肃卫视', tid: 'ws' },
+  { id: '25', name: '青海卫视', tid: 'ws' }, { id: '26', name: '云南卫视', tid: 'ws' },
+  { id: '27', name: '内蒙古卫视', tid: 'ws' }, { id: '28', name: '山西卫视', tid: 'ws' },
+  { id: '29', name: '陕西卫视', tid: 'ws' }, { id: '30', name: '兵团卫视', tid: 'ws' },
+  { id: '31', name: '新疆卫视', tid: 'ws' }, { id: '32', name: '西藏卫视', tid: 'ws' },
+  { id: '33', name: '宁夏卫视', tid: 'ws' }, { id: '34', name: '延边卫视', tid: 'ws' },
+  { id: '35', name: '康巴卫视', tid: 'ws' }, { id: '36', name: '大湾区卫视', tid: 'ws' },
+  { id: '37', name: '广东珠江频道', tid: 'ws' }, { id: '38', name: '厦门卫视', tid: 'ws' },
+  { id: '39', name: '安多卫视', tid: 'ws' }, { id: '40', name: '农林卫视', tid: 'ws' },
+  { id: '41', name: '三沙卫视', tid: 'ws' },
+]
+
 // ── Logo Proxy ──────────────────────────────────────────────────────────
 function generateLogoSvg(name) {
   const colors = ['#3b82f6','#8b5cf6','#ef4444','#10b981','#f59e0b','#ec4899','#06b6d4','#84cc16']
