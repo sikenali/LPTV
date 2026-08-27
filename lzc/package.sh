@@ -12,14 +12,20 @@ VERSION="${LPK_TAG:-1.0.0}"
 LPK_NAME="cloud.lazycat.app.lptv-${VERSION}.lpk"
 echo "Packaging version: $VERSION"
 
+# Step 1: Run build.sh via bash (works on Windows via Git Bash)
 bash "$(dirname "$0")/build.sh"
+
+# Step 2: Create temp build config without buildscript (skip re-run)
+cat > "$SCRIPT_DIR/lzc-build-no-buildscript.yml" << 'EOF'
+icon: ./icon.png
+manifest: ./lzc-manifest.yml
+contentdir: _lpk_content
+pkgout: ./output.lpk
+EOF
 
 CLI_BIN=$(npm root -g)/@lazycatcloud/lzc-cli/scripts/cli.js
 if [ ! -f "$CLI_BIN" ]; then
   CLI_BIN=$(which lzc-cli 2>/dev/null || echo "")
-  if [ -n "$CLI_BIN" ]; then
-    CLI_BIN="$CLI_BIN"
-  fi
 fi
 if [ -z "$CLI_BIN" ] || [ ! -f "$CLI_BIN" ]; then
   echo "Error: lzc-cli not found"
@@ -27,8 +33,10 @@ if [ -z "$CLI_BIN" ] || [ ! -f "$CLI_BIN" ]; then
 fi
 (
   cd "$SCRIPT_DIR"
-  node "$CLI_BIN" project release -o output.lpk
+  node "$CLI_BIN" project release -o output.lpk --file lzc-build-no-buildscript.yml
 )
+
+rm -f "$SCRIPT_DIR/lzc-build-no-buildscript.yml"
 
 if [ -f "$SCRIPT_DIR/output.lpk" ]; then
   mv "$SCRIPT_DIR/output.lpk" "$SCRIPT_DIR/$LPK_NAME"
