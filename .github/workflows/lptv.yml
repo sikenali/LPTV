@@ -63,6 +63,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git remote set-url origin $REPO_URL
+          git pull --rebase origin ${{ github.ref_name }} || true
           git add README.md channels/lptv.m3u channels/lptv.m3u8 logos/
           git diff --quiet && git diff --staged --quiet || git commit -m "自动更新: ${GET_TIME}"
           git push origin HEAD:${{ github.ref_name }}
