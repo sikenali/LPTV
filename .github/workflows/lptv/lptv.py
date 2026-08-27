@@ -4,6 +4,8 @@ import asyncio
 import time
 import json
 import urllib.parse
+import gzip
+import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 import re
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Any
@@ -39,6 +41,11 @@ CONFIG = {
     "stream_test_timeout": 5,
     "stream_content_verify": True,
     "cache_ttl_days": 7,
+    "epg_url": "http://epg.51zmt.top:8000/e.xml.gz",
+    "epg_cache_file": ".github/workflows/lptv/epg_cache.json",
+    "epg_cache_ttl_hours": 12,
+    "max_resolution": "1080p",  # 高于此分辨率的源降低权重
+    "min_bandwidth_kbps": 50,  # 最低码率阈值(Kbps)
 }
 
 # 浏览器无法播放的协议，直接从源中过滤掉
@@ -485,7 +492,8 @@ def save_source_quality_cache(cache: Dict[str, Any]) -> None:
         pass
 
 
-def record_source_result(cache: Dict[str, Any], url: str, total: int, valid: int, failed: int) -> None:
+def record_source_result(cache: Dict[str, Any], url: str, total: int, valid: int, failed: int,
+                          avg_score: float = 0.0, avg_latency: float = 0.0) -> None:
     key = _source_key(url)
     prev = cache.get(key, {})
     prev["total_parsed"] = prev.get("total_parsed", 0) + total
@@ -494,6 +502,10 @@ def record_source_result(cache: Dict[str, Any], url: str, total: int, valid: int
     prev["last_run"] = time.strftime("%Y-%m-%d %H:%M")
     prev["last_success_ts"] = time.time() if valid > 0 else prev.get("last_success_ts", 0)
     prev["consecutive_zero"] = 0 if valid > 0 else prev.get("consecutive_zero", 0) + 1
+    if avg_score > 0:
+        prev["avg_score"] = avg_score
+    if avg_latency > 0:
+        prev["avg_latency"] = avg_latency
     cache[key] = prev
 
 
@@ -515,16 +527,22 @@ def print_source_quality_summary(cache: Dict[str, Any], source_stats: List[Dict[
         key = _source_key(s["url"])
         info = cache.get(key, {})
         consec = info.get("consecutive_zero", 0)
+        avg_score = s.get("avg_score", 0.0)
+        avg_lat = s.get("avg_latency", 0.0)
         status = "✅" if s["valid"] > 0 else ("⚠️ 连续失效" if consec > 0 else "❌")
-        print(f"  {status} {s['url']}: 解析{s['total']}条 → 有效{s['valid']}条 (连续零有效: {consec})")
+        extra = f" 均分{avg_score:.2f} 均延迟{avg_lat:.2f}s" if s["valid"] > 0 else ""
+        print(f"  {status} {s['url']}: 解析{s['total']}条 → 有效{s['valid']}条 (连续零有效: {consec}){extra}")
     print(f"  合计: 有效流 {sum(s['valid'] for s in source_stats)} 条")
     print("=" * 22)
 
 
 async def discover_new_sources(session: aiohttp.ClientSession, current_urls: List[str]) -> List[str]:
-    """定期检查 GitHub 上新的热门 IPTV 仓库，发现高质量源"""
+    """发现高质量新源：GitHub 热门仓库 + tonkiang.us 搜索引擎 + 补充源列表"""
     new_urls: List[str] = []
-    candidates = [
+    seen_keys = {_source_key(u) for u in current_urls}
+
+    # ── GitHub 热门仓库 ──────────────────────────────────────────────
+    github_candidates = [
         ("xisohi/CHINA-IPTV", "Unicast/guangdong.m3u8"),
         ("xisohi/CHINA-IPTV", "Unicast/sichuan.m3u8"),
         ("xisohi/CHINA-IPTV", "Unicast/zhejiang.m3u8"),
@@ -535,12 +553,15 @@ async def discover_new_sources(session: aiohttp.ClientSession, current_urls: Lis
         ("ssili198/IPTV", "master/live.m3u8"),
         ("yuanzl77/IPTV", "master/live.m3u8"),
         ("yuanzl77/IPTV", "master/ipv4.m3u"),
+        # 新增：更多活跃维护的源
+        ("bbsting/iptv", "master/all.m3u8"),
+        ("asdjklol/iptv", "live.m3u8"),
+        ("fanmingming/live", "main/tv/m3u/ipv6.m3u"),
     ]
-    print("  [discover] 检查潜在新源...")
-    for owner_repo, path in candidates:
-        url = f"https://raw.githubusercontent.com/{owner_repo}/{path}"
-        # 检查是否已存在
-        if any(_source_key(url) == _source_key(u) for u in current_urls):
+    print("  [discover] 检查 GitHub 潜在新源...")
+    for owner_repo, file_path in github_candidates:
+        url = f"https://raw.githubusercontent.com/{owner_repo}/{file_path}"
+        if _source_key(url) in seen_keys:
             continue
         try:
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=6), allow_redirects=True) as resp:
@@ -548,11 +569,75 @@ async def discover_new_sources(session: aiohttp.ClientSession, current_urls: Lis
                     body = await resp.text(errors="ignore")
                     stream_count = sum(1 for line in body.splitlines() if line.startswith(('http://', 'https://')))
                     if stream_count >= CONFIG["min_source_streams"]:
-                        print(f"  [discover] ✅ 新源: {owner_repo} ({stream_count} 条)")
+                        print(f"  [discover] ✅ GitHub 新源: {owner_repo} ({stream_count} 条)")
                         new_urls.append(url)
+                        seen_keys.add(_source_key(url))
         except Exception:
             pass
+
+    # ── tonkiang.us 搜索引擎（文章推荐） ────────────────────────────
+    print("  [discover] 扫描 tonkiang.us 搜索引擎...")
+    try:
+        search_keywords = ["CCTV", "卫视", "体育", "电影", "新闻"]
+        for kw in search_keywords:
+            await _scrape_tonkiang(session, kw, new_urls, seen_keys)
+    except Exception as e:
+        print(f"  [discover] tonkiang.us 搜索失败: {e}")
+
+    # ── 恩山论坛 & 其他社区 ─────────────────────────────────────────
+    enshan_candidates = [
+        "https://raw.githubusercontent.com/wwgk/iptv/master/tv/m3u/%E5%85%A8%E9%83%A8.m3u8",
+        "https://raw.githubusercontent.com/wwgk/iptv/master/tv/m3u/CCTV.m3u8",
+        "https://raw.githubusercontent.com/yuanzl77/IPTV/master/live.m3u8",
+    ]
+    print("  [discover] 检查社区补充源...")
+    for url in enshan_candidates:
+        if _source_key(url) in seen_keys:
+            continue
+        try:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=6), allow_redirects=True) as resp:
+                if resp.status == 200:
+                    body = await resp.text(errors="ignore")
+                    stream_count = sum(1 for line in body.splitlines() if line.startswith(('http://', 'https://')))
+                    if stream_count >= CONFIG["min_source_streams"]:
+                        print(f"  [discover] ✅ 社区新源: {url} ({stream_count} 条)")
+                        new_urls.append(url)
+                        seen_keys.add(_source_key(url))
+        except Exception:
+            pass
+
     return new_urls
+
+
+async def _scrape_tonkiang(session: aiohttp.ClientSession, keyword: str, new_urls: List[str], seen_keys: set):
+    """从 tonkiang.us 搜索 IPTV 源（文章推荐的方法）"""
+    base_url = "http://tonkiang.us/"
+    search_url = f"{base_url}?name={keyword}"
+    try:
+        async with session.get(search_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            if resp.status != 200:
+                return
+            html = await resp.text(errors="ignore")
+        # 解析搜索结果中的 m3u8/txt 链接
+        import re as _re
+        links = _re.findall(r'href="(https?://[^"]+\.m3u8?[^"]*)"', html)
+        links += _re.findall(r'href="(https?://[^"]+\.txt[^"]*)"', html)
+        for link in links[:5]:  # 每关键词最多取 5 个
+            if _source_key(link) in seen_keys:
+                continue
+            try:
+                async with session.get(link, timeout=aiohttp.ClientTimeout(total=6), allow_redirects=True) as r:
+                    if r.status == 200:
+                        body = await r.text(errors="ignore")
+                        sc = sum(1 for line in body.splitlines() if line.startswith(('http://', 'https://')))
+                        if sc >= CONFIG["min_source_streams"]:
+                            print(f"  [discover] ✅ tonkiang 新源 [{keyword}]: {link} ({sc} 条)")
+                            new_urls.append(link)
+                            seen_keys.add(_source_key(link))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def looks_like_notice_entry(channel: str, source_group_title: Optional[str] = None) -> bool:
@@ -687,19 +772,23 @@ def deduplicate_candidate_entries(entries: Iterable[Dict[str, Any]]) -> List[Dic
 
 
 def choose_better_entry(current_best: Dict[str, Any], candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """优先选择质量评分更高、延迟更低的源"""
+    best_score = current_best.get("quality_score", 0.0)
+    cand_score = candidate.get("quality_score", 0.0)
     best_latency = current_best.get("latency")
     cand_latency = candidate.get("latency")
-    best_score = (
-        best_latency if isinstance(best_latency, (int, float)) else float("inf"),
-        0 if str(current_best.get("url", "")).startswith("https://") else 1,
-        len(str(current_best.get("url", ""))),
-    )
-    cand_score = (
-        cand_latency if isinstance(cand_latency, (int, float)) else float("inf"),
-        0 if str(candidate.get("url", "")).startswith("https://") else 1,
-        len(str(candidate.get("url", ""))),
-    )
-    return candidate if cand_score < best_score else current_best
+    # 综合分：质量分 60% + 延迟归一化 40%
+    def composite(e):
+        s = e.get("quality_score", 0.0)
+        lat = e.get("latency") if isinstance(e.get("latency"), (int, float)) else 5.0
+        lat_norm = max(0.0, 1.0 - lat / 5.0)  # 5s 以内线性归一化
+        return s * 0.6 + lat_norm * 0.4, -lat if lat else -999
+
+    best_key = composite(current_best)
+    cand_key = composite(candidate)
+    if cand_key > best_key:
+        return candidate
+    return current_best
 
 
 def select_best_streams(valid_entries: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -721,7 +810,7 @@ def select_best_streams(valid_entries: Iterable[Dict[str, Any]]) -> List[Dict[st
 
 
 def select_multi_streams(valid_entries: Iterable[Dict[str, Any]], max_per_channel: int = 5) -> Dict[str, List[Dict[str, Any]]]:
-    """保留每个频道最多 max_per_channel 条有效源，按延迟排序"""
+    """保留每个频道最多 max_per_channel 条有效源，按质量评分+延迟排序"""
     by_channel: Dict[str, List[Dict[str, Any]]] = {}
     for entry in valid_entries:
         channel = sanitize_channel_name(str(entry.get("channel", "")).strip())
@@ -732,10 +821,12 @@ def select_multi_streams(valid_entries: Iterable[Dict[str, Any]], max_per_channe
         by_channel.setdefault(key, []).append(dict(entry))
     result: Dict[str, List[Dict[str, Any]]] = {}
     for key, entries in by_channel.items():
-        entries.sort(key=lambda e: (
-            e.get("latency") if isinstance(e.get("latency"), (int, float)) else float("inf"),
-            0 if str(e.get("url", "")).startswith("https://") else 1,
-        ))
+        def sort_key(e):
+            score = e.get("quality_score", 0.0)
+            lat = e.get("latency") if isinstance(e.get("latency"), (int, float)) else 999.0
+            https_bonus = 0 if str(e.get("url", "")).startswith("https://") else 1
+            return (-score, lat, https_bonus)
+        entries.sort(key=sort_key)
         result[key] = entries[:max_per_channel]
     return result
 
@@ -824,35 +915,52 @@ def is_valid_channel_name(channel: str) -> bool:
 
 
 async def test_stream(session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, url: str):
-    """测速并验证流内容质量"""
+    """测速并验证流内容质量（增强版：GET 部分探测 + 质量评分）"""
     async with semaphore:
         for attempt in range(CONFIG["max_retries"]):
             start_time = time.time()
+            quality_info = {"latency": None, "content_length": 0, "content_type": "", "redirect_count": 0, "score": 0.0}
             try:
-                # 先用 HEAD 检查响应头
+                # HEAD 快速探测
                 async with session.head(url, timeout=aiohttp.ClientTimeout(total=CONFIG["stream_test_timeout"]),
                                         allow_redirects=True) as response:
                     elapsed_time = time.time() - start_time
-                    # 检查 Content-Type
+                    quality_info["redirect_count"] = response.history.__len__()
                     content_type = response.headers.get('Content-Type', '').lower()
-                    # 允许有效的视频类型或为空
+                    quality_info["content_type"] = content_type
+                    # 允许有效的视频类型或为空（m3u8 playlist 通常无 content-type）
                     is_valid_content = not content_type or any(
                         ct in content_type for ct in VALID_CONTENT_TYPES
                     )
                     if response.status == 200 and is_valid_content:
-                        return True, elapsed_time
+                        quality_info["latency"] = elapsed_time
+                        # HEAD 无法获取 Content-Length，尝试短 GET 探测
+                        cl = await _get_partial_content_length(session, url, elapsed_time)
+                        quality_info["content_length"] = cl
+                        quality_info["score"] = _compute_quality_score(quality_info)
+                        return True, quality_info
                     elif response.status != 200:
-                        # 状态码不对，重试或放弃
                         if attempt == CONFIG["max_retries"] - 1:
                             return False, None
                         await asyncio.sleep(0.3 * (attempt + 1))
                         continue
-                # HEAD 被拒绝时回退到 GET
+                # HEAD 被拒绝时回退到短 GET 探测（前 4KB）
                 if CONFIG["stream_content_verify"]:
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=CONFIG["stream_test_timeout"])) as response:
-                        if response.status == 200:
-                            elapsed_time = time.time() - start_time
-                            return True, elapsed_time
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=CONFIG["stream_test_timeout"]),
+                                            allow_redirects=True) as response:
+                        elapsed_time = time.time() - start_time
+                        content_type = response.headers.get('Content-Type', '').lower()
+                        quality_info["redirect_count"] = len(response.history)
+                        quality_info["content_type"] = content_type
+                        body = await response.read(4096)
+                        quality_info["content_length"] = len(body)
+                        is_valid_content = not content_type or any(
+                            ct in content_type for ct in VALID_CONTENT_TYPES
+                        )
+                        if response.status == 200 and is_valid_content:
+                            quality_info["latency"] = elapsed_time
+                            quality_info["score"] = _compute_quality_score(quality_info)
+                            return True, quality_info
                         return False, None
             except asyncio.TimeoutError:
                 if attempt == CONFIG["max_retries"] - 1:
@@ -864,6 +972,134 @@ async def test_stream(session: aiohttp.ClientSession, semaphore: asyncio.Semapho
                 await asyncio.sleep(0.3 * (attempt + 1))
 
 
+async def _get_partial_content_length(session: aiohttp.ClientSession, url: str, base_latency: float) -> int:
+    """用短 GET 探测 Content-Length，不读取 body"""
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=3), allow_redirects=True) as resp:
+            cl = resp.headers.get('Content-Length')
+            return int(cl) if cl else 0
+    except Exception:
+        return 0
+
+
+def _compute_quality_score(info: Dict[str, Any]) -> float:
+    """综合质量评分：延迟低 + 内容长度合理 + 有效视频类型 = 高分"""
+    latency = info.get("latency") or 999.0
+    cl = info.get("content_length", 0)
+    ct = info.get("content_type", "")
+    # 延迟分：0~1s=1.0, 1~3s=0.6, 3~5s=0.3, >5s=0.0
+    if latency <= 1.0:
+        latency_score = 1.0
+    elif latency <= 3.0:
+        latency_score = 0.6
+    elif latency <= 5.0:
+        latency_score = 0.3
+    else:
+        latency_score = 0.0
+    # 内容长度分：m3u8 通常很小（<50KB），视频分片较大；过小的 body 可能是错误页
+    if cl > 100_000:
+        cl_score = 0.8
+    elif cl > 10_000:
+        cl_score = 0.6
+    elif cl > 1_000:
+        cl_score = 0.4
+    elif cl > 0:
+        cl_score = 0.2
+    else:
+        cl_score = 0.3  # HEAD 探测无法获取 CL，给中等分数
+    # 类型分：m3u8 playlist 或视频流给高分
+    ct_score = 0.9 if any(t in ct for t in ('mpegurl', 'mp2t', 'mp4', 'video', 'audio')) else 0.5
+    return round(latency_score * 0.5 + cl_score * 0.2 + ct_score * 0.3, 2)
+
+
+# ─── HLS 分辨率 & 码率解析 ────────────────────────────────────────
+
+# 分辨率等级映射（与 flybird-iptv / iptv-checker 对齐）
+RESOLUTION_RATINGS = {
+    "480p": 1, "576p": 2, "720p": 3, "HD": 3,
+    "1080p": 4, "FHD": 4, "1080i": 4,
+    "1440p": 5, "2K": 5, "QHD": 5,
+    "2160p": 6, "4K": 6, "UHD": 6,
+    "4320p": 7, "8K": 7,
+}
+
+
+def parse_hls_resolution_from_url(stream_url: str) -> Optional[Tuple[str, int]]:
+    """从 HLS manifest URL 提取分辨率和码率，返回 (resolution_label, bandwidth_kbps) 或 None"""
+    parsed = urllib.parse.urlparse(stream_url)
+    if not (parsed.scheme in ('http', 'https') and
+            ('.m3u8' in parsed.path.lower() or 'm3u8' in stream_url)):
+        return None
+    return None  # 懒加载：在 test_stream 成功后再单独获取
+
+
+async def fetch_hls_manifest_info(session: aiohttp.ClientSession, url: str) -> Dict[str, Any]:
+    """拉取 HLS manifest，解析最高分辨率和码率（单线程，避免过多请求）"""
+    info = {"resolution": None, "bandwidth_kbps": None, "variant_count": 0}
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5), allow_redirects=True) as resp:
+            if resp.status != 200:
+                return info
+            text = await resp.text(errors="ignore")
+        # 解析所有变体流的 RESOLUTION 和 BANDWIDTH
+        resolutions = re.findall(r'RESOLUTION=(\d+x\d+)', text)
+        bandwidths = re.findall(r'BANDWIDTH=(\d+)', text)
+        # 找最高分辨率
+        best_res = None
+        best_res_value = 0
+        for r in resolutions:
+            try:
+                w, h = r.split('x')
+                pixels = int(w) * int(h)
+                if pixels > best_res_value:
+                    best_res_value = pixels
+                    # 标准化分辨率标签
+                    max_dim = max(int(w), int(h))
+                    if max_dim >= 3840:
+                        best_res = "4K"
+                    elif max_dim >= 1920:
+                        best_res = "1080p"
+                    elif max_dim >= 1280:
+                        best_res = "720p"
+                    elif max_dim >= 720:
+                        best_res = "480p"
+                    else:
+                        best_res = "SD"
+            except Exception:
+                pass
+        # 取最高码率
+        if bandwidths:
+            try:
+                max_bw = max(int(b) for b in bandwidths)
+                info["bandwidth_kbps"] = round(max_bw / 1000)
+            except Exception:
+                pass
+        info["resolution"] = best_res
+        info["variant_count"] = len(resolutions)
+    except Exception:
+        pass
+    return info
+
+
+def hls_resolution_boost(existing_score: float, resolution: Optional[str], bandwidth_kbps: Optional[int]) -> float:
+    """根据分辨率和码率调整质量分：高分辨率+高码率加分，低质量降权"""
+    if resolution is None or bandwidth_kbps is None:
+        return existing_score
+    boost = 0.0
+    # 分辨率加分
+    rating = RESOLUTION_RATINGS.get(resolution, 0)
+    if rating >= 4:  # 720p+
+        boost += 0.05
+    if rating >= 6:  # 4K+
+        boost += 0.03
+    # 码率惩罚：过低码率（可能是低质转码源）
+    if bandwidth_kbps < CONFIG["min_bandwidth_kbps"]:
+        boost -= 0.1
+    elif bandwidth_kbps < 200:
+        boost -= 0.03
+    return round(min(1.0, max(0.0, existing_score + boost)), 2)
+
+
 async def test_multiple_streams(session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, entries: Iterable[Dict[str, Any]]):
     tasks = [test_stream(session, semaphore, str(entry.get("url", "")).strip()) for entry in entries]
     results = await asyncio.gather(*tasks)
@@ -871,8 +1107,9 @@ async def test_multiple_streams(session: aiohttp.ClientSession, semaphore: async
 
 
 async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, file_path: str, is_m3u: bool = False, quality_cache: Optional[Dict[str, Any]] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """解析源文件、过滤无效协议、测速，返回有效条目和本次源质量统计"""
-    result: Dict[str, Any] = {"url": file_path, "total": 0, "valid": 0, "filtered_protocol": 0, "failed": 0}
+    """解析源文件、过滤无效协议、测速（含质量评分），返回有效条目和本次源质量统计"""
+    result: Dict[str, Any] = {"url": file_path, "total": 0, "valid": 0, "filtered_protocol": 0, "failed": 0,
+                               "avg_score": 0.0, "avg_latency": 0.0}
     try:
         async with session.get(file_path, timeout=aiohttp.ClientTimeout(total=CONFIG["timeout"])) as response:
             if response.status != 200:
@@ -901,14 +1138,30 @@ async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.
             return [], result
         valid_entries: List[Dict[str, Any]] = []
         results = await test_multiple_streams(session, semaphore, entries)
-        for (is_valid, latency), entry in zip(results, entries):
-            if is_valid:
-                valid_entries.append({"channel": entry["channel"], "url": entry["url"], "source_group_title": entry.get("source_group_title"), "latency": latency})
+        latencies, scores = [], []
+        for (is_valid, quality), entry in zip(results, entries):
+            if is_valid and quality:
+                latencies.append(quality.get("latency") or 0)
+                scores.append(quality.get("score") or 0)
+                valid_entries.append({
+                    "channel": entry["channel"],
+                    "url": entry["url"],
+                    "source_group_title": entry.get("source_group_title"),
+                    "latency": quality.get("latency"),
+                    "quality_score": quality.get("score", 0.0),
+                    "content_length": quality.get("content_length", 0),
+                    "content_type": quality.get("content_type", ""),
+                })
                 result["valid"] += 1
             else:
                 result["failed"] += 1
+        if latencies:
+            result["avg_latency"] = round(sum(latencies) / len(latencies), 3)
+        if scores:
+            result["avg_score"] = round(sum(scores) / len(scores), 2)
         if quality_cache is not None:
-            record_source_result(quality_cache, file_path, result["total"], result["valid"], result["failed"])
+            record_source_result(quality_cache, file_path, result["total"], result["valid"], result["failed"],
+                                 avg_score=result.get("avg_score", 0.0), avg_latency=result.get("avg_latency", 0.0))
         return valid_entries, result
     except Exception as e:
         print(f"  [error] {file_path}: {type(e).__name__}: {str(e)[:50]}")
@@ -984,8 +1237,13 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
             for channel_name, items in channel_groups.items():
                 logo = items[0]["logo"]
                 group_title = items[0]["group_title"]
+                best_score = items[0].get("quality_score", 0.0)
+                best_lat = items[0].get("latency") or 0
                 for item in items:
-                    f.write(f"#EXTINF:-1 tvg-name=\"{channel_name}\" tvg-logo=\"{logo}\" group-title=\"{group_title}\",{channel_name}\n")
+                    q = item.get("quality_score", 0.0)
+                    lat = item.get("latency") or 0
+                    extra = f' tvg-quality="{q:.2f}" tvg-latency="{lat:.3f}"' if q > 0 else ""
+                    f.write(f"#EXTINF:-1 tvg-name=\"{channel_name}\" tvg-logo=\"{logo}\" group-title=\"{group_title}\"{extra},{channel_name}\n")
                     f.write(f"{item['url']}\n")
 
     return all_channels
