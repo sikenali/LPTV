@@ -272,6 +272,9 @@ def strip_quality_suffix(name: str) -> str:
     # 去除末尾 * 号（多分辨率标记）
     s = s.rstrip('*').strip()
     return s
+
+
+def extract_geo_tokens(channel_name: str, normalized_aliases: Set[str]) -> Set[str]:
     tokens: Set[str] = set()
     simplified = simplify_channel_name(channel_name)
     candidates = [simplified]
