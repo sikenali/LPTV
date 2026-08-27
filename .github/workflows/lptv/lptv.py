@@ -262,7 +262,16 @@ def strip_common_channel_suffixes(token: str) -> str:
     return value
 
 
-def extract_geo_tokens(channel_name: str, normalized_aliases: Set[str]) -> Set[str]:
+def strip_quality_suffix(name: str) -> str:
+    """去除频道名中的质量后缀，对齐 iptv-checker 4.1.2 行为
+    例如: 'CCTV1 [HD]' -> 'CCTV1', '体育720p*' -> '体育'
+    """
+    s = name.strip()
+    # 去除末尾括号内的质量标签：[HD], [4K], [FHD], [SD], (720p), (1080p) 等
+    s = re.sub(r'\s*[\[（(][^\]）)]*(?:HD|4K|FHD|UHD|SD|720p|1080p|2160p|8K|HDR)[^\]）)]*[\]）)]', '', s, flags=re.IGNORECASE)
+    # 去除末尾 * 号（多分辨率标记）
+    s = s.rstrip('*').strip()
+    return s
     tokens: Set[str] = set()
     simplified = simplify_channel_name(channel_name)
     candidates = [simplified]
@@ -521,7 +530,7 @@ def is_source_deprecated(cache: Dict[str, Any], url: str) -> bool:
     return False
 
 
-def print_source_quality_summary(cache: Dict[str, Any], source_stats: List[Dict[str, Any]]) -> None:
+def print_source_quality_summary(cache: Dict[str, Any], source_stats: List[Dict[str, Any]], all_latencies: List[float] = None) -> None:
     print("\n===== 源质量报告 =====")
     for s in sorted(source_stats, key=lambda x: -x["valid"]):
         key = _source_key(s["url"])
@@ -532,7 +541,16 @@ def print_source_quality_summary(cache: Dict[str, Any], source_stats: List[Dict[
         status = "✅" if s["valid"] > 0 else ("⚠️ 连续失效" if consec > 0 else "❌")
         extra = f" 均分{avg_score:.2f} 均延迟{avg_lat:.2f}s" if s["valid"] > 0 else ""
         print(f"  {status} {s['url']}: 解析{s['total']}条 → 有效{s['valid']}条 (连续零有效: {consec}){extra}")
-    print(f"  合计: 有效流 {sum(s['valid'] for s in source_stats)} 条")
+    total_valid = sum(s['valid'] for s in source_stats)
+    print(f"  合计: 有效流 {total_valid} 条")
+    # 全局延迟分位数统计
+    if all_latencies and len(all_latencies) >= 3:
+        sorted_lat = sorted(all_latencies)
+        n = len(sorted_lat)
+        p50 = sorted_lat[int(n * 0.5)]
+        p90 = sorted_lat[min(int(n * 0.9), n - 1)]
+        p99 = sorted_lat[min(int(n * 0.99), n - 1)]
+        print(f"  全局延迟: p50={p50:.2f}s  p90={p90:.2f}s  p99={p99:.2f}s  (样本{n}个)")
     print("=" * 22)
 
 
@@ -1107,9 +1125,9 @@ async def test_multiple_streams(session: aiohttp.ClientSession, semaphore: async
 
 
 async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, file_path: str, is_m3u: bool = False, quality_cache: Optional[Dict[str, Any]] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-    """解析源文件、过滤无效协议、测速（含质量评分），返回有效条目和本次源质量统计"""
+    """解析源文件、过滤无效协议、测速（含质量评分 + HLS分辨率探测），返回有效条目和本次源质量统计"""
     result: Dict[str, Any] = {"url": file_path, "total": 0, "valid": 0, "filtered_protocol": 0, "failed": 0,
-                               "avg_score": 0.0, "avg_latency": 0.0}
+                               "avg_score": 0.0, "avg_latency": 0.0, "resolutions": {}, "bandwidths": []}
     try:
         async with session.get(file_path, timeout=aiohttp.ClientTimeout(total=CONFIG["timeout"])) as response:
             if response.status != 200:
@@ -1139,19 +1157,28 @@ async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.
         valid_entries: List[Dict[str, Any]] = []
         results = await test_multiple_streams(session, semaphore, entries)
         latencies, scores = [], []
+        # HLS manifest 懒解析：只对 m3u8 URL 批量获取分辨率（避免每个流单独请求）
+        hls_urls_to_parse: List[str] = []
         for (is_valid, quality), entry in zip(results, entries):
             if is_valid and quality:
                 latencies.append(quality.get("latency") or 0)
                 scores.append(quality.get("score") or 0)
-                valid_entries.append({
+                url = entry["url"]
+                entry_data = {
                     "channel": entry["channel"],
-                    "url": entry["url"],
+                    "url": url,
                     "source_group_title": entry.get("source_group_title"),
                     "latency": quality.get("latency"),
                     "quality_score": quality.get("score", 0.0),
                     "content_length": quality.get("content_length", 0),
                     "content_type": quality.get("content_type", ""),
-                })
+                    "resolution": None,
+                    "bandwidth_kbps": None,
+                }
+                # 标记 m3u8 URL 需要后续解析分辨率
+                if '.m3u8' in url.lower() or 'm3u8' in url:
+                    hls_urls_to_parse.append(url)
+                valid_entries.append(entry_data)
                 result["valid"] += 1
             else:
                 result["failed"] += 1
@@ -1159,6 +1186,29 @@ async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.
             result["avg_latency"] = round(sum(latencies) / len(latencies), 3)
         if scores:
             result["avg_score"] = round(sum(scores) / len(scores), 2)
+        # 批量获取 HLS 分辨率信息（去重后并发请求）
+        if hls_urls_to_parse:
+            unique_hls = list(dict.fromkeys(hls_urls_to_parse))
+            print(f"  [hls] 解析 {len(unique_hls)} 个 HLS manifest 分辨率...")
+            hls_tasks = [fetch_hls_manifest_info(session, u) for u in unique_hls]
+            hls_results = await asyncio.gather(*hls_tasks, return_exceptions=True)
+            for url, hls_info in zip(unique_hls, hls_results):
+                if isinstance(hls_info, dict):
+                    result["resolutions"][url] = hls_info
+                    if hls_info.get("bandwidth_kbps"):
+                        result["bandwidths"].append(hls_info["bandwidth_kbps"])
+            success_count = sum(1 for r in hls_results if isinstance(r, dict) and r.get("resolution"))
+            print(f"  [hls] 成功解析 {success_count}/{len(unique_hls)} 个 manifest")
+        # 应用 HLS 分辨率调整到 valid_entries
+        for entry in valid_entries:
+            url = entry["url"]
+            res_info = result["resolutions"].get(url, {})
+            res = res_info.get("resolution")
+            bw = res_info.get("bandwidth_kbps")
+            entry["resolution"] = res
+            entry["bandwidth_kbps"] = bw
+            if res or bw:
+                entry["quality_score"] = hls_resolution_boost(entry["quality_score"], res, bw)
         if quality_cache is not None:
             record_source_result(quality_cache, file_path, result["total"], result["valid"], result["failed"],
                                  avg_score=result.get("avg_score", 0.0), avg_latency=result.get("avg_latency", 0.0))
@@ -1178,7 +1228,7 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
     province_matchers = build_province_matchers(province_channels)
 
     for entry in valid_entries:
-        channel = str(entry.get("channel", "")).strip()
+        channel = strip_quality_suffix(str(entry.get("channel", "")).strip())
         url = str(entry.get("url", "")).strip()
         source_group_title = entry.get("source_group_title")
         if not channel or not url:
@@ -1187,7 +1237,17 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
             continue
         normalized_channel = normalize_text_for_match(normalize_cctv_name(channel))
         upstream_group = infer_group_from_upstream_title(source_group_title, province_matchers)
-        item = {"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": None}
+        item = {
+            "channel": channel,
+            "url": url,
+            "logo": f"logos/{sanitize_filename(channel)}.png",
+            "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png",
+            "group_title": None,
+            "quality_score": entry.get("quality_score", 0.0),
+            "latency": entry.get("latency"),
+            "resolution": entry.get("resolution"),
+            "bandwidth_kbps": entry.get("bandwidth_kbps"),
+        }
         if is_cctv_channel(channel, normalized_channel, normalized_cctv_channels) or upstream_group == "央视频道":
             item["group_title"] = "央视频道"
             cctv_channels_list.append(item)
@@ -1229,22 +1289,60 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
     m3u8_filename = filename.replace('.m3u', '.m3u8')
     generated_at = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
     unique_count = len(channel_groups)
-    for fname in [filename, m3u8_filename]:
-        with open(fname, 'w', encoding='utf-8') as f:
-            f.write("#EXTM3U\n")
-            f.write(f"# Generated-Time: {generated_at}\n")
-            f.write(f"# Channel-Count: {unique_count}\n")
-            for channel_name, items in channel_groups.items():
-                logo = items[0]["logo"]
-                group_title = items[0]["group_title"]
-                best_score = items[0].get("quality_score", 0.0)
-                best_lat = items[0].get("latency") or 0
-                for item in items:
-                    q = item.get("quality_score", 0.0)
-                    lat = item.get("latency") or 0
-                    extra = f' tvg-quality="{q:.2f}" tvg-latency="{lat:.3f}"' if q > 0 else ""
-                    f.write(f"#EXTINF:-1 tvg-name=\"{channel_name}\" tvg-logo=\"{logo}\" group-title=\"{group_title}\"{extra},{channel_name}\n")
-                    f.write(f"{item['url']}\n")
+
+    # ── IPv4/IPv6 分离导出（对齐 iptv-checker 4.4.0）───────────────────
+    ipv4_items, ipv6_items = [], []
+    for item in all_channels:
+        if item["url"].startswith("https://"):
+            ipv6_items.append(item)
+        else:
+            ipv4_items.append(item)
+
+    def _write_m3u(f, channels, gen_time, count):
+        f.write("#EXTM3U\n")
+        f.write(f"# Generated-Time: {gen_time}\n")
+        f.write(f"# Channel-Count: {count}\n")
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for item in channels:
+            groups.setdefault(item["channel"], []).append(item)
+        for channel_name, items in groups.items():
+            logo = items[0]["logo"]
+            group_title = items[0]["group_title"]
+            resolution_tag = items[0].get("resolution")
+            for item in items:
+                q = item.get("quality_score", 0.0)
+                lat = item.get("latency") or 0
+                bw = item.get("bandwidth_kbps")
+                extra_parts = []
+                if q > 0:
+                    extra_parts.append(f'tvg-quality="{q:.2f}"')
+                if lat > 0:
+                    extra_parts.append(f'tvg-latency="{lat:.3f}"')
+                if bw:
+                    extra_parts.append(f'tvg-bandwidth="{bw}"')
+                extra = f' {" ".join(extra_parts)}' if extra_parts else ""
+                display_name = channel_name
+                if resolution_tag:
+                    display_name = f"{channel_name} [{resolution_tag}]"
+                f.write(f"#EXTINF:-1 tvg-name=\"{channel_name}\" tvg-logo=\"{logo}\" group-title=\"{group_title}\"{extra},{display_name}\n")
+                f.write(f"{item['url']}\n")
+
+    with open(filename, 'w', encoding='utf-8') as f:
+        _write_m3u(f, all_channels, generated_at, unique_count)
+    with open(m3u8_filename, 'w', encoding='utf-8') as f:
+        _write_m3u(f, all_channels, generated_at, unique_count)
+
+    # IPv4 / IPv6 分别导出
+    if ipv4_items:
+        ipv4_file = filename.replace('.m3u', '.ipv4.m3u')
+        with open(ipv4_file, 'w', encoding='utf-8') as f:
+            _write_m3u(f, ipv4_items, generated_at, len(ipv4_items))
+        print(f"  [export] IPv4: {len(ipv4_items)} 条 → {ipv4_file}")
+    if ipv6_items:
+        ipv6_file = filename.replace('.m3u', '.ipv6.m3u')
+        with open(ipv6_file, 'w', encoding='utf-8') as f:
+            _write_m3u(f, ipv6_items, generated_at, len(ipv6_items))
+        print(f"  [export] IPv6: {len(ipv6_items)} 条 → {ipv6_file}")
 
     return all_channels
 
@@ -1345,11 +1443,22 @@ async def main(file_urls, cctv_channel_file, province_channel_files):
     multi_entries = select_multi_streams(deduplicated_entries)
     total_unique = len(multi_entries)
     total_streams = sum(len(v) for v in multi_entries.values())
+    # 收集所有延迟用于分位数统计
+    all_latencies = [e.get("latency") for items in multi_entries.values() for e in items if e.get("latency")]
+    # 分辨率分布统计
+    res_dist: Dict[str, int] = defaultdict(int)
+    for items in multi_entries.values():
+        for e in items:
+            res = e.get("resolution")
+            if res:
+                res_dist[res] += 1
     print(f"Valid streams: {len(all_valid_entries)}, deduplicated: {len(deduplicated_entries)}, channels: {total_unique} ({total_streams} total URLs)")
+    if res_dist:
+        print(f"  分辨率分布: {dict(res_dist)}")
     all_items = [item for items in multi_entries.values() for item in items]
     all_channels = generate_sorted_m3u(all_items, cctv_channels, province_channels, CONFIG["output_file"])
     print(f"Generated sorted M3U file: {CONFIG['output_file']}")
-    print_source_quality_summary(quality_cache, source_stats)
+    print_source_quality_summary(quality_cache, source_stats, all_latencies)
 
     # 下载台标（复用同一 session 减少连接开销）
     logo_semaphore = asyncio.Semaphore(CONFIG["max_parallel"])
