@@ -8,7 +8,7 @@ const zlib = require('zlib')
 const app = express()
 const PORT = process.env.PORT || 3000
 const LOGO_DIR = path.join(__dirname, '..', 'logos')
-const STREAM_TIMEOUT = 30000
+  const STREAM_TIMEOUT = 60000
 const maxConcurrentStreams = 10
 let activeStreams = 0
 const pendingStreamRequests = []
@@ -17,15 +17,13 @@ const PRIV_HOSTS = ['localhost','127.','10.','172.16.','172.17.','172.18.','172.
 
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || ['http://localhost:5173', 'http://127.0.0.1:5173']
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(',').map(s => s.trim()) || []
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin) return callback(null, true)
-    if (process.env.NODE_ENV !== 'production') return callback(null, true)
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
-    callback(null, true)
+    if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) return callback(null, true)
+    callback(null, false)
   },
-  credentials: true,
 }
 app.use(cors(corsOptions))
 app.use(express.json())
@@ -151,8 +149,8 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
 
   const referer = getSmartReferer(streamUrl)
   function setCors() {
-    res.set('Access-Control-Allow-Origin', req.headers.origin || '*')
-    res.set('Access-Control-Allow-Credentials', 'true')
+    const origin = req.headers.origin
+    res.set('Access-Control-Allow-Origin', origin || '*')
     res.set('Vary', 'Origin')
   }
   function enqueue(cb) {
