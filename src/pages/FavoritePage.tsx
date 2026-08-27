@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { RiHeartFill, RiTvLine, RiSearchLine, RiArrowDownSLine, RiArrowRightSLine } from '@remixicon/react';
 import { useApp } from '../context/AppContext';
 import { IptvChannel, cctvChannels, wsChannels } from '../data/iptvChannels';
+import { getChannelLogoUrl } from '../utils/logoMap';
 
 const allChannels: IptvChannel[] = [...cctvChannels, ...wsChannels];
 
@@ -136,9 +137,14 @@ const FavoritePage: React.FC = () => {
                             style={{ background: cardBk, border: `1px solid ${borderCol}` }}
                           >
                             <div className="relative h-[120px] flex items-center justify-center" style={{ background: isBlack ? '#1a1a1a' : '#f8f3e8' }}>
-                              <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ background: '#c43d3d' }}>
-                                {ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 2)}
-                              </div>
+                              {getChannelLogoUrl(ch) ? (
+                                <img src={getChannelLogoUrl(ch)} alt={ch.name} className="w-16 h-16 object-contain p-2"
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                              ) : (
+                                <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ background: '#c43d3d' }}>
+                                  {ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 2)}
+                                </div>
+                              )}
                               <div className="absolute top-2 right-2">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); toggleFavorite(`${ch.tid}-${ch.id}`); }}

@@ -12,17 +12,17 @@ import { Channel } from '../types';
 
 type GroupKey = 'cctv' | 'ws';
 
-const LogoCell: React.FC<{ ch: IptvChannel; color: string; isSelected: boolean }> = ({ ch, color, isSelected }) => {
+const LogoCell: React.FC<{ ch: IptvChannel; color: string }> = ({ ch, color }) => {
   const [imgError, setImgError] = useState(false);
   return (
     <div
       className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center overflow-hidden"
-      style={{ background: imgError ? (isSelected ? color : `${color}30`) : 'transparent' }}
+      style={{ background: `${color}22`, border: `1px solid ${color}44` }}
     >
       {!imgError ? (
-        <img src={getChannelLogoUrl(ch)} alt={ch.name} className="w-full h-full object-contain" onError={() => setImgError(true)} />
+        <img src={getChannelLogoUrl(ch)} alt={ch.name} className="w-full h-full object-contain p-1" onError={() => setImgError(true)} />
       ) : (
-        <span className="text-white text-xs font-bold">{ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 1)}</span>
+        <span className="text-white text-xs font-bold" style={{ color }}>{ch.name.replace(/^[^\u4e00-\u9fa5]+/, '').slice(0, 1)}</span>
       )}
     </div>
   );
@@ -237,7 +237,7 @@ export default function ChannelPage() {
                                 }}
                               >
                                 <div className="flex items-center gap-2 pl-2 pr-1 flex-1 min-w-0">
-                                  <LogoCell ch={ch} color={color} isSelected={isSelected} />
+                                  <LogoCell ch={ch} color={color} />
                                   <div className="flex-1 text-left min-w-0">
                                     <div className="font-medium text-xs truncate" style={{ color: textPri }}>{ch.name}</div>
                                     <div className="text-xs truncate" style={{ color: textSec }}>{ch.currentProgram}</div>

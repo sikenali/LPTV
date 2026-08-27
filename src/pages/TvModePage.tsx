@@ -67,6 +67,7 @@ const ChannelCard: React.FC<{
 
 const TvModePage: React.FC = () => {
   const navigate = useNavigate();
+  const { setTvMode } = useApp();
   const [activeGroup, setActiveGroup] = useState<GroupKey>('cctv');
   const [selectedChannel, setSelectedChannel] = useState<IptvChannel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
@@ -113,6 +114,7 @@ const TvModePage: React.FC = () => {
           break;
         case 'Escape':
           e.preventDefault();
+          setTvMode(false);
           navigate('/');
           break;
       }
@@ -125,25 +127,6 @@ const TvModePage: React.FC = () => {
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
       <Toast />
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Top bar */}
-        <div className="px-6 pt-3 pb-2 flex items-center justify-between border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-red-600 to-red-700 flex items-center justify-center">
-              <RiTvLine className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-white">{selectedChannel?.name || 'LPTV'}</div>
-              <div className="text-[10px] text-white/40">{selectedChannel?.currentProgram || '选择频道开始观看'}</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 text-right">
-            <div>
-              <div className="text-xs text-white/50">{currentDate}</div>
-              <div className="text-lg font-bold text-white tracking-wider">{currentTime}</div>
-            </div>
-          </div>
-        </div>
-
         {/* Video Player */}
         <div className="flex-1 relative min-h-[300px]">
           {selectedChannel ? (
@@ -159,16 +142,6 @@ const TvModePage: React.FC = () => {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Info bar */}
-        <div className="px-6 py-2 border-b border-white/5">
-          <div className="text-lg font-bold text-white">{selectedChannel?.name || '请选择频道'}</div>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-white/50">{selectedChannel?.currentProgram || ''}</span>
-            <span className="text-white/20">|</span>
-            <span className="text-xs text-green-400">直播中</span>
-          </div>
         </div>
 
         {/* Category tabs */}
@@ -212,7 +185,7 @@ const TvModePage: React.FC = () => {
       <div className="px-6 py-2.5 border-t border-white/10 flex items-center justify-between bg-black/90">
         <div className="flex items-center gap-5">
           <div
-            onClick={() => navigate('/')}
+            onClick={() => { setTvMode(false); navigate('/'); }}
             className="flex items-center gap-2 text-white/60 hover:text-white/90 cursor-pointer transition-colors text-xs"
           >
             <RiArrowLeftSLine className="w-4 h-4" />
@@ -224,8 +197,9 @@ const TvModePage: React.FC = () => {
             <span>切换频道</span>
           </div>
         </div>
-        <div className="text-white/30 text-xs">
-          {selectedChannel ? selectedChannel.name : '请选择频道'}
+        <div className="text-right">
+          <div className="text-xs text-white/50">{currentDate}</div>
+          <div className="text-sm font-bold text-white tracking-wider">{currentTime}</div>
         </div>
       </div>
     </div>
