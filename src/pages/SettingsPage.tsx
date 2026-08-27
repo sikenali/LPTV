@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RiPaletteLine, RiLayoutGridLine, RiCheckLine, RiArrowRightSLine, RiTv2Line, RiPlayCircleFill, RiRefreshLine, RiWindowLine } from '@remixicon/react';
+import { RiPaletteLine, RiLayoutGridLine, RiCheckLine, RiArrowRightSLine } from '@remixicon/react';
 import { useApp } from '../context/AppContext';
 
 type TabType = 'theme' | 'mode' | 'source';
@@ -25,30 +25,6 @@ const themes = [
   },
 ];
 
-const sourceOptions: { id: 'auto' | 'hls' | 'web'; label: string; sub: string; icon: React.ReactNode; desc: string }[] = [
-  {
-    id: 'auto',
-    label: '自动',
-    sub: '智能选择',
-    desc: 'HLS 优先，失败自动回退网页播放',
-    icon: <RiRefreshLine className="w-6 h-6" />,
-  },
-  {
-    id: 'hls',
-    label: '仅 HLS',
-    sub: '直链播放',
-    desc: '只走直链 HLS 播放，延迟最低',
-    icon: <RiPlayCircleFill className="w-6 h-6" />,
-  },
-  {
-    id: 'web',
-    label: '仅 Web',
-    sub: '网页播放',
-    desc: '只走 iframe 网页播放，兼容性强',
-    icon: <RiWindowLine className="w-6 h-6" />,
-  },
-];
-
 const tabItems: { id: TabType; label: string; sub: string; icon: React.ReactNode }[] = [
   {
     id: 'theme',
@@ -61,12 +37,6 @@ const tabItems: { id: TabType; label: string; sub: string; icon: React.ReactNode
     label: '模式管理',
     sub: '播放与显示功能',
     icon: <RiLayoutGridLine className="w-[18px] h-[18px]" />,
-  },
-  {
-    id: 'source',
-    label: '频道模式',
-    sub: '播放资源方式',
-    icon: <RiTv2Line className="w-[18px] h-[18px]" />,
   },
 ];
 
@@ -259,64 +229,6 @@ const SettingsPage: React.FC = () => {
               </motion.div>
             )}
 
-            {activeTab === 'source' && (
-              <motion.div key="source" variants={contentVariants} initial="enter" animate="center" exit="exit" transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}>
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="w-1 h-7 shrink-0 rounded-[2px]" style={{ background: '#c43d3d' }} />
-                  <div>
-                    <h1 className="font-bold leading-tight mb-1" style={{ color: textPri, fontSize: 22, lineHeight: 1.27 }}>频道模式</h1>
-                    <p className="leading-tight" style={{ color: '#8b7e6a', fontSize: 13, lineHeight: 1.38 }}>选择频道播放的资源方式</p>
-                  </div>
-                </div>
-                <div className="rounded-xl border" style={{ background: cardBg, borderColor: cardBorder }}>
-                  <div style={{ padding: 20 }}>
-                    <div className="flex gap-4">
-                      {sourceOptions.map((opt) => {
-                        const isSelected = settings.channelSource === opt.id;
-                        return (
-                          <motion.button
-                            key={opt.id}
-                            whileTap={{ scale: 0.97 }}
-                            whileHover={{ y: -3 }}
-                            onClick={() => updateSettings({ channelSource: opt.id })}
-                            className="flex-1 flex flex-col items-center rounded-xl transition-all p-5"
-                            style={{
-                              background: isSelected ? (isBlack ? 'rgba(196,61,61,0.12)' : 'rgba(196,61,61,0.06)') : (isBlack ? 'rgba(255,255,255,0.03)' : '#f8f3e8'),
-                              border: `2px solid ${isSelected ? '#c43d3d' : 'transparent'}`,
-                            }}
-                          >
-                            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-all" style={{ background: isSelected ? '#c43d3d' : sidebarBg }}>
-                              <span style={{ color: isSelected ? '#ffffff' : '#c43d3d', fontSize: 20 }}>{opt.icon}</span>
-                            </div>
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="font-semibold leading-tight" style={{ color: isSelected ? '#c43d3d' : textPri, fontSize: 15, lineHeight: 1.3 }}>
-                                {opt.label}
-                              </span>
-                              <span className="leading-tight" style={{ color: isSelected ? '#c43d3d' : mutedColor, fontSize: 12, lineHeight: 1.3, fontWeight: isSelected ? 500 : 400 }}>
-                                {opt.sub}
-                              </span>
-                            </div>
-                            <div className="mt-2 text-center" style={{ color: mutedColor, fontSize: 11, lineHeight: 1.4, padding: '4px 8px', background: isBlack ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: 6 }}>
-                              {opt.desc}
-                            </div>
-                            {isSelected && (
-                              <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-                                className="mt-3 w-6 h-6 rounded-full bg-[#c43d3d] flex items-center justify-center"
-                              >
-                                <RiCheckLine className="w-4 h-4 text-white" />
-                              </motion.div>
-                            )}
-                          </motion.button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
           </AnimatePresence>
         </div>
       </main>

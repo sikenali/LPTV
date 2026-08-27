@@ -23,7 +23,7 @@ type Action =
 
 const initialState: AppState = {
   favorites: [],
-  settings: { theme: 'glass', autoPlay: false, quality: 'high', tvMode: false, autoRefresh: true, channelSource: 'auto' },
+  settings: { theme: 'glass', autoPlay: false, quality: 'high', tvMode: false, autoRefresh: true },
   currentCategory: '全部',
   channels: [],
   channelsLoading: false,

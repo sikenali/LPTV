@@ -13,7 +13,6 @@ export interface UserSettings {
   quality: 'high' | 'medium' | 'low';
   tvMode: boolean;
   autoRefresh: boolean;
-  channelSource: 'auto' | 'hls' | 'web';
 }
 
 export type TvModeState = 'off' | 'entering' | 'on' | 'exiting'

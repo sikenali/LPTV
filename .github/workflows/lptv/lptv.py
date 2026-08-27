@@ -720,6 +720,26 @@ def select_best_streams(valid_entries: Iterable[Dict[str, Any]]) -> List[Dict[st
     return selected
 
 
+def select_multi_streams(valid_entries: Iterable[Dict[str, Any]], max_per_channel: int = 5) -> Dict[str, List[Dict[str, Any]]]:
+    """保留每个频道最多 max_per_channel 条有效源，按延迟排序"""
+    by_channel: Dict[str, List[Dict[str, Any]]] = {}
+    for entry in valid_entries:
+        channel = sanitize_channel_name(str(entry.get("channel", "")).strip())
+        url = str(entry.get("url", "")).strip()
+        if not channel or not url:
+            continue
+        key = channel_identity_key(channel)
+        by_channel.setdefault(key, []).append(dict(entry))
+    result: Dict[str, List[Dict[str, Any]]] = {}
+    for key, entries in by_channel.items():
+        entries.sort(key=lambda e: (
+            e.get("latency") if isinstance(e.get("latency"), (int, float)) else float("inf"),
+            0 if str(e.get("url", "")).startswith("https://") else 1,
+        ))
+        result[key] = entries[:max_per_channel]
+    return result
+
+
 def extract_urls_from_txt(content):
     """增强 TXT 解析：支持逗号、竖线、制表符分隔，跳过注释行"""
     urls: List[Dict[str, Any]] = []
@@ -914,20 +934,26 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
             continue
         normalized_channel = normalize_text_for_match(normalize_cctv_name(channel))
         upstream_group = infer_group_from_upstream_title(source_group_title, province_matchers)
+        item = {"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": None}
         if is_cctv_channel(channel, normalized_channel, normalized_cctv_channels) or upstream_group == "央视频道":
-            cctv_channels_list.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": "央视频道"})
+            item["group_title"] = "央视频道"
+            cctv_channels_list.append(item)
         elif "卫视" in channel or upstream_group == "卫视频道":
-            satellite_channels.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": "卫视频道"})
+            item["group_title"] = "卫视频道"
+            satellite_channels.append(item)
         else:
             province = match_province(normalized_channel, province_matchers)
             if province:
-                province_channels_list[province].append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": province})
+                item["group_title"] = province
+                province_channels_list[province].append(item)
             else:
                 smart_category = upstream_group if upstream_group in SMART_CATEGORY_KEYWORDS else match_smart_category(normalized_channel)
                 if smart_category and smart_category in SMART_CATEGORY_KEYWORDS:
-                    smart_category_channels[smart_category].append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": smart_category})
+                    item["group_title"] = smart_category
+                    smart_category_channels[smart_category].append(item)
                 else:
-                    other_channels.append({"channel": channel, "url": url, "logo": f"logos/{sanitize_filename(channel)}.png", "logo_url": f"https://raw.githubusercontent.com/fanmingming/live/main/tv/{sanitize_filename(channel)}.png", "group_title": "其他频道"})
+                    item["group_title"] = "其他频道"
+                    other_channels.append(item)
 
     cctv_channels_list.sort(key=lambda x: cctv_sort_key(x["channel"]))
     for province in province_channels_list:
@@ -942,16 +968,25 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
                    [channel for smart_category in SMART_CATEGORY_KEYWORDS for channel in smart_category_channels.get(smart_category, [])] + \
                    other_channels
 
+    # 按频道名分组，同名的多条源输出为连续 block
+    channel_groups: Dict[str, List[Dict[str, Any]]] = {}
+    for item in all_channels:
+        channel_groups.setdefault(item["channel"], []).append(item)
+
     m3u8_filename = filename.replace('.m3u', '.m3u8')
     generated_at = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
+    unique_count = len(channel_groups)
     for fname in [filename, m3u8_filename]:
         with open(fname, 'w', encoding='utf-8') as f:
             f.write("#EXTM3U\n")
             f.write(f"# Generated-Time: {generated_at}\n")
-            f.write(f"# Channel-Count: {len(all_channels)}\n")
-            for channel_info in all_channels:
-                f.write(f"#EXTINF:-1 tvg-name=\"{channel_info['channel']}\" tvg-logo=\"{channel_info['logo']}\" group-title=\"{channel_info['group_title']}\",{channel_info['channel']}\n")
-                f.write(f"{channel_info['url']}\n")
+            f.write(f"# Channel-Count: {unique_count}\n")
+            for channel_name, items in channel_groups.items():
+                logo = items[0]["logo"]
+                group_title = items[0]["group_title"]
+                for item in items:
+                    f.write(f"#EXTINF:-1 tvg-name=\"{channel_name}\" tvg-logo=\"{logo}\" group-title=\"{group_title}\",{channel_name}\n")
+                    f.write(f"{item['url']}\n")
 
     return all_channels
 
@@ -1049,9 +1084,12 @@ async def main(file_urls, cctv_channel_file, province_channel_files):
                 all_valid_entries.extend(valid_entries)
     save_source_quality_cache(quality_cache)
     deduplicated_entries = deduplicate_candidate_entries(all_valid_entries)
-    best_entries = select_best_streams(deduplicated_entries)
-    print(f"Valid streams: {len(all_valid_entries)}, deduplicated: {len(deduplicated_entries)}, best-per-channel: {len(best_entries)}")
-    all_channels = generate_sorted_m3u(best_entries, cctv_channels, province_channels, CONFIG["output_file"])
+    multi_entries = select_multi_streams(deduplicated_entries)
+    total_unique = len(multi_entries)
+    total_streams = sum(len(v) for v in multi_entries.values())
+    print(f"Valid streams: {len(all_valid_entries)}, deduplicated: {len(deduplicated_entries)}, channels: {total_unique} ({total_streams} total URLs)")
+    all_items = [item for items in multi_entries.values() for item in items]
+    all_channels = generate_sorted_m3u(all_items, cctv_channels, province_channels, CONFIG["output_file"])
     print(f"Generated sorted M3U file: {CONFIG['output_file']}")
     print_source_quality_summary(quality_cache, source_stats)
 

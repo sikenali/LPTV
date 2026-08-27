@@ -98,4 +98,3 @@ export const wsChannels: IptvChannel[] = [
 
 export const iptvChannels: IptvChannel[] = [...cctvChannels, ...wsChannels];
 
-export const categories = ['全部', '央视频道', '卫视频道'];

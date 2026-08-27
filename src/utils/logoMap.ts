@@ -32,7 +32,7 @@ const channelLogoMap: Record<string, string> = {
   'CCTV 俄语': 'CGTN俄语',
   'CETV-1': 'CETV1',
   'CETV-2': 'CETV2',
-  'CETV-3': 'CETV4',
+  'CETV-3': 'CETV3',
   'CETV-4': 'CETV4',
   'CCTV 怀旧剧场': 'CCTV怀旧剧场',
   'CCTV 第一剧场': 'CCTV第一剧场',
