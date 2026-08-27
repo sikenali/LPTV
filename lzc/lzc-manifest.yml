@@ -11,7 +11,7 @@ application:
       # 默认转发会去掉 location 前缀（/api/m3u -> /m3u），导致后端 404。
       # 保留前缀，使后端收到的仍是 /api/m3u（需 lzcos v1.3.9+）
       disable_trim_location: true
-      backend_launch_command: /lzcapp/pkg/content/scripts/start-backend.sh
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
       workdir: /lzcapp/pkg/content/scripts
   environment:
     BACKEND_PORT: "8080"
