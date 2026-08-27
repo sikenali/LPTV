@@ -250,8 +250,37 @@ app.get('/api/stream/check', async (req, res) => {
 
 // ── 频道列表 API ─────────────────────────────────────────────────────────
 const M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
+const M3U_REMOTE_URLS = [
+  `https://raw.githubusercontent.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/main/channels/lptv.m3u8`,
+  `https://raw.githubusercontent.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/main/channels/lptv.m3u`,
+]
 let m3uCache = null
 let m3uCacheTime = 0
+let m3uFetchFailed = false
+
+async function fetchRemoteM3u() {
+  if (m3uFetchFailed) return
+  for (const url of M3U_REMOTE_URLS) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(10000) })
+      if (!resp.ok) continue
+      const body = await resp.text()
+      const channels = parseM3u(body)
+      if (channels.length === 0) continue
+      m3uCache = channels
+      m3uCacheTime = Date.now()
+      m3uFetchFailed = false
+      console.log(`[m3u] Remote updated: ${channels.length} channels (${url})`)
+      return
+    } catch (err) {
+      console.warn(`[m3u] Remote fetch failed: ${url} - ${err.message}`)
+    }
+  }
+  m3uFetchFailed = true
+}
+
+fetchRemoteM3u()
+setInterval(fetchRemoteM3u, 30 * 60 * 1000)
 
 function parseM3u(content) {
   const channels = []
@@ -303,13 +332,14 @@ app.get('/api/m3u', (req, res) => {
     return res.json(m3uCache)
   }
   try {
-    const content = fs.readFileSync(M3U_PATH, 'utf-8')
-    const channels = parseM3u(content)
+    const fileContent = fs.readFileSync(M3U_PATH, 'utf-8')
+    const channels = parseM3u(fileContent)
     m3uCache = channels
     m3uCacheTime = now
     res.json(channels)
   } catch (err) {
-    console.error('[m3u] Error:', err.message)
+    console.error('[m3u] Local file read failed:', err.message)
+    if (m3uCache) return res.json(m3uCache)
     res.status(500).json({ error: '读取频道列表失败', channels: [] })
   }
 })
@@ -318,3 +348,4 @@ app.listen(PORT, () => {
   console.log(`LPTV proxy server running on port ${PORT}`)
   console.log(`[startup] CORS allowed: ${ALLOWED_ORIGINS.join(', ')}`)
 })
+
