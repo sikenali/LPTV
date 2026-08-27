@@ -151,6 +151,7 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
   function setCors() {
     const origin = req.headers.origin
     res.set('Access-Control-Allow-Origin', origin || '*')
+    res.set('Access-Control-Expose-Headers', 'Content-Length')
     res.set('Vary', 'Origin')
   }
   function enqueue(cb) {

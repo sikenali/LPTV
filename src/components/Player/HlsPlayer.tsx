@@ -315,6 +315,8 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
         ref={videoRef}
         className="w-full h-full object-contain"
         playsInline
+        muted
+        autoPlay
         style={{ maxHeight: '100%', maxWidth: '100%' }}
         onLoadedData={() => {
           clearAllTimers()
