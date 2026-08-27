@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XGPlayer 测试 - LPTV</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0f172a; color: #fff; font-family: sans-serif; padding: 20px; }
+    h1 { text-align: center; margin-bottom: 20px; font-size: 18px; color: #f87171; }
+    .player-wrap { max-width: 800px; margin: 0 auto 20px; }
+    #player-container { width: 100%; aspect-ratio: 16/9; background: #000; }
+    .controls { max-width: 800px; margin: 0 auto; display: flex; gap: 10px; flex-wrap: wrap; }
+    button { padding: 8px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; background: #dc2626; color: #fff; }
+    button:hover { background: #ef4444; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    .status { max-width: 800px; margin: 10px auto; padding: 10px 16px; border-radius: 8px; font-size: 13px; }
+    .status.ok { background: #166534; color: #86efac; }
+    .status.err { background: #991b1b; color: #fca5a5; }
+    .status.info { background: #1e293b; color: #94a3b8; }
+    .info { max-width: 800px; margin: 10px auto; font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <h1>XGPlayer 测试 (LPTV)</h1>
+  <div class="player-wrap">
+    <div id="player-container"></div>
+  </div>
+  <div class="controls">
+    <button id="playBtn">播放测试流</button>
+    <button id="pauseBtn" disabled>暂停</button>
+    <button id="fullBtn">全屏</button>
+  </div>
+  <div class="status info" id="status">就绪 - 点击「播放测试流」开始</div>
+  <div class="info">使用 XGPlayer + xgplayer-hls 插件 | 测试源: BigBuckBunny HLS</div>
+
+  <script type="module">
+    import Player from 'https://unpkg.com/xgplayer@3.0.26/es/index.js'
+    import HlsPlugin from 'https://unpkg.com/xgplayer-hls@3.0.26/es/index.js'
+
+    const statusEl = document.getElementById('status')
+    const playBtn = document.getElementById('playBtn')
+    const pauseBtn = document.getElementById('pauseBtn')
+    const fullBtn = document.getElementById('fullBtn')
+
+    let player = null
+
+    function setStatus(msg, type = 'info') {
+      statusEl.textContent = msg
+      statusEl.className = 'status ' + type
+    }
+
+    const TEST_URL = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8'
+
+    playBtn.onclick = async () => {
+      if (player) { player.destroy(); player = null }
+      playBtn.disabled = true
+      setStatus('正在初始化 XGPlayer...', 'info')
+
+      try {
+        player = new Player({
+          id: 'xg-test-player',
+          el: document.getElementById('player-container'),
+          url: TEST_URL,
+          autoplay: true,
+          autoplayMuted: false,
+          lang: 'zh-cn',
+          plugins: [HlsPlugin],
+          volume: 0.8,
+        })
+
+        player.on('play', () => { setStatus('✅ 播放中', 'ok'); pauseBtn.disabled = false })
+        player.on('playing', () => {})
+        player.on('pause', () => setStatus('⏸ 已暂停', 'info'))
+        player.on('waiting', () => setStatus('⏳ 缓冲中...', 'info'))
+        player.on('error', (e) => {
+          setStatus('❌ 播放失败: ' + (e?.message || '未知错误'), 'err')
+          playBtn.disabled = false
+        })
+      } catch (err) {
+        setStatus('❌ 初始化失败: ' + err.message, 'err')
+        playBtn.disabled = false
+      }
+    }
+
+    pauseBtn.onclick = () => {
+      if (player) {
+        player.pause()
+        setStatus('⏸ 已暂停', 'info')
+      }
+    }
+
+    fullBtn.onclick = () => {
+      const el = document.getElementById('player-container')
+      if (!document.fullscreenElement) {
+        el.requestFullscreen().catch(() => {})
+      } else {
+        document.exitFullscreen().catch(() => {})
+      }
+    }
+  </script>
+</body>
+</html>

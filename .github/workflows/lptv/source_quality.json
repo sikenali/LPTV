@@ -1,0 +1,10 @@
+{
+  "raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u": {
+    "total_parsed": 471,
+    "total_valid": 371,
+    "total_failed": 100,
+    "last_run": "2026-08-26 12:07",
+    "last_success_ts": 1787717273.9386358,
+    "consecutive_zero": 0
+  }
+}
