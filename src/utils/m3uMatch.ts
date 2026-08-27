@@ -26,12 +26,12 @@ export function matchM3uUrls(
   const allMatches = m3uChannels.filter(c =>
     keywords.every(kw => c.name.toLowerCase().includes(kw.toLowerCase()))
   )
-  if (allMatches.length > 0) return allMatches.flatMap(c => [c.url, ...(c.urls?.filter(u => u.startsWith('http://') || u.startsWith('https://')) ?? [])])
+  if (allMatches.length > 0) return allMatches.flatMap(c => [c.url, ...(c.urls ?? [])])
 
   const firstMatches = m3uChannels.filter(c =>
     c.name.toLowerCase().includes(keywords[0].toLowerCase())
   )
-  if (firstMatches.length > 0) return firstMatches.flatMap(c => [c.url, ...(c.urls?.filter(u => u.startsWith('http://') || u.startsWith('https://')) ?? [])])
+  if (firstMatches.length > 0) return firstMatches.flatMap(c => [c.url, ...(c.urls ?? [])])
 
   return []
 }

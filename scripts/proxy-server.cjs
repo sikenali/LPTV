@@ -270,7 +270,7 @@ function parseM3u(content) {
           if (existing.url && !existing.urls.includes(existing.url)) {
             existing.urls.push(existing.url)
           }
-          existing.urls.push(trimmed)
+          // 新 block：如果当前行是 URL，追加；否则只追加到 urls（兼容旧格式）
           currentChannel = existing
         } else {
           currentChannel = {
