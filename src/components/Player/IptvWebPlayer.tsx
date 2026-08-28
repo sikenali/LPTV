@@ -14,7 +14,7 @@ const LptvSplash: React.FC = () => (
       @keyframes lptv-bounce { 0%,80%,100%{transform:scale(1)} 40%{transform:scale(1.25)} }
       @keyframes lptv-fade { 0%,30%{opacity:1} 60%,100%{opacity:0} }
     `}</style>
-    <div className="absolute inset-0 flex items-center justify-center bg-black z-20">
+    <div className="absolute inset-0 flex items-center justify-center z-20">
       <div className="flex gap-3 items-center">
         {(['#f97316','#ef4444','#3b82f6','#22c55e'] as const).map((color, i) => (
           <span key={i} className="text-5xl font-black text-white" style={{
@@ -28,13 +28,12 @@ const LptvSplash: React.FC = () => (
 );
 
 const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
-  // 默认播放 CCTV1
   const defaultChannel = useRef<IptvChannel>(iptvChannels[0] ?? { id: '1', name: 'CCTV1', category: '央视频道', currentProgram: '', tid: 'ys' });
   const initChannel = channel ?? defaultChannel.current;
 
   const [currentChannel, setCurrentChannel] = useState<IptvChannel>(initChannel);
   const [currentUrlIndex, setCurrentUrlIndex] = useState(0);
-  const [showControls, setShowControls] = useState(true);
+  const [showControls, setShowControls] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [volume, setVolume] = useState(1);
@@ -44,14 +43,9 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hlsPlayerRef = useRef<HlsPlayerRef>(null);
-  // 记录控制栏是否已经显示过（用于首次自动隐藏）
-  const controlsShownRef = useRef(false);
 
   useEffect(() => {
-    if (channel) {
-      setCurrentChannel(channel);
-      resetPlayer();
-    }
+    if (channel) { setCurrentChannel(channel); resetPlayer(); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel]);
 
@@ -62,14 +56,12 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     setAllUrls([]);
     setIsPaused(false);
     setIsMuted(true);
-    controlsShownRef.current = false;
+    setShowControls(false);
   }, []);
 
-  // 加载 M3U
   useEffect(() => {
     setError(null);
     setM3uLoaded(false);
-
     fetch('/api/m3u')
       .then(r => r.json())
       .then(data => {
@@ -91,12 +83,11 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
 
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(() => setShowControls(false), 4000);
+    hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
   }, []);
 
   const handleTouch = useCallback(() => {
     setShowControls(true);
-    controlsShownRef.current = true;
     scheduleHide();
   }, [scheduleHide]);
 
@@ -161,29 +152,30 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
       onTouchStart={handleTouch}
       onMouseMove={handleTouch}
     >
-      {/* LPTV 加载动画：仅 M3U 加载期间显示 */}
+      {/* LPTV 加载动画：仅 M3U 加载期间 */}
       {!m3uLoaded && <LptvSplash />}
 
-      {/* 视频区域 */}
-      <HlsPlayer
-        key={`${currentChannel.tid}-${currentChannel.id}-m3u-${currentUrlIndex}`}
-        ref={hlsPlayerRef}
-        url={activeUrl}
-        onError={err => {
-          console.log('[IptvWebPlayer] HLS error:', err?.message);
-          if (allUrls.length > 0 && currentUrlIndex < allUrls.length - 1) {
-            setCurrentUrlIndex(i => i + 1);
-            setError(null);
-            return;
-          }
-          setError('M3U8 播放失败，请重试');
-        }}
-      />
+      {/* 视频区域：占满整个容器，无黑边 */}
+      <div className="absolute inset-0">
+        <HlsPlayer
+          key={`${currentChannel.tid}-${currentChannel.id}-m3u-${currentUrlIndex}`}
+          ref={hlsPlayerRef}
+          url={activeUrl}
+          onError={() => {
+            if (allUrls.length > 0 && currentUrlIndex < allUrls.length - 1) {
+              setCurrentUrlIndex(i => i + 1);
+              setError(null);
+              return;
+            }
+            setError('播放失败，请重试');
+          }}
+        />
+      </div>
 
-      {/* 控制栏：M3U 加载完成后显示，4秒无操作自动隐藏 */}
+      {/* 控制栏：3秒无操作自动隐藏 */}
       <div
-        className={`absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-20 transition-opacity duration-300 ${
-          showControls && m3uLoaded ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        className={`absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-20 transition-opacity duration-200 ${
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' }}
       >
