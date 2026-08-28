@@ -288,9 +288,9 @@ function parseM3u(content) {
   for (const line of lines) {
     const trimmed = line.trim()
     if (trimmed.startsWith('#EXTINF:')) {
-      const match = trimmed.match(/tvg-name="([^"]*)".*?tvg-logo="([^"]*)".*?group-title="([^"]*)"(?:,)(.*)/)
+      const match = trimmed.match(/tvg-name="([^"]*)".*?group-title="([^"]*)"[^,]*,(.*)/)
       if (match) {
-        const chName = match[4] || match[1]
+        const chName = match[3] || match[1]
         // 查找已有同名频道，复用并追加 URL
         const existing = channels.find(c => c.name === chName)
         if (existing) {
@@ -304,8 +304,8 @@ function parseM3u(content) {
           currentChannel = {
             id: String(channels.length + 1),
             name: chName,
-            logo: match[2],
-            group: match[3],
+            logo: '',
+            group: match[2],
             url: '',
             urls: undefined,
           }
