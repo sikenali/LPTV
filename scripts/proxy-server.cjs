@@ -188,12 +188,24 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
             } else {
               setCors(); const ab = await resp.arrayBuffer(); res.end(Buffer.from(ab)); done()
             }
-          }).catch(err => { clearTimeout(tid); done(); reject(err) })
+          }).catch(err => { clearTimeout(tid); done();
+            // 客户端断开或 abort 不视为错误（HLS.js 切换分段时正常行为）
+            if (err.name === 'AbortError' || err.message === 'terminated') {
+              resolve()
+            } else {
+              reject(err)
+            }
+          })
       })
     })
   } catch (err) {
-    console.error('[proxy/stream] Error:', err.message)
-    res.status(502).json({ error: 'Proxy stream error', url: streamUrl })
+    // 忽略已处理的 AbortError
+    if (err.message !== 'terminated' && err.name !== 'AbortError') {
+      console.error('[proxy/stream] Error:', err.message)
+    }
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Proxy stream error', url: streamUrl })
+    }
   }
 })
 
