@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { RiErrorWarningLine, RiPlayFill, RiPauseFill, RiFullscreenFill, RiFullscreenExitFill, RiVolumeUpFill, RiVolumeMuteFill, RiVolumeDownFill } from '@remixicon/react';
 import { matchM3uUrls } from '../../utils/m3uMatch';
+import { IptvChannel } from '../../data/iptvChannels';
 import HlsPlayer, { HlsPlayerRef } from './HlsPlayer';
 
 interface IptvWebPlayerProps {
