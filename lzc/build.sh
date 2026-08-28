@@ -23,8 +23,8 @@ unsupported_platforms:
   - ios
 locales:
   zh-CN:
-    name: LPTV
-    description: LPTV，支持 IPTV 直播频道播放
+    name: 懒猫微视
+    description: 懒猫微视，IPTV 直播频道聚合播放，内置多源聚合、自动测速与流媒体代理
   en:
     name: LPTV
     description: IPTV live channel player with M3U source parsing and stream proxy
