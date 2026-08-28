@@ -72,13 +72,16 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
     }
     const onCanPlay = () => { if (!cancelled) finishLoading() }
     const onPlaying = () => { if (!cancelled) finishLoading() }
+    const onCanPlayThrough = () => { if (!cancelled) finishLoading() }
     v.addEventListener('canplay', onCanPlay)
     v.addEventListener('playing', onPlaying)
+    v.addEventListener('canplaythrough', onCanPlayThrough)
     const t = window.setTimeout(clearOnBuffer, 5000)
     return () => {
       cancelled = true
       v.removeEventListener('canplay', onCanPlay)
       v.removeEventListener('playing', onPlaying)
+      v.removeEventListener('canplaythrough', onCanPlayThrough)
       clearTimeout(t)
     }
   }, [url, finishLoading])
