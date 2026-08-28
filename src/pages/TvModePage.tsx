@@ -121,7 +121,7 @@ const TvModePage: React.FC = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedChannel, currentChannels, navigate]);
+  }, [selectedChannel, currentChannels, navigate, setTvMode]);
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
