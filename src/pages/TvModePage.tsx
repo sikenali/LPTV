@@ -67,12 +67,20 @@ const ChannelCard: React.FC<{
 
 const TvModePage: React.FC = () => {
   const navigate = useNavigate();
-  const { setTvMode } = useApp();
+  const { setTvMode, settings } = useApp();
   const [activeGroup, setActiveGroup] = useState<GroupKey>('cctv');
   const [selectedChannel, setSelectedChannel] = useState<IptvChannel | null>(null);
   const [currentTime, setCurrentTime] = useState(formatTime());
   const [currentDate] = useState(formatDate());
   const allChannels = useMemo(() => [...cctvChannels, ...wsChannels], []);
+
+  // 进入 TV 模式时同步状态
+  useEffect(() => {
+    if (!settings.tvMode) setTvMode(true);
+    return () => {
+      // 退出时不自动关闭，由 Escape 键处理
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(formatTime()), 1000);

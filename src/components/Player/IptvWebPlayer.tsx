@@ -40,12 +40,17 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [m3uLoaded, setM3uLoaded] = useState(false);
   const [allUrls, setAllUrls] = useState<string[]>([]);
+  // 标记是否已经播放过（用于控制 splash 只显示一次）
+  const [hasPlayed, setHasPlayed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hlsPlayerRef = useRef<HlsPlayerRef>(null);
 
   useEffect(() => {
-    if (channel) { setCurrentChannel(channel); resetPlayer(); }
+    if (channel) {
+      setCurrentChannel(channel);
+      resetPlayer();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel]);
 
@@ -57,11 +62,13 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     setIsPaused(false);
     setIsMuted(true);
     setShowControls(false);
+    // 切换频道时保留 hasPlayed 状态，避免 splash 重新显示
   }, []);
 
   useEffect(() => {
     setError(null);
     setM3uLoaded(false);
+
     fetch('/api/m3u')
       .then(r => r.json())
       .then(data => {
@@ -133,6 +140,10 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     player.setVolume(v);
   }, []);
 
+  const handleVideoReady = useCallback(() => {
+    setHasPlayed(true);
+  }, []);
+
   if (error) {
     return (
       <div className="w-full h-full bg-black flex items-center justify-center">
@@ -152,15 +163,16 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
       onTouchStart={handleTouch}
       onMouseMove={handleTouch}
     >
-      {/* LPTV 加载动画：仅 M3U 加载期间 */}
-      {!m3uLoaded && <LptvSplash />}
+      {/* LPTV 加载动画：仅在 M3U 加载且未播放过时显示 */}
+      {!m3uLoaded && !hasPlayed && <LptvSplash />}
 
-      {/* 视频区域：占满整个容器，无黑边 */}
+      {/* 视频区域：绝对定位占满容器 */}
       <div className="absolute inset-0">
         <HlsPlayer
           key={`${currentChannel.tid}-${currentChannel.id}-m3u-${currentUrlIndex}`}
           ref={hlsPlayerRef}
           url={activeUrl}
+          onReady={handleVideoReady}
           onError={() => {
             if (allUrls.length > 0 && currentUrlIndex < allUrls.length - 1) {
               setCurrentUrlIndex(i => i + 1);
@@ -172,7 +184,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
         />
       </div>
 
-      {/* 控制栏：3秒无操作自动隐藏 */}
+      {/* 控制栏：点击显示，3秒后自动隐藏 */}
       <div
         className={`absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-20 transition-opacity duration-200 ${
           showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'

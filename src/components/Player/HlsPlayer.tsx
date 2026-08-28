@@ -21,7 +21,7 @@ function proxyUrl(url: string) {
   return `/api/proxy/stream?url=${encodeURIComponent(url)}`
 }
 
-const PLAY_TIMEOUT_MS = 15000
+const PLAY_TIMEOUT_MS = 12000
 
 const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPlay, onReady }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -30,31 +30,41 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
   const isPlayingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const mountedRef = useRef(true)
+  const safetyTimerRef = useRef<number | null>(null)
 
-  const destroyHls = useCallback(() => {
-    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
+  const clearSafetyTimer = useCallback(() => {
+    if (safetyTimerRef.current) {
+      clearTimeout(safetyTimerRef.current)
+      safetyTimerRef.current = null
+    }
   }, [])
 
-  // 唯一的状态标志：正在加载
-  const loadingRef = useRef(true)
+  const destroyHls = useCallback(() => {
+    clearSafetyTimer()
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
+  }, [clearSafetyTimer])
 
-  // 当视频真正开始播放时清除 loading
   const handlePlaying = useCallback(() => {
     if (!mountedRef.current) return
     isPlayingRef.current = true
-    loadingRef.current = false
+    clearSafetyTimer()
     onPlay?.()
     onReady?.()
-  }, [onPlay, onReady])
+  }, [clearSafetyTimer, onPlay, onReady])
 
+  // 监听视频事件
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
     v.addEventListener('playing', handlePlaying)
-    v.addEventListener('pause', () => { isPlayingRef.current = false })
+    v.addEventListener('pause', () => {
+      isPlayingRef.current = false
+    })
     return () => {
       v.removeEventListener('playing', handlePlaying)
-      v.removeEventListener('pause', () => { isPlayingRef.current = false })
+      v.removeEventListener('pause', () => {
+        isPlayingRef.current = false
+      })
     }
   }, [url, handlePlaying])
 
@@ -63,7 +73,7 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
     if (!v) return
     v.play().then(() => {
       isPlayingRef.current = true
-      // 等待 playing 事件清除 loadingRef
+      // 等待 playing 事件触发
     }).catch(() => {
       // autoplay 被阻止，静音重试
       v.muted = true
@@ -79,19 +89,18 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
     destroyHls()
     if (!videoRef.current) return
 
-    loadingRef.current = true
     setError(null)
     isPlayingRef.current = false
 
     if (!Hls.isSupported()) {
       if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
         videoRef.current.src = proxyUrl(src)
-        const t = window.setTimeout(() => {
+        safetyTimerRef.current = window.setTimeout(() => {
           if (!mountedRef.current) return
           setError('浏览器原生 HLS 不支持或播放超时')
           onError?.(new Error('native_hls_timeout'))
         }, PLAY_TIMEOUT_MS)
-        return () => clearTimeout(t)
+        return
       }
       setError('浏览器不支持 HLS 播放')
       return
@@ -100,10 +109,10 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
     const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60, lowLatencyMode: true, liveDurationInfinity: true })
     hlsRef.current = hls
 
-    // 兜底：15秒后仍未播放则标记为 ready（避免永远卡黑屏）
-    const safetyTimer = window.setTimeout(() => {
-      if (loadingRef.current && mountedRef.current) {
-        loadingRef.current = false
+    // 兜底计时器：12秒后仍未播放则标记为 ready
+    safetyTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current && !isPlayingRef.current) {
+        isPlayingRef.current = true
       }
     }, PLAY_TIMEOUT_MS)
 
@@ -131,24 +140,17 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
     })
 
     hls.attachMedia(videoRef.current)
-    return () => {
-      clearTimeout(safetyTimer)
-      destroyHls()
-    }
   }, [destroyHls, onError, tryPlay])
 
   useEffect(() => {
     mountedRef.current = true
     if (!url) return
-    loadingRef.current = true
-    setError(null)
     initHls(url)
     return () => { mountedRef.current = false; destroyHls() }
   }, [url, initHls, destroyHls])
 
   const handleRetry = useCallback(() => {
     setError(null)
-    loadingRef.current = true
     initHls(url)
   }, [url, initHls])
 
