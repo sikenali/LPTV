@@ -21,12 +21,14 @@ function proxyUrl(url: string) {
   return `/api/proxy/stream?url=${encodeURIComponent(url)}`
 }
 
-const LOADING_TIMEOUT = 30000
+// 最长等待时间：超过此时间认为加载失败，直接显示错误
+const MAX_LOAD_TIME_MS = 20000
 
 const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPlay, onReady }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // loadingRef: false = 视频已就绪，可以显示内容
   const loadingRef = useRef(true)
   const errorRef = useRef<string | null>(null)
   const retryCountRef = useRef(0)
@@ -35,73 +37,76 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
   const errorTypeRef = useRef<string | null>(null)
   const isPlayingRef = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const readyFiredRef = useRef(false)
   const mountedRef = useRef(true)
+  // 记录首次成功的时间，用于兜底超时
+  const startTimeRef = useRef(0)
 
-  const clearAllTimers = useCallback(() => {
+  const clearTimer = useCallback(() => {
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
   }, [])
 
   const destroyHls = useCallback(() => {
-    clearAllTimers()
+    clearTimer()
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
-  }, [clearAllTimers])
+  }, [clearTimer])
 
-  const finishLoading = useCallback(() => {
+  // 标记加载完成（安全调用：多次调用无副作用）
+  const markReady = useCallback(() => {
     if (!loadingRef.current) return
     loadingRef.current = false
     onPlay?.()
   }, [onPlay])
 
-  // 视频真正可以播放时触发 onReady（只触发一次）
-  const handlePlaying = useCallback(() => {
+  // 兜底超时：MAX_LOAD_TIME_MS 后无论是否播放都标记为 ready
+  const startSafetyTimer = useCallback(() => {
+    clearTimer()
+    timeoutRef.current = window.setTimeout(() => {
+      if (loadingRef.current && mountedRef.current) {
+        // 仍未播放，尝试强制清除遮罩（可能是 live 流，无法触发 canplay）
+        markReady()
+      }
+    }, MAX_LOAD_TIME_MS)
+  }, [clearTimer, markReady])
+
+  // 监听真正播放开始（最可靠）
+  const onPlayingCb = useCallback(() => {
     if (!mountedRef.current) return
     isPlayingRef.current = true
-    loadingRef.current = false
-    readyFiredRef.current = true
-    onPlay?.()
+    clearTimer()
+    markReady()
     onReady?.()
-  }, [onPlay, onReady])
+  }, [clearTimer, markReady, onReady])
 
-  // 缓冲足够后兜底清除遮罩
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
-    let cancelled = false
-    const clearOnBuffer = () => {
-      if (cancelled || !mountedRef.current || !loadingRef.current) return
-      const buffered = v.buffered
-      if (buffered.length > 0 && buffered.end(0) > 1) finishLoading()
-    }
-    v.addEventListener('playing', handlePlaying)
+    v.addEventListener('playing', onPlayingCb)
     v.addEventListener('pause', () => { isPlayingRef.current = false })
-    const t = window.setTimeout(clearOnBuffer, 8000)
     return () => {
-      cancelled = true
-      v.removeEventListener('playing', handlePlaying)
+      v.removeEventListener('playing', onPlayingCb)
       v.removeEventListener('pause', () => { isPlayingRef.current = false })
-      clearTimeout(t)
     }
-  }, [url, finishLoading, handlePlaying])
+  }, [url, onPlayingCb])
 
   const tryPlay = useCallback(() => {
     const v = videoRef.current
     if (!v) return
     v.play().then(() => {
       isPlayingRef.current = true
-      loadingRef.current = false
-      readyFiredRef.current = true
-      onPlay?.()
+      clearTimer()
+      // 等待 playing 事件触发 markReady
     }).catch(() => {
+      // autoplay 被阻止：静音后重试
       v.muted = true
       v.play().then(() => {
         isPlayingRef.current = true
-        loadingRef.current = false
-        readyFiredRef.current = true
-        onPlay?.()
-      }).catch(() => { isPlayingRef.current = false })
+        clearTimer()
+      }).catch(() => {
+        isPlayingRef.current = false
+        // 完全无法播放，等待兜底超时
+      })
     })
-  }, [onPlay])
+  }, [clearTimer])
 
   const initHls = useCallback((src: string) => {
     destroyHls()
@@ -110,8 +115,8 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
     errorTypeRef.current = null
     errorRef.current = null
     retryCountRef.current = 0
-    readyFiredRef.current = false
     loadingRef.current = true
+    startTimeRef.current = Date.now()
     setError(null)
 
     if (!Hls.isSupported()) {
@@ -119,40 +124,50 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
         videoRef.current.src = proxyUrl(src)
         timeoutRef.current = window.setTimeout(() => {
           if (!mountedRef.current) return
-          errorRef.current = 'native_hls_timeout'
+          errorRef.current = 'native_timeout'
           setError('浏览器原生 HLS 不支持或播放超时')
           onError?.(new Error('native_hls_timeout'))
-        }, LOADING_TIMEOUT)
+        }, MAX_LOAD_TIME_MS)
         return
       }
       setError('浏览器不支持 HLS 播放')
       return
     }
 
-    const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 })
+    const hls = new Hls({
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+      // 启用低延迟模式
+      lowLatencyMode: true,
+      liveDurationInfinity: true,
+    })
     hlsRef.current = hls
 
+    // 兜底超时
     timeoutRef.current = window.setTimeout(() => {
       if (loadingRef.current && !errorRef.current && mountedRef.current) {
+        errorRef.current = 'timeout'
         setError('加载超时，请检查网络或频道源')
         onError?.(new Error('loading_timeout'))
       }
-    }, LOADING_TIMEOUT)
+    }, MAX_LOAD_TIME_MS)
 
     hls.on(Hls.Events.MEDIA_ATTACHED, () => { hls.loadSource(proxyUrl(src)) })
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      clearAllTimers()
+      clearTimer()
       retryCountRef.current = 0
       errorTypeRef.current = null
       setError(null)
       errorRef.current = null
       tryPlay()
+      // 启动兜底安全计时器
+      startSafetyTimer()
     })
 
     hls.on(Hls.Events.ERROR, (_event, data) => {
       if (!data.fatal) {
-        clearAllTimers()
+        clearTimer()
         if (errorTypeRef.current === 'media') {
           retryCountRef.current++
           if (retryCountRef.current > MAX_RETRIES) onError?.(new Error('media_error_max_retries'))
@@ -161,47 +176,36 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
       }
       switch (data.details) {
         case Hls.ErrorDetails.MANIFEST_PARSING_ERROR:
-          clearAllTimers(); setError('无法加载频道列表，该源可能已失效'); onError?.(new Error('manifest_error')); hls.destroy(); break
+          clearTimer(); setError('无法加载频道列表，该源可能已失效'); onError?.(new Error('manifest_error')); hls.destroy(); break
         case Hls.ErrorDetails.MANIFEST_LOAD_ERROR:
-          clearAllTimers()
+          clearTimer()
           if (retryCountRef.current < MAX_RETRIES) { retryCountRef.current++; errorTypeRef.current = 'manifest' }
-          else { errorRef.current = 'manifest_load_error'; setError('网络连接失败，无法加载频道'); onError?.(new Error('manifest_load_error_max_retries')); hls.destroy() }
+          else { errorRef.current = 'manifest_error'; setError('网络连接失败，无法加载频道'); onError?.(new Error('manifest_load_error_max_retries')); hls.destroy() }
           break
         case Hls.ErrorDetails.LEVEL_LOAD_ERROR:
         case Hls.ErrorDetails.LEVEL_PARSING_ERROR:
-          clearAllTimers()
+          clearTimer()
           if (retryCountRef.current <= MAX_RETRIES) { errorTypeRef.current = 'level'; retryCountRef.current++; hls.recoverMediaError() }
           else { setError('播放失败，该频道源可能不可用'); onError?.(new Error('max_retries_exceeded')); hls.destroy() }
           break
         case Hls.ErrorDetails.BUFFER_STALLED_ERROR:
           if (retryCountRef.current <= MAX_RETRIES) { retryCountRef.current++; hls.recoverMediaError() }
-          else { clearAllTimers(); setError('播放失败'); onError?.(new Error('buffer_error_max_retries')); hls.destroy() }
+          else { clearTimer(); setError('播放失败'); onError?.(new Error('buffer_error_max_retries')); hls.destroy() }
           break
         case Hls.ErrorDetails.FRAG_LOAD_ERROR:
         case Hls.ErrorDetails.FRAG_LOAD_TIMEOUT:
           if (retryCountRef.current <= MAX_RETRIES) { retryCountRef.current++; hls.recoverMediaError() }
-          else { clearAllTimers(); setError('片段加载失败，频道源可能不稳定'); onError?.(new Error('frag_load_error')); hls.destroy() }
+          else { clearTimer(); setError('片段加载失败，频道源可能不稳定'); onError?.(new Error('frag_load_error')); hls.destroy() }
           break
         case Hls.ErrorDetails.FRAG_PARSING_ERROR:
-          clearAllTimers(); hls.stopLoad(); hls.recoverMediaError(); break
+          clearTimer(); hls.stopLoad(); hls.recoverMediaError(); break
         default:
-          clearAllTimers(); setError('播放失败'); onError?.(new Error('unknown_fatal_error')); hls.destroy(); break
+          clearTimer(); setError('播放失败'); onError?.(new Error('unknown_fatal_error')); hls.destroy(); break
       }
-    })
-
-    hls.on(Hls.Events.FRAG_BUFFERED, () => {
-      if (loadingRef.current) { clearAllTimers(); finishLoading() }
     })
 
     hls.attachMedia(videoRef.current)
-    // 初始安全检查
-    requestAnimationFrame(() => {
-      const v = videoRef.current
-      if (v && mountedRef.current && v.buffered.length > 0 && v.buffered.end(0) > 1 && loadingRef.current) {
-        finishLoading()
-      }
-    })
-  }, [destroyHls, onError, clearAllTimers, finishLoading, tryPlay])
+  }, [destroyHls, onError, clearTimer, tryPlay, startSafetyTimer])
 
   useEffect(() => {
     mountedRef.current = true
@@ -248,7 +252,6 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
         muted
         autoPlay
         style={{ maxHeight: '100%', maxWidth: '100%' }}
-        onLoadedData={() => { clearAllTimers(); isPlayingRef.current = true }}
         onClick={() => {
           const v = videoRef.current
           if (!v) return

@@ -41,13 +41,13 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [m3uLoaded, setM3uLoaded] = useState(false);
   const [allUrls, setAllUrls] = useState<string[]>([]);
-  const [videoReady, setVideoReady] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hlsPlayerRef = useRef<HlsPlayerRef>(null);
+  // 记录控制栏是否已经显示过（用于首次自动隐藏）
+  const controlsShownRef = useRef(false);
 
   useEffect(() => {
-    // channel prop 变化时切换频道
     if (channel) {
       setCurrentChannel(channel);
       resetPlayer();
@@ -62,7 +62,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     setAllUrls([]);
     setIsPaused(false);
     setIsMuted(true);
-    setVideoReady(false);
+    controlsShownRef.current = false;
   }, []);
 
   // 加载 M3U
@@ -89,11 +89,16 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
 
   const activeUrl = m3uLoaded ? (allUrls[currentUrlIndex] ?? '') : '';
 
-  const handleTouch = useCallback(() => {
-    setShowControls(true);
+  const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
     hideTimerRef.current = setTimeout(() => setShowControls(false), 4000);
   }, []);
+
+  const handleTouch = useCallback(() => {
+    setShowControls(true);
+    controlsShownRef.current = true;
+    scheduleHide();
+  }, [scheduleHide]);
 
   const handleRetry = useCallback(() => {
     if (allUrls.length > 0 && currentUrlIndex < allUrls.length - 1) {
@@ -159,12 +164,11 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
       {/* LPTV 加载动画：仅 M3U 加载期间显示 */}
       {!m3uLoaded && <LptvSplash />}
 
-      {/* 视频区域：M3U 加载完成后直接显示视频（无黑屏） */}
+      {/* 视频区域 */}
       <HlsPlayer
         key={`${currentChannel.tid}-${currentChannel.id}-m3u-${currentUrlIndex}`}
         ref={hlsPlayerRef}
         url={activeUrl}
-        onReady={() => { setVideoReady(true); setShowControls(true); }}
         onError={err => {
           console.log('[IptvWebPlayer] HLS error:', err?.message);
           if (allUrls.length > 0 && currentUrlIndex < allUrls.length - 1) {
@@ -176,10 +180,10 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
         }}
       />
 
-      {/* 控制栏：视频就绪后显示，4秒无操作自动隐藏 */}
+      {/* 控制栏：M3U 加载完成后显示，4秒无操作自动隐藏 */}
       <div
         className={`absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-20 transition-opacity duration-300 ${
-          showControls && videoReady ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          showControls && m3uLoaded ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
         style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' }}
       >

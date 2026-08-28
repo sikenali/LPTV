@@ -51,12 +51,10 @@ const SettingsPage: React.FC = () => {
   const { settings, updateSettings, setTvMode } = useApp();
   const [activeTab, setActiveTab] = useState<TabType>('theme');
   const [selectedTheme, setSelectedTheme] = useState(settings.theme);
-  const [tvMode, setTvModeLocal] = useState(settings.tvMode);
   const [tabRef, setTabRef] = useState<HTMLDivElement | null>(null);
   const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => { setSelectedTheme(settings.theme); }, [settings.theme]);
-  useEffect(() => { setTvModeLocal(settings.tvMode); }, [settings.tvMode]);
 
   useEffect(() => {
     const el = tabRef;
@@ -209,18 +207,17 @@ const SettingsPage: React.FC = () => {
                       whileTap={{ scale: 0.9 }}
                       whileHover={{ scale: 1.05 }}
                       onClick={() => {
-                        const next = !tvMode;
-                        setTvModeLocal(next);
+                        const next = !settings.tvMode;
                         setTvMode(next);
                         updateSettings({ tvMode: next });
                         if (next) navigate('/tv-mode');
                       }}
                       className="relative w-[52px] h-7 rounded-full shrink-0"
-                      style={{ background: tvMode ? '#c43d3d' : '#d5cdc4' }}
+                      style={{ background: settings.tvMode ? '#c43d3d' : '#d5cdc4' }}
                     >
                       <motion.span
                         className="absolute left-0.5 top-0.5 w-6 h-6 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                        animate={{ x: tvMode ? 24 : 0 }}
+                        animate={{ x: settings.tvMode ? 24 : 0 }}
                         transition={{ type: 'spring', stiffness: 500, damping: 20 }}
                       />
                     </motion.button>
