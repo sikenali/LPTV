@@ -62,7 +62,8 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     setIsPaused(false);
     setIsMuted(true);
     setShowControls(false);
-    // 切换频道时保留 hasPlayed 状态，避免 splash 重新显示
+    // 切换频道时重置 hasPlayed，确保 splash 重新显示
+    setHasPlayed(false);
   }, []);
 
   useEffect(() => {
