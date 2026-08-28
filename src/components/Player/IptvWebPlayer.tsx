@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { RiErrorWarningLine, RiPlayFill, RiPauseFill, RiFullscreenFill, RiFullscreenExitFill, RiVolumeUpFill, RiVolumeMuteFill, RiVolumeDownFill } from '@remixicon/react';
-import { getChannelLogoUrl } from '../../utils/logoMap';
 import { IptvChannel } from '../../data/iptvChannels';
 import { matchM3uUrls } from '../../utils/m3uMatch';
 import HlsPlayer, { HlsPlayerRef } from './HlsPlayer';
@@ -199,15 +198,6 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
             }}
             onPlay={handleHlsPlay}
           />
-
-          {getChannelLogoUrl(channel) && (
-            <img
-              src={getChannelLogoUrl(channel)}
-              alt={channel.name}
-              className="absolute top-3 left-3 z-10 h-9 w-auto object-contain pointer-events-none select-none drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]"
-              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-            />
-          )}
         </div>
 
         <div className={`absolute inset-x-0 bottom-0 flex items-center justify-between px-4 h-14 z-20 transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), transparent)' }}>
