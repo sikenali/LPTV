@@ -9,7 +9,7 @@ application:
     - location: /api/
       backend: http://127.0.0.1:8080/
       disable_trim_location: true
-      backend_launch_command: /lzcapp/pkg/content/scripts/start-backend.sh
+      backend_launch_command: /lzcapp/pkg/content/scripts/start.sh
   environment:
     BACKEND_PORT: "8080"
     FRONTEND_PORT: "5173"

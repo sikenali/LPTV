@@ -57,8 +57,13 @@ cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/pr
 cp "$SCRIPT_DIR/backend-package.json" "$SCRIPT_DIR/_lpk_content/package.json"
 cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null || true
 
-cat > "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh" << 'RUNNER'
+cat > "$SCRIPT_DIR/_lpk_content/scripts/start.sh" << 'STARTSCRIPT'
 #!/bin/sh
+set -e
+
+mkdir -p /app/data /app/logs
+chmod -R 777 /app/data || true
+
 BUNDLED_DEPS="/lzcapp/pkg/content/node_modules"
 FALLBACK_NM="/tmp/lptv-node-modules"
 
@@ -71,41 +76,8 @@ else
   fi
   export NODE_PATH="$FALLBACK_NM/node_modules"
 fi
-exec node /lzcapp/pkg/content/scripts/proxy-server.cjs
-RUNNER
-chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh"
 
-# Pre-install backend deps into lpk
-(
-  cd "$SCRIPT_DIR/_lpk_content"
-  if [ -f package.json ]; then
-    npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 || exit 1
-  fi
-)
-
-# Create SPA page redirects
-(
-  cd "$SCRIPT_DIR/_lpk_content/frontend"
-  for f in *.html; do
-    case "$f" in
-      index.html|404.html) continue ;;
-    esac
-    name="${f%.html}"
-    if [ -n "$name" ]; then
-      mkdir -p "$name"
-      cp "$f" "$name/index.html"
-    fi
-  done
-)
-
-cat > "$SCRIPT_DIR/_lpk_content/scripts/start.sh" << 'STARTSCRIPT'
-#!/bin/sh
-set -e
-
-mkdir -p /app/data /app/logs
-chmod -R 777 /app/data || true
-
-/lzcapp/pkg/content/scripts/start-backend.sh >>/app/logs/backend.log 2>&1 &
+node /lzcapp/pkg/content/scripts/proxy-server.cjs >>/app/logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
 for i in $(seq 1 30); do
@@ -131,4 +103,25 @@ cat /app/logs/backend.log
 exit 0
 STARTSCRIPT
 
-chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start.sh"
+# Pre-install backend deps into lpk
+(
+  cd "$SCRIPT_DIR/_lpk_content"
+  if [ -f package.json ]; then
+    npm install --omit=dev --no-audit --no-fund --loglevel=error 2>&1 || exit 1
+  fi
+)
+
+# Create SPA page redirects
+(
+  cd "$SCRIPT_DIR/_lpk_content/frontend"
+  for f in *.html; do
+    case "$f" in
+      index.html|404.html) continue ;;
+    esac
+    name="${f%.html}"
+    if [ -n "$name" ]; then
+      mkdir -p "$name"
+      cp "$f" "$name/index.html"
+    fi
+  done
+)
