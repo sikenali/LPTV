@@ -25,7 +25,9 @@ if [ -z "$CLI_BIN" ] || [ ! -f "$CLI_BIN" ]; then
 fi
 (
   cd "$SCRIPT_DIR"
-  node "$CLI_BIN" project release -o output.lpk
+  BUILD_CFG="${LPK_BUILD_CONFIG:-lzc-build.yml}"
+  echo "Using build config: $BUILD_CFG"
+  node "$CLI_BIN" project release -f "$BUILD_CFG" -o output.lpk
 )
 
 if [ -f "$SCRIPT_DIR/output.lpk" ]; then
