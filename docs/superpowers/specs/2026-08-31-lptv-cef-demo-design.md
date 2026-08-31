@@ -8,7 +8,18 @@
 
 ## 1. 概述
 
-在 Linux x86_64 机器上，用自建 CEF 二进制 + Node.js TypeScript IPC 桥，实现电视直播频道的 iframe 内嵌播放。验证 OSR 帧输出、Blob/MSE 播放检测、双源互备切换、DOM 广告清理等核心能力后，再迁移进 LPK service。
+在 Linux x86_64 机器上，用自建 CEF 二进制 + Node.js TypeScript IPC 桥，实现电视直播频道的 iframe 内嵌播放。验证 OSR 帧输出、Blob/MSE 播放检测、多源优先级切换、DOM 广告清理等核心能力后，再迁移进 LPK service。
+
+**播放源优先级链（每个频道最多 4 路）**：
+
+| 优先级 | 来源 | 域名 | 备注 |
+|--------|------|------|------|
+| 1 | 央视官网 | `tv.cctv.com/live/xxx` | 官方，iframe 嵌套友好 |
+| 2 | 央视频 | `yangshipin.cn/tv/home?pid=xxx` | 官方，部分页面外跳限制 |
+| 3 | 789iptv | `789iptv.com/?act=play&token=...&tid=ys&id=N` | 第三方聚合，已有真实 token |
+| 4 | 345iptv | `345iptv.com/?act=play&token=...&tid=ys&id=N` | 第三方聚合，兜底备用 |
+
+央视 1~17 频道优先用央视官网 + 央视频；卫视频道优先用央视频 + 第三方聚合。
 
 **当前不做的事**：
 - 不做 React/前端 UI（复用已有 lptv/ 目录的 TV 导航界面即可）
@@ -28,7 +39,7 @@
 │  │  (TypeScript)        │   /tmp/lptv.sock               │  (OSR)
 │  │                      │                                │
 │  │  - 频道管理          │   WebSocket TCP (127.0.0.1:8765)│
-│  │  - 双源探测          │─────────────────────────► 消费者 │
+│  │  - 四源优先级探测    │─────────────────────────► 消费者 │
 │  │  - DOM 清理调度       │     ws://127.0.0.1:8765        │
 │  │  - 帧缓冲 & 推送      │                                │
 │  └──────────────────────┘                                │
@@ -122,8 +133,8 @@ lptv-cef-demo/
 │   │   ├── uds-server.ts    # Unix Socket 控制信令服务器
 │   │   └── commands.ts      # 命令/事件类型定义
 │   ├── channels/
-│   │   ├── data.ts          # 频道列表（硬编码，双源备用）
-│   │   └── probe.ts         # 双源可用性探测
+│   │   ├── data.ts          # 频道列表（硬编码，四源备用）
+│   │   └── probe.ts         # 四源可用性探测
 │   ├── player/
 │   │   ├── manager.ts       # 播放管理器：状态机、线路切换
 │   │   └── monitor.ts       # 监控脚本生成与注入逻辑
@@ -181,25 +192,32 @@ lptv-cef-demo/
 
 ---
 
-## 5. 频道数据与双源互备
+## 5. 频道数据与四源优先级链
 
 ### 5.1 数据结构
 
-每个频道绑定两个源，**token 和 id 完全相同，仅域名不同**：
+每个频道绑定最多 4 个 URL，按优先级顺序排列。央视和央视频用官方参数（pid/slug），第三方用 token+id 参数：
 
 ```typescript
 interface IChannel {
   id: number;
   name: string;
   category: '央视频道' | '卫视频道';
-  primary: { tid: string; id: number; token: string };  // 789iptv
-  backup:  { tid: string; id: number; token: string };  // 345iptv（与 primary 的 token/id 完全相同，仅域名不同）
+  /** 优先级链：tv.cctv.com → yangshipin.cn → 789iptv → 345iptv */
+  sources: ISource[];
+}
+
+interface ISource {
+  priority: 1 | 2 | 3 | 4;
+  domain: 'cctv' | 'ysp' | '789' | '345';
+  url: string;   // 完整播放 URL
+  params?: { tid?: string; id?: number; token?: string; pid?: string };
 }
 ```
 
-### 5.2 可用性探测
+### 5.2 四源可用性探测
 
-启动时并行探测两个源：
+启动时并行 HEAD 请求各源，记录可用状态：
 
 ```typescript
 async function probeSource(url: string): Promise<boolean> {
@@ -210,19 +228,46 @@ async function probeSource(url: string): Promise<boolean> {
 }
 ```
 
-- 两源都可用 → 默认用 primary
-- primary 不可用 → 自动切 backup
-- 播放中 primary 失败 → 切 backup 并重试
+**探测结果决定优先级重排**：
+- 央视官网 + 央视频都可用 → 顺序不变（cctv → ysp → 789 → 345）
+- 央视官网不可用但央视频可用 → 调整为（ysp → cctv → 789 → 345）
+- 仅第三方可用 → 调整为（789 → 345 → ysp → cctv）
+- 全部不可用 → 频道标记为不可播放
 
-### 5.3 频道列表来源
+### 5.3 播放线路切换策略
 
-频道数据从 `src/data/iptvChannels.ts` 读取（现有项目文件），运行时转换为内部格式。不需要每次启动重新抓取。
+播放中失败时的切换逻辑：
+
+```
+当前源失败 → 尝试 next_source
+  ├── 下一源可用 → 导航到新 URL
+  ├── 下一源不可用 → skip，继续查下一源
+  └── 所有源均不可用 → 推 error 帧，停止播放
+```
+
+切换前执行 `dom_cleanup` 清理残留 iframe，避免 DOM 堆积。
+
+### 5.4 不同源的特殊处理
+
+| 来源 | 特殊注意事项 |
+|------|-------------|
+| tv.cctv.com | iframe 嵌套友好，CSP 宽松，优先使用 |
+| yangshipin.cn | 部分页面有"外跳客户端"提示，需在注入脚本中拦截弹窗 |
+| 789iptv.com | 有广告 iframe，需定期清理；token 已抓取并固化 |
+| 345iptv.com | 与 789iptv 结构相似，token/id 完全相同，仅域名不同 |
+
+### 5.5 频道列表来源
+
+直接复用 `src/data/iptvChannels.ts`，运行时转换为内部 `IChannel` 格式：
+- `source: 'cctv'` 的频道 → priority 1 = tv.cctv.com URL，priority 2 = backupUrl (yangshipin)
+- `source: 'ysp'` 的频道 → priority 1 = yangshipin URL，priority 2 = tv.cctv.com（如有对应 slug）
+- 所有频道补充 priority 3/4 = 789iptv / 345iptv（基于 tid=ys/ws 和已有 token）
 
 ---
 
 ## 6. 监控脚本注入逻辑
 
-导航完成后，向目标 frame 注入以下 JS：
+导航完成后，向目标 frame 注入以下 JS（根据域名动态调整拦截规则）：
 
 ```javascript
 (function() {
@@ -244,6 +289,27 @@ async function probeSource(url: string): Promise<boolean> {
     const ifs = document.querySelectorAll('iframe').length;
     if (ifs === 0) sendToNode({evt:'ads_cleared'});
   }, 2000);
+
+  // 4. 央视频专属：拦截"下载客户端"外跳弹窗
+  if (location.hostname.includes('yangshipin')) {
+    // 拦截 window.open 和外跳链接
+    const origOpen = window.open.bind(window);
+    window.open = function(url) {
+      if (url && String(url).includes('android') || String(url).includes('ios')) {
+        sendToNode({evt:'ysp_app_redirect_blocked', url});
+        return null;
+      }
+      return origOpen(url);
+    };
+    // 拦截立即外跳的 a 标签点击
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('a');
+      if (a && a.href && /download|client|app/.test(a.href.toLowerCase())) {
+        e.preventDefault();
+        sendToNode({evt:'app_link_blocked', href: a.href});
+      }
+    }, true);
+  }
 })();
 ```
 
@@ -271,9 +337,10 @@ iframe, .ad-container, [class*="ad"], [id*="ad"],
 | 错误场景 | 处理策略 |
 |----------|----------|
 | CEF 进程崩溃 | Node 检测心跳超时（10s），自动重启 CEF |
-| 播放超时（5s 无 playing 事件）| 触发 `switch_line`，最多 3 条线路 |
+| 播放超时（5s 无 playing 事件）| 触发 `switch_line`，按优先级尝试下一条可用线路（最多 4 条）|
 | 所有线路均失败 | WebSocket 推 `error` 帧，停止帧推送 |
 | DOM 清理后仍无法播放 | 重新导航（清空 cache），重试一次 |
+| 央视频外跳弹窗出现 | JS 拦截并重试当前源，不切线路 |
 
 ---
 
@@ -293,8 +360,10 @@ Node 业务逻辑层 **零改动**。
 ## 10. 验收标准
 
 - [ ] CEF 以 OSR 模式启动，`OnPaint` 回调正常触发
-- [ ] 点击频道列表 → CEF 加载 789iptv 播放页 → 播放成功 → WebSocket 推送首帧
-- [ ] 主源失败 → 自动切换到备用源（345iptv）→ 播放恢复
+- [ ] 点击频道列表 → CEF 加载首选源播放页 → 播放成功 → WebSocket 推送首帧
+- [ ] 央视官网可用时优先加载，央视频备用链路正常工作
+- [ ] 主源失败 → 按优先级自动切换到下一可用源（789iptv → 345iptv）→ 播放恢复
+- [ ] 央视频外跳弹窗被拦截，不影响播放
 - [ ] 播放页广告 iframe 被清理（数量归零）
 - [ ] 频道切换流畅，无内存泄漏
 - [ ] CEF 崩溃后 Node 自动重启并恢复播放状态
