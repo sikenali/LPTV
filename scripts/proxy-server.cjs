@@ -73,34 +73,6 @@ app.get('/api/channels', (req, res) => {
   }
 })
 
-// ── API: 央视官网直播页可播性探测 ─────────────────────────────────────────
-// 仅允许 tv.cctv.com, 防止任意 URL SSRF。判断依据: HTTP 200 + 页面含播放器标记。
-app.get('/api/check', async (req, res) => {
-  const url = req.query.url
-  try {
-    const u = new URL(String(url || ''))
-    if (u.hostname !== 'tv.cctv.com') {
-      return res.status(403).json({ ok: false, reason: 'host_not_allowed' })
-    }
-    const resp = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36',
-        'Referer': 'https://tv.cctv.com/',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(10000),
-    })
-    if (!resp.ok) {
-      return res.json({ ok: false, status: resp.status, reason: 'http_' + resp.status })
-    }
-    const html = await resp.text()
-    const hasPlayer = /liveplayer|#player|<video|videoReady|player_/.test(html)
-    res.json({ ok: hasPlayer, status: resp.status, host: u.host, hasPlayer })
-  } catch (e) {
-    res.json({ ok: false, reason: 'err', message: e.message })
-  }
-})
-
 // ── API: 健康检查 ──────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({

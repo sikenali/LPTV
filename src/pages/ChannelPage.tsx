@@ -224,8 +224,8 @@ export default function ChannelPage() {
               <RiTvFill className="w-8 h-8" style={{ color: '#c43d3d' }} />
             </div>
             <div className="text-white/80 text-base font-medium mb-2">点击左侧频道开始观看</div>
-            <div className="text-white/40 text-sm mb-5">播放 = 整页导航到央视官网 / 央视频 直播页</div>
-            <div className="text-white/30 text-xs">央视官网播放页可返回本应用，央视频需通过 App 或浏览器返回</div>
+            <div className="text-white/40 text-sm mb-5">点击后整页跳转至央视官网 / 央视频 直播页</div>
+            <div className="text-white/30 text-xs">在懒猫 App 内点击后会自动开启全屏沉浸模式</div>
           </div>
         </div>
       </div>

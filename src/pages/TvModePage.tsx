@@ -132,14 +132,14 @@ const TvModePage: React.FC = () => {
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
       <Toast />
       <div className="flex-1 flex flex-col min-h-0">
-        {/* 顶部提示区: 表明这是频道启动器, 播放将整页导航到官网 */}
+        {/* 顶部提示区: 表明这是频道启动器, 点击频道即整页跳转直播源 */}
         <div className="flex-1 relative min-h-[300px] flex items-center justify-center bg-gradient-to-br from-gray-900 to-black">
           <div className="text-center">
             <div className="w-20 h-20 rounded-full bg-red-600/15 flex items-center justify-center mx-auto mb-4">
               <RiTvLine className="w-10 h-10 text-red-500" />
             </div>
             <p className="text-white/80 text-lg font-medium mb-1">选择频道开始观看</p>
-            <p className="text-white/40 text-sm">播放 = 整页导航到 央视官网 / 央视频 直播页</p>
+            <p className="text-white/40 text-sm">点击频道后整页跳转至 央视官网 / 央视频 直播页</p>
           </div>
         </div>
 

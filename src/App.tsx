@@ -8,7 +8,6 @@ const LazyChannelPage = React.lazy(() => import('./pages/ChannelPage'));
 const LazyFavoritePage = React.lazy(() => import('./pages/FavoritePage'));
 const LazySettingsPage = React.lazy(() => import('./pages/SettingsPage'));
 const LazyTvModePage = React.lazy(() => import('./pages/TvModePage'));
-const LazyPlayPage = React.lazy(() => import('./pages/PlayPage'));
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center h-full" style={{ background: '#fbf7f0' }}>
@@ -43,45 +42,37 @@ const ThemedApp: React.FC = () => {
       data-theme={isBlack ? 'black' : 'glass'}
     >
       <Routes>
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             <Layout>
               <LazyChannelPage />
             </Layout>
-          } 
+          }
         />
-        <Route 
-          path="/favorites" 
+        <Route
+          path="/favorites"
           element={
             <Layout>
               <LazyFavoritePage />
             </Layout>
-          } 
+          }
         />
-        <Route 
-          path="/settings" 
+        <Route
+          path="/settings"
           element={
             <Layout>
               <LazySettingsPage />
             </Layout>
-          } 
+          }
         />
-        <Route 
-          path="/tv-mode" 
+        <Route
+          path="/tv-mode"
           element={
             <Suspense fallback={<LoadingSpinner />}>
               <LazyTvModePage />
             </Suspense>
-          } 
-        />
-        <Route 
-          path="/play/:tid/:id" 
-          element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <LazyPlayPage />
-            </Suspense>
-          } 
+          }
         />
       </Routes>
     </div>

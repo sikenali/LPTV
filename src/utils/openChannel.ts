@@ -64,11 +64,10 @@ export function setLazcatControlBar(visible: boolean): void {
 }
 
 /**
- * 打开一个频道。
- * - 央视官网(tv.cctv.com): 若配置了央视频备用源, 先进入内部播放页(/play)做
- *   官网可播性探测, 异常时自动切央视频; 未配置备用则直接整页导航官网。
- * - 卫视频道(央视频, CSP 拒绝 iframe): 整页导航。
- * 若在懒猫 WebShell 环境先做沉浸全屏/隐藏控制栏。
+ * 打开一个频道：整页跳转至直播源。
+ * - 央视官网(tv.cctv.com): 直接跳转官网直播页。
+ * - 卫视频道(央视频): 直接跳转央视频直播页。
+ * 若在懒猫 WebShell 环境，先做沉浸全屏/隐藏控制栏。
  */
 export function openChannel(channel: IptvChannel): void {
   if (!channel?.url) return;
@@ -79,12 +78,5 @@ export function openChannel(channel: IptvChannel): void {
     (window as LazcatWindow).lzcappNavigationBarHidden = true;
   }
 
-  // 央视官网 + 有央视频备用 → 走 /play 播放页(探测 + 异常自动切)
-  if (channel.source === 'cctv' && channel.backupUrl) {
-    window.location.href = `/play/${channel.tid}/${channel.id}`;
-    return;
-  }
-
-  // 其余: 整页导航到官网/央视频
   window.location.href = channel.url;
 }

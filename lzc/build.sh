@@ -102,6 +102,7 @@ echo "=== backend log ==="
 cat /app/logs/backend.log
 exit 0
 STARTSCRIPT
+chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start.sh"
 
 # Pre-install backend deps into lpk
 (
