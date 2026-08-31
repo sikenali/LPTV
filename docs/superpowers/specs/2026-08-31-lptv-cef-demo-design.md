@@ -68,7 +68,8 @@
 --windowless-rendering          # OSR 模式（禁用 --headless）
 --disable-web-security          # 允许跨域加载外部播放页
 --disable-features=IsolateOrigins,site-per-process
---remote-debugging-port=0       # 关闭 DevTools 调试端口（不安全）
+--remote-debugging-port=0
+--user-agent=Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36  # 伪装移动端，规避央视频外跳检测
 --single-process                # 单进程模式，减少 IPC 开销（demo 阶段）
 ```
 
