@@ -1,15 +1,16 @@
-name: Release LPK
+name: Build & Release LPK
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [webtv]
+    tags: ['v*']
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  build:
+    name: Build LPK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,18 +31,49 @@ jobs:
       - name: Install dependencies
         run: npm ci --registry https://registry.npmmirror.com
 
+      # tag 推送 (v*) → 用 tag 作为版本; 分支推送 → 标签不存在时回退 1.0.0
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo '1.0.0')"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building LPK version: $VERSION"
+
       - name: Build and package LPK
         working-directory: lzc
         env:
-          LPK_VERSION: ${{ github.ref_name }}
+          LPK_VERSION: v${{ steps.version.outputs.version }}
         run: bash package.sh
 
-      - name: Get version
+      - name: Upload LPK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lptv-${{ steps.version.outputs.version }}.lpk
+          path: lzc/cloud.lazycat.app.lptv-${{ steps.version.outputs.version }}.lpk
+          if-no-files-found: error
+
+  release:
+    name: Publish Release (tag)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine version
         id: version
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Tag: v$VERSION"
+
+      - name: Download LPK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lptv-${{ steps.version.outputs.version }}.lpk
+          path: ./lpk
 
       - name: Upload LPK to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -50,4 +82,4 @@ jobs:
           name: LPTV v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
-            lzc/cloud.lazycat.app.lptv-${{ steps.version.outputs.version }}.lpk
+            lpk/cloud.lazycat.app.lptv-${{ steps.version.outputs.version }}.lpk
