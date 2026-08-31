@@ -35,7 +35,8 @@ runtime: node
 runtime_version: "20"
 PKGEOF
 
-rm -rf "$SCRIPT_DIR/_lpk_content"
+mkdir -p "$SCRIPT_DIR/_lpk_content"
+find "$SCRIPT_DIR/_lpk_content" -mindepth 1 -delete
 mkdir -p "$SCRIPT_DIR/_lpk_content/frontend"
 mkdir -p "$SCRIPT_DIR/_lpk_content/scripts"
 mkdir -p "$SCRIPT_DIR/_lpk_content/logos"
