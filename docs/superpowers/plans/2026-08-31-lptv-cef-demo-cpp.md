@@ -621,20 +621,25 @@ static void my_app_on_before_command_line_processing(
     cef_app_t* self,
     const cef_string_t* process_type,
     cef_command_line_t* command_line) {
+  (void)self;
   (void)process_type;
   if (!command_line || !command_line->is_valid(command_line)) return;
 
   // Disable sandbox
-  command_line->append_switch(command_line, cef_string_utf8_to_utf16("no-sandbox", strlen("no-sandbox"), nullptr, 0));
+  cef_string_t switch_name;
+  cef_string_utf8_set("no-sandbox", 10, &switch_name, 1);
+  command_line->append_switch(command_line, &switch_name);
+  cef_string_clear(&switch_name);
 
   // Set mobile UA to bypass yangshipin redirect
-  command_line->append_switch_value(
-      command_line,
-      cef_string_utf8_to_utf16("user-agent", strlen("user-agent"), nullptr, 0),
-      cef_string_utf8_to_utf16(
-          "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
-          strlen("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36"),
-          nullptr, 0));
+  cef_string_t ua_name, ua_val;
+  cef_string_utf8_set("user-agent", 10, &ua_name, 1);
+  cef_string_utf8_set(
+      "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
+      110, &ua_val, 1);
+  command_line->append_switch_with_value(command_line, &ua_name, &ua_val);
+  cef_string_clear(&ua_name);
+  cef_string_clear(&ua_val);
 
   LOG_OBJ("cmd_line_processed");
 }
@@ -646,7 +651,7 @@ static void my_app_on_register_custom_schemes(
   if (!registrar) return;
 
   cef_string_t scheme_name;
-  cef_string_utf8_set("lptv", 4, &scheme_name);
+  cef_string_utf8_set("lptv", 4, &scheme_name, 1);
   // options: 0 = default (scheme is standard, cross-origin accessible)
   registrar->add_custom_scheme(registrar, &scheme_name, 0);
   cef_string_clear(&scheme_name);
@@ -832,7 +837,7 @@ static cef_browser_t* g_browser = nullptr;
 // ---- Helper: set cef_string from const char* ----
 static void set_str(const char* src, cef_string_t* dst) {
   if (!src) { cef_string_clear(dst); return; }
-  cef_string_utf8_set(src, strlen(src), dst);
+  cef_string_utf8_set(src, strlen(src), dst, 1);
 }
 
 // ---- Play a channel ----
@@ -869,19 +874,17 @@ static int play_channel(int channel_id, int source_idx) {
 
   // Close existing browser
   if (g_browser) {
-    cef_browser_host_close_graceful(g_browser);
+    // Browser will be closed via life span handler; just null out our ref
     g_browser = nullptr;
   }
 
-  // Setup window info for OSR
+  // Setup window info for OSR (Linux)
   cef_window_info_t window_info;
   memset(&window_info, 0, sizeof(window_info));
-  window_info.style = 0;  // no window
-  window_info.ex_style = 0;
-  window_info.x = CW_USEDEFAULT;
-  window_info.y = CW_USEDEFAULT;
-  window_info.width = g_handler.width;
-  window_info.height = g_handler.height;
+  window_info.bounds.x = 0;
+  window_info.bounds.y = 0;
+  window_info.bounds.width = g_handler.width;
+  window_info.bounds.height = g_handler.height;
   window_info.parent_window = 0;
   window_info.windowless_rendering_enabled = 1;  // OSR mode
 
@@ -889,14 +892,13 @@ static int play_channel(int channel_id, int source_idx) {
   cef_browser_settings_t settings;
   memset(&settings, 0, sizeof(settings));
   settings.size = sizeof(settings);
-  // Disable features that cause issues
-  settings.windowless_rendering_enabled = 1;
+  settings.windowless_frame_rate = 30;  // max 30 fps for OSR
 
-  // Create browser
+  // Create browser (synchronous - blocks until browser is ready)
   cef_string_t url_str;
   set_str(url, &url_str);
 
-  int result = cef_browser_host_create_browser(
+  g_browser = cef_browser_host_create_browser_sync(
       &window_info,
       nullptr,  // client (use default)
       &url_str,
@@ -906,14 +908,11 @@ static int play_channel(int channel_id, int source_idx) {
 
   cef_string_clear(&url_str);
 
-  if (!result) {
+  if (!g_browser) {
     LOG_ERR("browser_create_failed");
     return -1;
   }
 
-  // Note: cef_browser_host_create_browser returns a handle, not the browser ptr
-  // We need to get it via CefBrowserHost::GetBrowser() or similar
-  // For now, we'll track via the render handler
   LOG_OBJ("nav_committed", ",\"channel_id\":%d,\"source\":%d", channel_id, used_source);
   return 0;
 }
@@ -954,7 +953,8 @@ int main(int argc, char* argv[]) {
   }
 
   // Init CEF
-  CefMainArgs main_args(0, nullptr);
+  cef_main_args_t main_args;
+  memset(&main_args, 0, sizeof(main_args));
   cef_settings_t settings;
   memset(&settings, 0, sizeof(settings));
   settings.size = sizeof(settings);
@@ -978,11 +978,9 @@ int main(int argc, char* argv[]) {
   // Play first channel
   play_channel(channel_id, source_idx);
 
-  // Message loop
+  // Message loop (blocks until cef_quit_message_loop() is called)
   LOG_OBJ("message_loop_start");
-  while (cef_do_message_loop_work()) {
-    // CEF processes events here
-  }
+  cef_run_message_loop();
   LOG_OBJ("message_loop_end");
 
   cef_shutdown();
@@ -1028,8 +1026,8 @@ git commit -m "feat: add main entry point with channel navigation and OSR browse
 
 1. **编译期修复**：
    - 检查 `cef_window_info_t` 字段名是否匹配 CEF 104 头文件
-   - 修正 `cef_string_utf8_set` 调用签名
-   - 处理 `CW_USEDEFAULT` 宏（可能需要 `<windows.h>` 替代或手动定义）
+   - 修正 `cef_string_utf8_set` 调用签名（4参数: src, len, output, copy）
+   - 处理 Linux 上 `CEF_CALLBACK` 为空宏（无需 `__stdcall`）
 
 2. **运行期修复**：
    - 验证 `OnPaint` 回调是否被触发
