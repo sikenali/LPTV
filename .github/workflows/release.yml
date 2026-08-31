@@ -55,7 +55,7 @@ jobs:
       - name: Upload LPK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lptv-${{ steps.version.outputs.version }}.lpk
+          name: cloud.lazycat.app.lptv-${{ steps.version.outputs.version }}.lpk
           path: lzc/cloud.lazycat.app.lptv-${{ steps.version.outputs.version }}.lpk
           if-no-files-found: error
 
@@ -75,7 +75,7 @@ jobs:
       - name: Download LPK artifact
         uses: actions/download-artifact@v4
         with:
-          name: lptv-${{ steps.version.outputs.version }}.lpk
+          name: cloud.lazycat.app.lptv-${{ steps.version.outputs.version }}.lpk
           path: ./lpk
 
       - name: Upload LPK to GitHub Release
