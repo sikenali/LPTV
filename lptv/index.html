@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>懒猫微视</title>
+    <link rel="stylesheet" href="css/tv.css">
+    <script src="js/tv-common.js"></script>
+    <script src="js/tv-player.js"></script>
+    <script src="js/tv-channels.js"></script>
+    <script src="js/tv-app.js"></script>
+</head>
+<body>
+    <div id="tv-app">
+        <!-- 播放提示区: 播放 = 整页导航到官网 -->
+        <div class="tv-player-container" id="playerContainer">
+            <div class="tv-hero" id="tvHero">
+                <div class="tv-hero-icon">LPTV</div>
+                <div class="tv-hero-title">懒猫微视</div>
+                <div class="tv-hero-sub">选择频道 → 整页导航到 央视官网 / 央视频 直播页</div>
+            </div>
+            <div class="tv-error" id="tvError" style="display:none;">
+                <div class="tv-error-text" id="tvErrorText"></div>
+            </div>
+            <!-- Logo overlay -->
+            <div class="tv-logo" id="tvLogo"></div>
+            <!-- Channel info overlay -->
+            <div class="tv-channel-info" id="tvChannelInfo">
+                <span class="tv-channel-name" id="tvChannelName"></span>
+                <span class="tv-channel-line" id="tvChannelLine"></span>
+            </div>
+        </div>
+
+        <!-- Channel List Panel -->
+        <div class="tv-panel tv-panel-right" id="channelPanel" style="display:none;">
+            <div class="tv-panel-header">
+                <button class="tv-panel-close" onclick="TVApp.closeChannelPanel()">�?</button>
+                <span>频道列表</span>
+            </div>
+            <div class="tv-category-tabs" id="categoryTabs"></div>
+            <div class="tv-channel-list" id="channelList"></div>
+        </div>
+
+        <!-- Bottom Bar -->
+        <div class="tv-bottom-bar" id="bottomBar">
+            <div class="tv-bottom-left">
+                <button class="tv-btn tv-btn-menu" onclick="TVApp.toggleChannelPanel()" tabindex="0">�?频道</button>
+                <span class="tv-time" id="tvTime"></span>
+            </div>
+            <div class="tv-bottom-right">
+                <span class="tv-channel-counter" id="tvChannelCounter"></span>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="tv-loading" id="tvLoading">
+            <div class="tv-loading-logo">LPTV</div>
+            <div class="tv-loading-text">正在加载...</div>
+        </div>
+    </div>
+</body>
+</html>
