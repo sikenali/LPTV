@@ -6,8 +6,9 @@ dist/
 .DS_Store
 local.m3u8
 
-# lzc build output
+# lzc build output (build.sh regenerates these)
 lzc/_lpk_content/
+lzc/package.yml
 *.lpk
 /.github/logos/
 __pycache__/
