@@ -35,11 +35,14 @@ jobs:
       - name: Resolve version
         id: version
         run: |
+          VERSION=""
           if [ "${{ github.ref_type }}" = "tag" ]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
           else
-            VERSION="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo '1.0.0')"
+            VERSION="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+            VERSION="${VERSION#v}"
           fi
+          if [ -z "$VERSION" ]; then VERSION="1.0.0"; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Building LPK version: $VERSION"
 
