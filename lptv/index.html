@@ -12,12 +12,15 @@
 </head>
 <body>
     <div id="tv-app">
-        <!-- 播放提示区: 播放 = 整页导航到官网 -->
+        <!-- 播放区: CEF OSR 帧渲染 / 整页导航回退 -->
         <div class="tv-player-container" id="playerContainer">
+            <!-- CEF OSR 帧画布 -->
+            <canvas id="tvCanvas" class="tv-canvas" style="display:none;"></canvas>
+            <!-- 兜底: 导航提示 -->
             <div class="tv-hero" id="tvHero">
                 <div class="tv-hero-icon">LPTV</div>
                 <div class="tv-hero-title">懒猫微视</div>
-                <div class="tv-hero-sub">选择频道 → 整页导航到 央视官网 / 央视频 直播页</div>
+                <div class="tv-hero-sub">选择频道 → CEF OSR 内嵌播放</div>
             </div>
             <div class="tv-error" id="tvError" style="display:none;">
                 <div class="tv-error-text" id="tvErrorText"></div>
@@ -34,7 +37,7 @@
         <!-- Channel List Panel -->
         <div class="tv-panel tv-panel-right" id="channelPanel" style="display:none;">
             <div class="tv-panel-header">
-                <button class="tv-panel-close" onclick="TVApp.closeChannelPanel()">�?</button>
+                <button class="tv-panel-close" onclick="TVApp.closeChannelPanel()">✕</button>
                 <span>频道列表</span>
             </div>
             <div class="tv-category-tabs" id="categoryTabs"></div>
@@ -44,7 +47,7 @@
         <!-- Bottom Bar -->
         <div class="tv-bottom-bar" id="bottomBar">
             <div class="tv-bottom-left">
-                <button class="tv-btn tv-btn-menu" onclick="TVApp.toggleChannelPanel()" tabindex="0">�?频道</button>
+                <button class="tv-btn tv-btn-menu" onclick="TVApp.toggleChannelPanel()" tabindex="0">☰ 频道</button>
                 <span class="tv-time" id="tvTime"></span>
             </div>
             <div class="tv-bottom-right">

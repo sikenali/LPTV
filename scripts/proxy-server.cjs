@@ -2,6 +2,7 @@ const express = require('express')
 const cors = require('cors')
 const fs = require('fs')
 const path = require('path')
+const { spawn } = require('child_process')
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -73,15 +74,137 @@ app.get('/api/channels', (req, res) => {
   }
 })
 
-// ── API: 健康检查 ──────────────────────────────────────────────────────
+// ── CEF IPC 代理路由 ───────────────────────────────────────────────────────
+// 将 /lptv-api/* 转发到 node-ipc HTTP API (127.0.0.1:8081)
+// 将 /lptv-ws 升级为 WebSocket 到 node-ipc WS (127.0.0.1:8765)
+const IPC_HTTP_PORT = parseInt(process.env.LPTV_HTTP_PORT || '8081', 10)
+const IPC_WS_PORT = parseInt(process.env.LPTV_WS_PORT || '8765', 10)
+
+// HTTP proxy for /lptv-api/*
+app.all('/lptv-api/*', (req, res) => {
+  const targetPath = req.path.replace(/^\/lptv-api/, '')
+  const target = `http://127.0.0.1:${IPC_HTTP_PORT}${targetPath}`
+  
+  const options = {
+    hostname: '127.0.0.1',
+    port: IPC_HTTP_PORT,
+    path: targetPath,
+    method: req.method,
+    headers: { ...req.headers, host: `127.0.0.1:${IPC_HTTP_PORT}` },
+  }
+
+  const proxyReq = require('http').request(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers)
+    proxyRes.pipe(res, { end: true })
+  })
+  proxyReq.on('error', (e) => {
+    console.error('[proxy] IPC HTTP error:', e.message)
+    res.status(502).json({ error: 'ipc_unavailable' })
+  })
+  if (req.body) proxyReq.write(JSON.stringify(req.body))
+  proxyReq.end()
+})
+
+// WebSocket proxy for /lptv-ws
+const WebSocket = require('ws')
+const wss = new WebSocket.Server({ noServer: true })
+
+app.get('/lptv-ws', (req, res) => {
+  // Upgrade handled by server.on('upgrade')
+  res.writeHead(426)
+  res.end('Upgrade required')
+})
+
+// ── 健康检查 ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     source: 'official-page-navigation',
+    ipc: { http: IPC_HTTP_PORT, ws: IPC_WS_PORT },
   })
 })
 
-app.listen(PORT, () => {
-  console.log(`LPTV server running on port ${PORT} (official-page-navigation proxy)`)
+// ── 启动 node-ipc 子进程 ───────────────────────────────────────────────────
+let ipcProcess = null
+
+function startIpc() {
+  const ipcScript = path.join(__dirname, 'node-ipc.js')
+  if (!fs.existsSync(ipcScript)) {
+    console.log('[server] node-ipc.js not found, CEF IPC disabled')
+    return
+  }
+
+  ipcProcess = spawn(process.execPath, [ipcScript], {
+    env: {
+      ...process.env,
+      LPTV_HTTP_PORT: String(IPC_HTTP_PORT),
+      LPTV_WS_PORT: String(IPC_WS_PORT),
+      LPTV_CEF_BIN: path.join(__dirname, '..', 'lptv-cef-demo', 'build', 'lptv-cef-demo'),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  ipcProcess.stdout.on('data', (d) => process.stdout.write(d))
+  ipcProcess.stderr.on('data', (d) => process.stderr.write(d))
+  ipcProcess.on('exit', (code) => {
+    console.log(`[server] node-ipc exited with code ${code}`)
+    ipcProcess = null
+  })
+  ipcProcess.on('error', (err) => {
+    console.error('[server] node-ipc failed to start:', err.message)
+  })
+
+  console.log(`[server] node-ipc started (HTTP:${IPC_HTTP_PORT}, WS:${IPC_WS_PORT})`)
+}
+
+// ── WebSocket upgrade ─────────────────────────────────────────────────────
+const server = app.listen(PORT, () => {
+  console.log(`LPTV server running on port ${PORT}`)
+  console.log(`  CEF IPC HTTP: http://127.0.0.1:${IPC_HTTP_PORT}`)
+  console.log(`  CEF IPC WS:   ws://127.0.0.1:${IPC_WS_PORT}`)
+  console.log(`  Frontend:     http://localhost:${PORT}`)
 })
+
+server.on('upgrade', (req, socket, head) => {
+  if (req.url !== '/lptv-ws') { socket.destroy(); return }
+  
+  // Connect to node-ipc WebSocket
+  const ws = new WebSocket(`ws://127.0.0.1:${IPC_WS_PORT}/`)
+  
+  ws.on('open', () => {
+    console.log('[server] upstream WS connected')
+    // Upgrade our client connection
+    wss.handleUpgrade(req, socket, head, (client) => {
+      wss.emit('connection', client, req)
+    })
+  })
+
+  ws.on('message', (data) => {
+    if (socket.readyState === 1) socket.send(data)
+  })
+
+  ws.on('close', () => {
+    if (socket.readyState === 1) socket.close()
+  })
+
+  ws.on('error', (err) => {
+    console.error('[server] upstream WS error:', err.message)
+    socket.destroy()
+  })
+
+  socket.on('close', () => ws.close())
+})
+
+// ── 启动 IPC 服务 ──────────────────────────────────────────────────────────
+startIpc()
+
+// ── Graceful shutdown ──────────────────────────────────────────────────────
+function shutdown() {
+  console.log('[server] shutting down...')
+  if (ipcProcess) ipcProcess.kill('SIGTERM')
+  server.close(() => process.exit(0))
+  setTimeout(() => process.exit(0), 3000)
+}
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)

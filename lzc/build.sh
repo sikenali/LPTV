@@ -54,6 +54,23 @@ if [ -d "$PROJECT_ROOT/lptv" ]; then
 fi
 
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
+cp "$PROJECT_ROOT/scripts/node-ipc.js" "$SCRIPT_DIR/_lpk_content/scripts/node-ipc.js" 2>/dev/null || true
+
+# Build CEF binary if cmake available and source exists
+CEF_BIN_SRC="$PROJECT_ROOT/lptv-cef-demo/src/main.cpp"
+CEF_BIN_BUILD="$SCRIPT_DIR/_lpk_content/scripts/lptv-cef-demo"
+if command -v cmake >/dev/null 2>&1 && [ -f "$CEF_BIN_SRC" ]; then
+  echo "Building CEF binary..."
+  (cd "$PROJECT_ROOT/lptv-cef-demo" && \
+    mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 && \
+    cmake --build . -j$(nproc) 2>/dev/null) && \
+    [ -f "$PROJECT_ROOT/lptv-cef-demo/build/lptv-cef-demo" ] && \
+    cp "$PROJECT_ROOT/lptv-cef-demo/build/lptv-cef-demo" "$CEF_BIN_BUILD" && \
+    chmod +x "$CEF_BIN_BUILD" && \
+    echo "CEF binary built: $(ls -lh "$CEF_BIN_BUILD" | awk '{print $5}')" || \
+    echo "WARNING: CEF binary build failed (non-fatal)"
+fi
 cp "$SCRIPT_DIR/backend-package.json" "$SCRIPT_DIR/_lpk_content/package.json"
 cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null || true
 
@@ -77,7 +94,7 @@ else
   export NODE_PATH="$FALLBACK_NM/node_modules"
 fi
 
-node /lzcapp/pkg/content/scripts/proxy-server.cjs >>/app/logs/backend.log 2>&1 &
+LPTV_CEF_BIN=/lzcapp/pkg/content/scripts/lptv-cef-demo node /lzcapp/pkg/content/scripts/proxy-server.cjs >>/app/logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
 for i in $(seq 1 30); do
