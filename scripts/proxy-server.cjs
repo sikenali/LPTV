@@ -129,9 +129,9 @@ app.get('/health', (req, res) => {
 let ipcProcess = null
 
 function startIpc() {
-  const ipcScript = path.join(__dirname, 'node-ipc.js')
+  const ipcScript = path.join(__dirname, 'node-ipc.cjs')
   if (!fs.existsSync(ipcScript)) {
-    console.log('[server] node-ipc.js not found, CEF IPC disabled')
+    console.log('[server] node-ipc.cjs not found, CEF IPC disabled')
     return
   }
 

@@ -54,7 +54,7 @@ if [ -d "$PROJECT_ROOT/lptv" ]; then
 fi
 
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
-cp "$PROJECT_ROOT/scripts/node-ipc.js" "$SCRIPT_DIR/_lpk_content/scripts/node-ipc.js" 2>/dev/null || true
+cp "$PROJECT_ROOT/scripts/node-ipc.cjs" "$SCRIPT_DIR/_lpk_content/scripts/node-ipc.cjs" 2>/dev/null || true
 
 # Build CEF binary if cmake available and source exists
 CEF_BIN_SRC="$PROJECT_ROOT/lptv-cef-demo/src/main.cpp"
