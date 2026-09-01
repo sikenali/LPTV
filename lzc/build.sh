@@ -56,21 +56,48 @@ fi
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
 cp "$PROJECT_ROOT/scripts/node-ipc.cjs" "$SCRIPT_DIR/_lpk_content/scripts/node-ipc.cjs" 2>/dev/null || true
 
-# Build CEF binary if cmake available and source exists
-CEF_BIN_SRC="$PROJECT_ROOT/lptv-cef-demo/src/main.cpp"
-CEF_BIN_BUILD="$SCRIPT_DIR/_lpk_content/scripts/lptv-cef-demo"
+# ── CEF runtime: copy binary + shared lib + resources into scripts/ ──────────
+CEF_DEMO_DIR="$PROJECT_ROOT/lptv-cef-demo"
+CEF_BIN_SRC="$CEF_DEMO_DIR/src/main.cpp"
+CEF_TMP_BIN="$(mktemp -d)/lptv-cef-demo"
+CEF_SCRIPTS_DIR="$SCRIPT_DIR/_lpk_content/scripts"
+
+# Build CEF binary locally if cmake available
 if command -v cmake >/dev/null 2>&1 && [ -f "$CEF_BIN_SRC" ]; then
   echo "Building CEF binary..."
-  (cd "$PROJECT_ROOT/lptv-cef-demo" && \
+  (cd "$CEF_DEMO_DIR" && \
     mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release >/dev/null 2>&1 && \
     cmake --build . -j$(nproc) 2>/dev/null) && \
-    [ -f "$PROJECT_ROOT/lptv-cef-demo/build/lptv-cef-demo" ] && \
-    cp "$PROJECT_ROOT/lptv-cef-demo/build/lptv-cef-demo" "$CEF_BIN_BUILD" && \
-    chmod +x "$CEF_BIN_BUILD" && \
-    echo "CEF binary built: $(ls -lh "$CEF_BIN_BUILD" | awk '{print $5}')" || \
-    echo "WARNING: CEF binary build failed (non-fatal)"
+    [ -f "$CEF_DEMO_DIR/build/lptv-cef-demo" ] && \
+    cp "$CEF_DEMO_DIR/build/lptv-cef-demo" "$CEF_TMP_BIN" && \
+    chmod +x "$CEF_TMP_BIN" && \
+    echo "CEF binary built: $(ls -lh "$CEF_TMP_BIN" | awk '{print $5}')" || \
+    echo "WARNING: CEF binary build failed (non-fatal), CEF playback disabled"
 fi
+
+# Copy libcef.so and resources from local CEF demo dir (must exist locally)
+CEF_LIB_SRC="$CEF_DEMO_DIR/third_party/libcef/libcef.so"
+if [ -f "$CEF_LIB_SRC" ]; then
+  cp "$CEF_LIB_SRC" "$CEF_SCRIPTS_DIR/libcef.so"
+  # Copy CEF resources (.pak, icudtl.dat, locales/)
+  cp "$CEF_DEMO_DIR/third_party/libcef/chrome_100_percent.pak" "$CEF_SCRIPTS_DIR/" 2>/dev/null || true
+  cp "$CEF_DEMO_DIR/third_party/libcef/chrome_200_percent.pak" "$CEF_SCRIPTS_DIR/" 2>/dev/null || true
+  cp "$CEF_DEMO_DIR/third_party/libcef/resources.pak" "$CEF_SCRIPTS_DIR/" 2>/dev/null || true
+  cp "$CEF_DEMO_DIR/third_party/libcef/icudtl.dat" "$CEF_SCRIPTS_DIR/" 2>/dev/null || true
+  cp -r "$CEF_DEMO_DIR/third_party/libcef/locales" "$CEF_SCRIPTS_DIR/" 2>/dev/null || true
+  echo "CEF runtime copied: libcef.so + resources ($(du -sh "$CEF_SCRIPTS_DIR" | awk '{print $1}'))"
+else
+  echo "WARNING: libcef.so not found at $CEF_LIB_SRC — CEF playback will not work"
+  echo "  Copy from WPS: cp /opt/kingsoft/wps-office/office6/addons/cef/libcef.so $CEF_LIB_SRC"
+  # Still copy the built binary if it exists
+  if [ -f "${CEF_TMP_BIN:-}" ]; then
+    cp "${CEF_TMP_BIN}" "$CEF_SCRIPTS_DIR/lptv-cef-demo"
+    chmod +x "$CEF_SCRIPTS_DIR/lptv-cef-demo"
+  fi
+fi
+[ -n "${CEF_TMP_BIN}" ] && rm -rf "${CEF_TMP_BIN}"
+
 cp "$SCRIPT_DIR/backend-package.json" "$SCRIPT_DIR/_lpk_content/package.json"
 cp -f "$PROJECT_ROOT/logos/"*.png "$SCRIPT_DIR/_lpk_content/logos/" 2>/dev/null || true
 
@@ -94,7 +121,9 @@ else
   export NODE_PATH="$FALLBACK_NM/node_modules"
 fi
 
-LPTV_CEF_BIN=/lzcapp/pkg/content/scripts/lptv-cef-demo node /lzcapp/pkg/content/scripts/proxy-server.cjs >>/app/logs/backend.log 2>&1 &
+LPTV_CEF_BIN=/lzcapp/pkg/content/scripts/lptv-cef-demo \
+  LD_LIBRARY_PATH=/lzcapp/pkg/content/scripts:$LD_LIBRARY_PATH \
+  node /lzcapp/pkg/content/scripts/proxy-server.cjs >>/app/logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
 for i in $(seq 1 30); do
