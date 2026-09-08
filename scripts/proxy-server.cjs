@@ -309,24 +309,25 @@ function parseM3u(content) {
   for (const line of lines) {
     const trimmed = line.trim()
     if (trimmed.startsWith('#EXTINF:')) {
-      const match = trimmed.match(/tvg-name="([^"]*)".*?group-title="([^"]*)"[^,]*,(.*)/)
-      if (match) {
-        const chName = match[3] || match[1]
-        // 查找已有同名频道，复用并追加 URL
+      const nameMatch = trimmed.match(/tvg-name="([^"]*)"/)
+      const groupMatch = trimmed.match(/group-title="([^"]*)"/)
+      const namePart = trimmed.split(',').pop() || ''
+      const chName = nameMatch ? nameMatch[1].trim() : namePart.trim()
+      const group = groupMatch ? groupMatch[1] : ''
+      if (chName) {
         const existing = channels.find(c => c.name === chName)
         if (existing) {
           if (!existing.urls) existing.urls = []
           if (existing.url && !existing.urls.includes(existing.url)) {
             existing.urls.push(existing.url)
           }
-          // 新 block：如果当前行是 URL，追加；否则只追加到 urls（兼容旧格式）
           currentChannel = existing
         } else {
           currentChannel = {
             id: String(channels.length + 1),
             name: chName,
             logo: '',
-            group: match[2],
+            group: group,
             url: '',
             urls: undefined,
           }
