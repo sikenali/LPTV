@@ -50,6 +50,10 @@ cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/scripts/proxy-server.cjs"
 cp "$SCRIPT_DIR/backend-package.json" "$SCRIPT_DIR/_lpk_content/package.json"
 cp -f "$PROJECT_ROOT/channels/lptv.m3u8" "$SCRIPT_DIR/_lpk_content/channels/lptv.m3u8" 2>/dev/null || true
+# 三网 1~5 合并默认源及各网络独立文件
+for f in default.m3u default-1.m3u default-2.m3u default-3.m3u default-4.m3u default-5.m3u; do
+  cp -f "$PROJECT_ROOT/channels/$f" "$SCRIPT_DIR/_lpk_content/channels/$f" 2>/dev/null || true
+done
 if [ -z "$(ls -A "$PROJECT_ROOT/logos/" 2>/dev/null)" ]; then
   echo "[build] logos/ empty, fetching from GitHub..."
   node "$PROJECT_ROOT/scripts/fetch-logos.cjs" 2>/dev/null || true

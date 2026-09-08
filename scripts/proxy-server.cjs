@@ -261,6 +261,15 @@ app.get('/api/stream/check', async (req, res) => {
 
 // ── 频道列表 API ─────────────────────────────────────────────────────────
 const M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
+// 三网 1~5 fallback 链（优先级从高到低）
+const DEFAULT_M3U_CHAIN = [
+  path.join(__dirname, '..', 'channels', 'default.m3u'),
+  path.join(__dirname, '..', 'channels', 'default-1.m3u'),
+  path.join(__dirname, '..', 'channels', 'default-2.m3u'),
+  path.join(__dirname, '..', 'channels', 'default-3.m3u'),
+  path.join(__dirname, '..', 'channels', 'default-4.m3u'),
+  path.join(__dirname, '..', 'channels', 'default-5.m3u'),
+]
 const M3U_REMOTE_URLS = [
   `https://raw.githubusercontent.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/main/channels/lptv.m3u8`,
   `https://raw.githubusercontent.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/main/channels/lptv.m3u`,
@@ -343,10 +352,24 @@ app.get('/api/m3u', (req, res) => {
     return res.json(m3uCache)
   }
   try {
-    const fileContent = fs.readFileSync(M3U_PATH, 'utf-8')
+    let fileContent = null
+    let usedSource = 'lptv.m3u8'
+    try {
+      fileContent = fs.readFileSync(M3U_PATH, 'utf-8')
+    } catch {
+      for (const p of DEFAULT_M3U_CHAIN) {
+        try {
+          fileContent = fs.readFileSync(p, 'utf-8')
+          usedSource = path.basename(p)
+          break
+        } catch {}
+      }
+    }
+    if (!fileContent) throw new Error('All m3u sources unavailable')
     const channels = parseM3u(fileContent)
     m3uCache = channels
     m3uCacheTime = now
+    console.log(`[m3u] using ${usedSource}: ${channels.length} channels`)
     res.json(channels)
   } catch (err) {
     console.error('[m3u] Local file read failed:', err.message)
