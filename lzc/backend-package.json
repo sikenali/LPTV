@@ -1,0 +1,1 @@
+{"name":"lptv-backend","version":"1.0.0","private":true,"dependencies":{"cors":"^2.8.6","express":"^5.2.1","m3u-parser-generator":"^5.0.2"}}

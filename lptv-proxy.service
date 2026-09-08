@@ -1,0 +1,22 @@
+[Unit]
+Description=LPTV Proxy Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/lptv
+ExecStart=/usr/bin/node scripts/proxy-server.cjs
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=ALLOWED_ORIGINS=https://your-domain.com
+EnvironmentFile=/opt/lptv/.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lptv-proxy
+
+[Install]
+WantedBy=multi-user.target
