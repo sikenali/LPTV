@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>懒猫微视</title>
+    <link rel="stylesheet" href="lptv/css/tv.css">
+</head>
+<body>
+    <!-- 启动加载动画 -->
+    <div class="tv-splash" id="tvSplash">
+        <img src="../icon.png" alt="LPTV" class="tv-splash-img">
+        <div class="tv-splash-wave"></div>
+    </div>
+
+    <!-- 主布局：左列表 + 右播放器 -->
+    <div class="tv-main">
+        <!-- 左侧频道列表 -->
+        <div class="tv-sidebar">
+            <!-- Logo + 标题 -->
+            <div class="tv-header">
+                <img src="../icon.png" alt="logo" class="tv-header-logo-img">
+                <span class="tv-header-title">懒猫微视</span>
+            </div>
+            <!-- 分类标签 -->
+            <div class="tv-categories" id="tvCategories">
+                <button class="tv-cat-btn active" data-cat="cctv">
+                    央视频道
+                    <span class="tv-cat-count" id="cctvCount">18</span>
+                </button>
+                <button class="tv-cat-btn" data-cat="ws">
+                    卫视频道
+                    <span class="tv-cat-count" id="wsCount">41</span>
+                </button>
+            </div>
+            <!-- 频道列表 -->
+            <div class="tv-channels-list" id="tvChannelsList">
+                <div class="tv-loading" id="tvLoading">
+                    <div class="tv-spinner"></div>
+                    <span>加载中...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧播放区域 -->
+        <div class="tv-content">
+            <div class="tv-player-section" id="tvPlayerSection">
+                <div class="tv-player-container" id="tvPlayerContainer">
+                    <iframe id="tvIframe" sandbox="allow-scripts allow-popups allow-same-origin" frameborder="0"></iframe>
+                    <video id="tvVideo" style="display:none; width:100%; height:100%; background:#000;" controls playsinline></video>
+                    <div class="tv-buffering" id="tvBuffering" style="display:none;">
+                        <div class="tv-spinner"></div>
+                        <span>正在加载...</span>
+                    </div>
+                    <div class="tv-placeholder" id="tvPlaceholder">
+                        <div class="tv-placeholder-icon">📺</div>
+                        <div class="tv-placeholder-text">选择频道开始观看</div>
+                    </div>
+                </div>
+                <div class="tv-playing-bar" id="tvPlayingBar" style="display:none;">
+                    <div class="tv-playing-info">
+                        <span class="tv-playing-name" id="tvPlayingName">--</span>
+                        <span class="tv-playing-cat" id="tvPlayingCat">--</span>
+                    </div>
+                    <button class="tv-fav-btn" id="tvFavBtn">☆ 收藏</button>
+                    <button class="tv-fullscreen-btn" id="tvFullscreenBtn">⛶ 全屏</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="lptv/js/channels.js"></script>
+    <script src="lptv/js/player.js"></script>
+    <script src="lptv/js/app.js"></script>
+</body>
+</html>

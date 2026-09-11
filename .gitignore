@@ -1,0 +1,5 @@
+lzc/_lpk_content/scripts/libcef.so
+lzc/*.lpk
+node_modules/
+package-lock.json
+cef-framework/third_party/libcef/libcef.so

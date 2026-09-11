@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+#lptv-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.85);
+  z-index: 999999;
+  display: none;
+  flex-direction: column;
+}
+#lptv-panel.visible { display: flex; }
+#lptv-header {
+  padding: 12px 20px;
+  background: rgba(30,30,30,0.9);
+  color: #fff;
+  font-size: 18px;
+  font-family: -apple-system, sans-serif;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#lptv-header .channel-info { font-size: 14px; color: #aaa; }
+#lptv-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+#lptv-list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.lptv-chan {
+  background: rgba(50,50,50,0.8);
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #fff;
+}
+.lptv-chan:hover, .lptv-chan.active {
+  border-color: #00aaff;
+  background: rgba(0,100,200,0.4);
+}
+.lptv-chan .num { font-size: 20px; font-weight: bold; color: #00aaff; }
+.lptv-chan .name { font-size: 12px; margin-top: 4px; color: #ddd; }
+#lptv-footer {
+  padding: 10px 20px;
+  background: rgba(30,30,30,0.9);
+  color: #888;
+  font-size: 12px;
+  text-align: center;
+  font-family: -apple-system, sans-serif;
+}
+</style>
+</head>
+<body>
+<div id="lptv-panel">
+  <div id="lptv-header">
+    <span>LPTV 频道列表</span>
+    <span class="channel-info" id="lptv-info">按 F2 关闭</span>
+  </div>
+  <div id="lptv-body">
+    <div id="lptv-list"></div>
+  </div>
+  <div id="lptv-footer">↑↓ 切换频道 | 数字键直接输入 | ESC 退出</div>
+</div>
+<script>
+(function() {
+  window.LPTV = window.LPTV || {};
+  window.LPTV.channels = window.LPTV_CHANNELS || [];
+  window.LPTV.activeIndex = window.LPTV_ACTIVE_INDEX || 0;
+  
+  function renderPanel() {
+    var list = document.getElementById('lptv-list');
+    var panel = document.getElementById('lptv-panel');
+    var info = document.getElementById('lptv-info');
+    if (!list || !panel) return;
+    
+    list.innerHTML = '';
+    window.LPTV.channels.forEach(function(ch, i) {
+      var div = document.createElement('div');
+      div.className = 'lptv-chan' + (i === window.LPTV.activeIndex ? ' active' : '');
+      div.innerHTML = '<div class="num">' + (i+1) + '</div><div class="name">' + (ch.name || '') + '</div>';
+      div.onclick = function() {
+        window.LPTV.activeIndex = i;
+        if (window.LPTV.onChannelSelect) window.LPTV.onChannelSelect(i);
+      };
+      list.appendChild(div);
+    });
+    
+    var current = window.LPTV.channels[window.LPTV.activeIndex];
+    if (current) {
+      info.textContent = (window.LPTV.activeIndex+1) + '/(' + window.LPTV.channels.length + ') ' + (current.name || '');
+    }
+  }
+  
+  window.LPTV.renderPanel = renderPanel;
+  window.LPTV.showPanel = function() {
+    var p = document.getElementById('lptv-panel');
+    if (p) p.classList.add('visible');
+    renderPanel();
+  };
+  window.LPTV.hidePanel = function() {
+    var p = document.getElementById('lptv-panel');
+    if (p) p.classList.remove('visible');
+  };
+  
+  // Keyboard navigation in panel
+  document.addEventListener('keydown', function(e) {
+    if (!document.getElementById('lptv-panel').classList.contains('visible')) return;
+    var count = window.LPTV.channels.length;
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      window.LPTV.activeIndex = (window.LPTV.activeIndex - 1 + count) % count;
+      renderPanel();
+      if (window.LPTV.onChannelSelect) window.LPTV.onChannelSelect(window.LPTV.activeIndex);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      window.LPTV.activeIndex = (window.LPTV.activeIndex + 1) % count;
+      renderPanel();
+      if (window.LPTV.onChannelSelect) window.LPTV.onChannelSelect(window.LPTV.activeIndex);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      window.LPTV.hidePanel();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      window.LPTV.hidePanel();
+    }
+  });
+  
+  renderPanel();
+})();
+</script>
+</body>
+</html>

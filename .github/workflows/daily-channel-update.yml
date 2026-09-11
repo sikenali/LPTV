@@ -1,0 +1,43 @@
+name: Daily Channel Update
+
+on:
+  schedule:
+    # 每天北京时间 02:00 执行
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-channels:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run 345iptv channel scraper
+        run: node scripts/scraper-345iptv.js scripts/data/iptvStreams.json
+
+      - name: Sync to lzc content
+        run: cp scripts/data/iptvStreams.json lzc/_lpk_content/scripts/data/iptvStreams.json
+
+      - name: Check for changes
+        id: check
+        run: |
+          git diff --quiet scripts/data/iptvStreams.json && echo "changed=false" >> $GITHUB_OUTPUT || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push if updated
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add scripts/data/iptvStreams.json lzc/_lpk_content/scripts/data/iptvStreams.json
+          git commit -m "chore(channels): daily 345iptv channel list update"
+          git push

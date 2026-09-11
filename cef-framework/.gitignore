@@ -1,0 +1,9 @@
+build/
+node_modules/
+*.o
+*.d
+cmake_install.cmake
+Makefile
+CMakeCache.txt
+CMakeFiles/
+!build/cef-tv.xz

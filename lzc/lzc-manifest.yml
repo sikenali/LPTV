@@ -1,0 +1,36 @@
+application:
+  subdomain: lptv
+  background_task: true
+  image: registry.lazycat.cloud/lzc-music/server:1.0.2
+  routes:
+    - /=file:///lzcapp/pkg/content/frontend
+    - /*=file:///lzcapp/pkg/content/frontend
+  public_path:
+    - /lptv-ws
+    - /api/cef/
+    - /api/channels
+    - /lptv/
+    - /proxy/
+    - /icon.png
+  upstreams:
+    - location: /api/
+      backend: http://127.0.0.1:8080/
+      disable_trim_location: true
+      backend_launch_command: sh -c "/lzcapp/pkg/content/scripts/start.sh"
+    - location: /lptv-ws
+      backend: http://127.0.0.1:8080/
+      disable_trim_location: true
+      fix_websocket_header: true
+    - location: /proxy/
+      backend: http://127.0.0.1:8080/
+      disable_trim_location: true
+  environment:
+    BACKEND_PORT: "8080"
+    FRONTEND_PORT: "5173"
+    DATA_DIR: /lzcapp/var/data
+    PORT: "8080"
+    NODE_ENV: production
+  health_check:
+    test_url: http://127.0.0.1:8080/health
+    start_period: 120s
+    timeout: 10s
