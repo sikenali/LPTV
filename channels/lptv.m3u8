@@ -1922,3 +1922,6 @@ http://192.151.150.154/live/dszn.m3u8
 http://204.12.221.218:8181/3m1080p/btvkk.m3u8
 #EXTINF:-1 group-title="央视频道" tvg-name="金鹰卡通" tvg-logo="https://epg.112114.xyz/logo/金鹰卡通.png",金鹰卡通
 http://204.12.221.218:8181/3m1080p/hnjykt.m3u8
+
+#EXTINF:-1 tvg-name="康巴卫视" tvg-logo="logos/Kangba卫视.png" group-title="卫视频道",康巴卫视
+http://example.com/kangba.m3u8

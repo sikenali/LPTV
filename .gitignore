@@ -12,3 +12,4 @@ lzc/_lpk_content/
 /.github/logos/
 __pycache__/
 *.pyc
+cef-framework/

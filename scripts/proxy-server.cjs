@@ -326,16 +326,24 @@ const M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
 const DEFAULT_M3U_CHAIN = [
   path.join(__dirname, '..', 'channels', 'lptv.m3u'),
 ]
+// 将 GitHub blob URL 转换为 raw URL，便于直接下载
+function toRawGithubUrl(url) {
+  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)/)
+  if (m) return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}/${m[4]}`
+  return url
+}
+
 const M3U_REMOTE_URLS = [
+  `https://github.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/blob/main/channels/lptv.m3u8`,
   `https://raw.githubusercontent.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/main/channels/lptv.m3u8`,
   `https://raw.githubusercontent.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/main/channels/lptv.m3u`,
-]
+].map(toRawGithubUrl)
 let m3uCache = null
 let m3uCacheTime = 0
 let m3uFetchFailed = false
 
-async function fetchRemoteM3u() {
-  if (m3uFetchFailed) return
+async function fetchRemoteM3u(force = false) {
+  if (m3uFetchFailed && !force) return
   for (const url of M3U_REMOTE_URLS) {
     try {
       const resp = await fetch(url, { signal: AbortSignal.timeout(10000) })
@@ -427,12 +435,37 @@ function parseM3u(content) {
   return channels
 }
 
-app.get('/api/m3u', (req, res) => {
+app.get('/api/m3u', async (req, res) => {
   const shouldRefresh = req.query.refresh === '1'
   const now = Date.now()
+
+  // 缓存命中：非刷新请求且缓存 5 分钟内有效
   if (!shouldRefresh && m3uCache && now - m3uCacheTime < 5 * 60 * 1000) {
     return res.json(m3uCache)
   }
+
+  // 优先远程源（刷新或缓存过期时强制重试一次）
+  if (shouldRefresh || !m3uCache || now - m3uCacheTime >= 5 * 60 * 1000) {
+    await fetchRemoteM3u(shouldRefresh)
+  }
+
+  // 远程成功：用远程清单为主，补充仅存在于本地文件的频道
+  if (m3uCache && m3uCache.length > 0) {
+    try {
+      const localContent = fs.readFileSync(M3U_PATH, 'utf-8')
+      const localChannels = parseM3u(localContent)
+      const remoteNames = new Set(m3uCache.map(c => c.name))
+      const supplements = localChannels.filter(c => !remoteNames.has(c.name))
+      if (supplements.length > 0) {
+        m3uCache = [...m3uCache, ...supplements]
+        console.log(`[m3u] Remote + ${supplements.length} local supplements (${supplements.map(c => c.name).join(', ')})`)
+      }
+    } catch {}
+    m3uCacheTime = now
+    return res.json(m3uCache)
+  }
+
+  // 远程失败：回退本地文件
   try {
     let fileContent = null
     let usedSource = 'lptv.m3u8'
