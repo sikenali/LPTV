@@ -1498,6 +1498,8 @@ if __name__ == "__main__":
         "https://iptvip.95mm.dpdns.org/u/f8FEwpS2XTw1QAVDpIBbjQds/m3u",
         "https://live.fanmingming.com/tv/m3u/ipv6.m3u",
         "https://cdn.jsdelivr.net/gh/Guovin/iptv-api@gd/output/result.m3u",
+        "https://raw.githubusercontent.com/YueChan/Live/main/IPTV.m3u",
+        "https://iptv-org.github.io/iptv/index.m3u",
     ]
     cctv_channel_file = ".github/workflows/lptv/LPTV/CCTV.txt"
     province_channel_files = [

@@ -343,6 +343,31 @@ function parseM3u(content) {
       currentChannel = null
     }
   }
+  // ── 单源频道自动补多条路由 ──────────────────────────────────────────────
+  // 同一频道名若只有一条 URL，从其他来源找备选流补充到 urls 数组
+  const nameMap = {}
+  channels.forEach((ch, i) => {
+    const key = ch.name
+    if (!nameMap[key]) nameMap[key] = []
+    nameMap[key].push(i)
+  })
+  channels.forEach(ch => {
+    if (!ch.url || !ch.urls || ch.urls.length > 1) return
+    const others = nameMap[ch.name] || []
+    const candidates = []
+    others.forEach(idx => {
+      const other = channels[idx]
+      if (other.url && other.url !== ch.url) candidates.push(other.url)
+      if (other.urls) {
+        other.urls.forEach(u => { if (u !== ch.url && !candidates.includes(u)) candidates.push(u) })
+      }
+    })
+    // 去重保留原 url 为首条，补充最多 4 条备选
+    const unique = candidates.filter(u => u !== ch.url && u.startsWith('http'))
+    if (unique.length > 0) {
+      ch.urls = [ch.url, ...unique.slice(0, 4)]
+    }
+  })
   return channels
 }
 
