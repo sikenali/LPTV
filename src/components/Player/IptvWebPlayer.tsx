@@ -88,7 +88,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
 
   const checkUrl = useCallback(async (url: string, signal?: AbortSignal): Promise<StreamCheckResult> => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 9000);
+    const timeout = window.setTimeout(() => controller.abort(), 4000);
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
     try {

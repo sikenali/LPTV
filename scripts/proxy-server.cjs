@@ -172,13 +172,15 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
       enqueue((done) => {
         const ctrl = new AbortController()
         const tid = setTimeout(() => ctrl.abort(), STREAM_TIMEOUT)
-        fetch(streamUrl, { headers: { 'User-Agent': COMMON_UA, 'Referer': referer, 'Origin': referer }, signal: ctrl.signal })
+        fetch(streamUrl, { headers: { 'User-Agent': COMMON_UA, 'Referer': referer, 'Origin': referer }, signal: ctrl.signal, redirect: 'follow' })
           .then(async resp => {
             clearTimeout(tid); if (!resp.ok) { done(); return resolve(res.status(resp.status).json({ error: 'fetch failed', status: resp.status })) }
             const ct = resp.headers.get('content-type') || ''
+            // 使用重定向后的最终 URL 作为 base，确保相对路径正确解析
+            const finalUrl = resp.url || streamUrl
             if (ct.includes('mpegurl') || ct.includes('x-mpegurl') || streamUrl.endsWith('.m3u8')) {
               const text = await resp.text()
-              let rewritten = rewriteManifest(text, streamUrl)
+              let rewritten = rewriteManifest(text, finalUrl)
               const ae = req.headers['accept-encoding'] || ''
               const compress = rewritten.length > 1024 && (ae.includes('gzip') || ae.includes('deflate'))
               setCors()
