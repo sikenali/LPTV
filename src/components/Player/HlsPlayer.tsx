@@ -176,15 +176,10 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
     <div ref={containerRef} className="relative w-full h-full bg-black" style={{ height: '100%', width: '100%' }}>
       <video
         ref={videoRef}
-        className="w-full h-full object-contain"
+        className="w-full h-full object-cover"
         playsInline
         muted
         style={{ height: '100%', width: '100%', display: 'block' }}
-        onClick={() => {
-          const v = videoRef.current
-          if (!v) return
-          isPlayingRef.current ? v.pause() : v.play().catch(() => { v.muted = true; v.play() })
-        }}
       />
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 gap-4">
