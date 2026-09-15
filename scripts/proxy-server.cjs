@@ -8,12 +8,15 @@ const crypto = require('crypto')
 const zlib = require('zlib')
 
 const app = express()
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 8080
 const LOGO_DIR = path.join(__dirname, '..', 'logos')
   const STREAM_TIMEOUT = 60000
 const maxConcurrentStreams = 10
 let activeStreams = 0
 const pendingStreamRequests = []
+
+// 防止 unhandled rejection 导致进程崩溃
+process.on('unhandledRejection', () => {})
 
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
@@ -214,7 +217,7 @@ app.get('/health', (req, res) => { res.json({ status: 'ok', timestamp: new Date(
 // ── 流状态检测 API ─────────────────────────────────────────────────────
 const streamStatusCache = new Map()
 const STREAM_STATUS_TTL = 5 * 60 * 1000 // 5 分钟缓存
-const STREAM_PROBE_BYTES = 256 * 1024
+const STREAM_PROBE_BYTES = 64 * 1024
 
 function isPrivateAddress(address) {
   if (!address) return true
@@ -268,51 +271,54 @@ app.get('/api/stream/check', async (req, res) => {
 
     const started = Date.now()
     const headers = { 'User-Agent': COMMON_UA, Range: `bytes=0-${STREAM_PROBE_BYTES - 1}` }
-    let resp
-    let headResp
-    try {
-      const headController = new AbortController()
-      const headTimeout = setTimeout(() => headController.abort(), 5000)
-      headResp = await fetch(url, { method: 'HEAD', signal: headController.signal, headers: { 'User-Agent': COMMON_UA } })
-      clearTimeout(headTimeout)
-    } catch {}
+    const ctrl = new AbortController()
+    const timeout = setTimeout(() => ctrl.abort(), 5000)
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-    try {
-      resp = await fetch(url, { signal: controller.signal, headers })
-      const firstByteAt = Date.now()
-      let bytes = 0
-      let sample = Buffer.alloc(0)
-      const reader = resp.body?.getReader()
-      if (reader) {
-        while (bytes < STREAM_PROBE_BYTES) {
-          const chunk = await reader.read()
-          if (chunk.done) break
-          if (sample.length < 512) sample = Buffer.concat([sample, Buffer.from(chunk.value).subarray(0, 512 - sample.length)])
-          bytes += chunk.value?.byteLength || 0
-        }
-        await reader.cancel().catch(() => {})
-      }
-      clearTimeout(timeout)
-      const elapsed = Math.max((Date.now() - started) / 1000, 0.001)
-      const contentType = resp.headers.get('content-type') || headResp?.headers.get('content-type') || ''
-      const looksHtml = /text\/html/i.test(contentType) || /^\s*<(?:!doctype|html)/i.test(sample.toString('utf8'))
-      const result = {
-        url,
-        status: (resp.status === 200 || resp.status === 206) && bytes > 0 && !looksHtml ? 'ok' : 'error',
-        latency: Number(((firstByteAt - started) / 1000).toFixed(3)),
-        downloadSpeedKbps: Number((bytes / elapsed / 1024).toFixed(1)),
-        contentType,
-        redirects: resp.url && resp.url !== url ? 1 : 0,
-        checkedAt: new Date().toISOString(),
-        bytes,
-      }
-      streamStatusCache.set(cacheKey, { status: result.status, time: now, result })
-      res.json(result)
-    } finally {
-      clearTimeout(timeout)
+    // 并行执行 HEAD 和 GET，总超时 5s
+    const [headResult, getResult] = await Promise.allSettled([
+      fetch(url, { method: 'HEAD', signal: ctrl.signal, headers: { 'User-Agent': COMMON_UA } }),
+      fetch(url, { signal: ctrl.signal, headers }),
+    ])
+    clearTimeout(timeout)
+
+    let headResp, resp
+    if (headResult.status === 'fulfilled') headResp = headResult.value
+    if (getResult.status === 'fulfilled') resp = getResult.value
+
+    if (!resp) {
+      const result = { url, status: 'error', latency: null, downloadSpeedKbps: 0, contentType: '', redirects: 0, checkedAt: new Date().toISOString(), reason: 'timeout' }
+      streamStatusCache.set(cacheKey, { status: 'error', time: now, result })
+      return res.json(result)
     }
+
+    const firstByteAt = Date.now()
+    let bytes = 0
+    let sample = Buffer.alloc(0)
+    const reader = resp.body?.getReader()
+    if (reader) {
+      while (bytes < STREAM_PROBE_BYTES) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        if (sample.length < 512) sample = Buffer.concat([sample, Buffer.from(chunk.value).subarray(0, 512 - sample.length)])
+        bytes += chunk.value?.byteLength || 0
+      }
+      await reader.cancel().catch(() => {})
+    }
+    const elapsed = Math.max((Date.now() - started) / 1000, 0.001)
+    const contentType = resp.headers.get('content-type') || headResp?.headers.get('content-type') || ''
+    const looksHtml = /text\/html/i.test(contentType) || /^\s*<(?:!doctype|html)/i.test(sample.toString('utf8'))
+    const result = {
+      url,
+      status: (resp.status === 200 || resp.status === 206) && bytes > 0 && !looksHtml ? 'ok' : 'error',
+      latency: Number(((firstByteAt - started) / 1000).toFixed(3)),
+      downloadSpeedKbps: Number((bytes / elapsed / 1024).toFixed(1)),
+      contentType,
+      redirects: resp.url && resp.url !== url ? 1 : 0,
+      checkedAt: new Date().toISOString(),
+      bytes,
+    }
+    streamStatusCache.set(cacheKey, { status: result.status, time: now, result })
+    res.json(result)
   } catch (err) {
     const result = { url, status: 'error', latency: null, downloadSpeedKbps: 0, contentType: '', redirects: 0, checkedAt: new Date().toISOString() }
     streamStatusCache.set(cacheKey, { status: 'error', time: now, result })
