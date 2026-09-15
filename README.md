@@ -22,7 +22,7 @@
 | 多源聚合 | 聚合 15+ 公开源，去重后生成稳定播放清单 |
 | 质量测速 | HEAD + GET 混合探测，综合评分排序（延迟/码率/类型） |
 | 分辨率提取 | 解析 HLS manifest 中的 RESOLUTION/BANDWIDTH，输出质量标签 |
-| IPv4/IPv6 分离 | 自动生成 lptv.ipv4.m3u / lptv.ipv6.m3u 独立清单 |
+| 播放清单 | 统一生成 lptv.m3u 与 lptv.m3u8，按频道保留多条优选线路 |
 | 流媒体代理 | Node.js 反向代理，支持 Referer 伪装、m3u8 URL 重写 |
 | 台标缓存 | 批量下载 fanmingming CDN 台标，本地缓存加速 |
 | TV 模式 | 全屏沉浸式观看，键盘方向键切台，Escape 退出 |

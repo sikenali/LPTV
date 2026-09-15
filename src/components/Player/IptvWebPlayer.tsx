@@ -27,6 +27,20 @@ const LptvSplash: React.FC = () => (
   </>
 );
 
+interface StreamCheckResult {
+  status?: 'ok' | 'error';
+  latency?: number | null;
+  downloadSpeedKbps?: number;
+}
+
+const CHECK_INTERVAL_MS = 60_000;
+const FAILURE_THRESHOLD = 2;
+const CIRCUIT_BREAK_MS = 5 * 60_000;
+
+function channelStorageKey(channel: IptvChannel) {
+  return `lptv-last-url:${channel.tid}-${channel.id}`;
+}
+
 const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
   const defaultChannel = useRef<IptvChannel>(iptvChannels[0] ?? { id: '1', name: 'CCTV1', category: '央视频道', currentProgram: '', tid: 'ys' });
   const initChannel = channel ?? defaultChannel.current;
@@ -40,11 +54,16 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
   const [isMuted, setIsMuted] = useState(true);
   const [m3uLoaded, setM3uLoaded] = useState(false);
   const [allUrls, setAllUrls] = useState<string[]>([]);
+  const [isChecking, setIsChecking] = useState(false);
   // 标记是否已经播放过（用于控制 splash 只显示一次）
   const [hasPlayed, setHasPlayed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hlsPlayerRef = useRef<HlsPlayerRef>(null);
+  const currentUrlRef = useRef('');
+  const failureCountRef = useRef<Record<string, number>>({});
+  const circuitOpenUntilRef = useRef<Record<string, number>>({});
+  const rankingAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (channel) {
@@ -59,6 +78,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     setError(null);
     setM3uLoaded(false);
     setAllUrls([]);
+    setIsChecking(false);
     setIsPaused(false);
     setIsMuted(true);
     setShowControls(false);
@@ -66,28 +86,118 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     setHasPlayed(false);
   }, []);
 
+  const checkUrl = useCallback(async (url: string, signal?: AbortSignal): Promise<StreamCheckResult> => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 9000);
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const response = await fetch(`/api/stream/check?url=${encodeURIComponent(url)}`, { signal: controller.signal });
+      if (!response.ok) return { status: 'error' };
+      return await response.json() as StreamCheckResult;
+    } catch {
+      return { status: 'error' };
+    } finally {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener('abort', abort);
+    }
+  }, []);
+
+  const rankUrls = useCallback(async (urls: string[], channelForStorage: IptvChannel, signal: AbortSignal) => {
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    const recentUrl = localStorage.getItem(channelStorageKey(channelForStorage));
+    const checks = await Promise.all(uniqueUrls.map(async (url) => ({ url, result: await checkUrl(url, signal) })));
+    const healthy = checks
+      .filter(({ result }) => result.status === 'ok')
+      .sort((a, b) => {
+        const score = (item: { url: string; result: StreamCheckResult }) => {
+          const speed = Math.min(1, (item.result.downloadSpeedKbps ?? 0) / 2048);
+          const latency = Math.max(0, 1 - (item.result.latency ?? 9) / 5);
+          return speed * 0.55 + latency * 0.45 + (item.url === recentUrl ? 0.03 : 0);
+        };
+        return score(b) - score(a);
+      })
+      .map(({ url }) => url);
+    const remainder = uniqueUrls.filter(url => !healthy.includes(url));
+    // 检测服务暂时不可达时不阻塞播放，退回 CI 生成的线路顺序。
+    const fallback = recentUrl && uniqueUrls.includes(recentUrl)
+      ? [recentUrl, ...uniqueUrls.filter(url => url !== recentUrl)]
+      : uniqueUrls;
+    return healthy.length > 0 ? [...healthy, ...remainder] : fallback;
+  }, [checkUrl]);
+
   useEffect(() => {
     setError(null);
     setM3uLoaded(false);
-
-    fetch('/api/m3u')
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.length > 0) {
-          const urls = matchM3uUrls(currentChannel, data);
-          if (urls.length === 0) { setError('未找到该频道的播放地址'); setM3uLoaded(true); return; }
-          setAllUrls(urls);
-          setCurrentUrlIndex(0);
-          setM3uLoaded(true);
-        } else {
-          setError('M3U 源无可播放频道');
-          setM3uLoaded(true);
-        }
-      })
-      .catch(() => { setError('M3U 源加载失败'); setM3uLoaded(true); });
-  }, [currentChannel]);
+    rankingAbortRef.current?.abort();
+    const controller = new AbortController();
+    rankingAbortRef.current = controller;
+    setIsChecking(true);
+    (async () => {
+      try {
+        const response = await fetch('/api/m3u', { signal: controller.signal });
+        const data = await response.json();
+        if (!Array.isArray(data) || data.length === 0) throw new Error('empty_m3u');
+        const urls = matchM3uUrls(currentChannel, data);
+        if (urls.length === 0) { setError('未找到该频道的播放地址'); return; }
+        const ranked = await rankUrls(urls, currentChannel, controller.signal);
+        if (controller.signal.aborted) return;
+        setAllUrls(ranked);
+        setCurrentUrlIndex(0);
+        setM3uLoaded(true);
+      } catch (err) {
+        if (!controller.signal.aborted) { setError(err instanceof Error && err.message === 'empty_m3u' ? 'M3U 源无可播放频道' : 'M3U 源加载失败'); setM3uLoaded(true); }
+      } finally {
+        if (!controller.signal.aborted) setIsChecking(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [currentChannel, rankUrls]);
 
   const activeUrl = m3uLoaded ? (allUrls[currentUrlIndex] ?? '') : '';
+
+  useEffect(() => {
+    currentUrlRef.current = activeUrl;
+  }, [activeUrl]);
+
+  const switchToNextAvailable = useCallback(() => {
+    const current = currentUrlRef.current;
+    if (current) {
+      const failures = (failureCountRef.current[current] ?? 0) + 1;
+      failureCountRef.current[current] = failures;
+      if (failures >= FAILURE_THRESHOLD) circuitOpenUntilRef.current[current] = Date.now() + CIRCUIT_BREAK_MS;
+    }
+    const now = Date.now();
+    const nextIndex = allUrls.findIndex((url, index) => index !== currentUrlIndex && (circuitOpenUntilRef.current[url] ?? 0) <= now);
+    if (nextIndex >= 0) {
+      setCurrentUrlIndex(nextIndex);
+      setError(null);
+      return true;
+    }
+    return false;
+  }, [allUrls, currentUrlIndex]);
+
+  useEffect(() => {
+    if (!m3uLoaded || !activeUrl) return;
+    let disposed = false;
+    const checkCurrent = async () => {
+      const url = currentUrlRef.current;
+      if (!url || disposed) return;
+      const result = await checkUrl(url);
+      if (disposed) return;
+      if (result.status === 'ok') {
+        failureCountRef.current[url] = 0;
+        circuitOpenUntilRef.current[url] = 0;
+        localStorage.setItem(channelStorageKey(currentChannel), url);
+      } else if ((failureCountRef.current[url] ?? 0) + 1 >= FAILURE_THRESHOLD && !switchToNextAvailable()) {
+        setError('当前频道线路均不可用，请重试');
+      } else {
+        failureCountRef.current[url] = (failureCountRef.current[url] ?? 0) + 1;
+      }
+    };
+    const timer = window.setInterval(checkCurrent, CHECK_INTERVAL_MS);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [activeUrl, checkUrl, currentChannel, m3uLoaded, switchToNextAvailable]);
 
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -100,8 +210,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
   }, [scheduleHide]);
 
   const handleRetry = useCallback(() => {
-    if (allUrls.length > 0 && currentUrlIndex < allUrls.length - 1) {
-      setCurrentUrlIndex(i => i + 1);
+    if (switchToNextAvailable()) {
       setError(null);
       return;
     }
@@ -116,7 +225,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
         }
       })
       .catch(() => setError('M3U 源加载失败'));
-  }, [currentChannel, allUrls, currentUrlIndex]);
+  }, [currentChannel, switchToNextAvailable]);
 
   const handleTogglePlay = useCallback(() => {
     setIsPaused(p => !p);
@@ -143,7 +252,13 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
 
   const handleVideoReady = useCallback(() => {
     setHasPlayed(true);
-  }, []);
+    const url = currentUrlRef.current;
+    if (url) {
+      failureCountRef.current[url] = 0;
+      circuitOpenUntilRef.current[url] = 0;
+      localStorage.setItem(channelStorageKey(currentChannel), url);
+    }
+  }, [currentChannel]);
 
   if (error) {
     return (
@@ -165,7 +280,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
       onMouseMove={handleTouch}
     >
       {/* LPTV 加载动画：仅在 M3U 加载且未播放过时显示 */}
-      {!m3uLoaded && !hasPlayed && <LptvSplash />}
+      {(!m3uLoaded || isChecking) && !hasPlayed && <LptvSplash />}
 
       {/* 视频区域：绝对定位占满容器 */}
       <div className="absolute inset-0">
@@ -175,12 +290,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
           url={activeUrl}
           onReady={handleVideoReady}
           onError={() => {
-            if (allUrls.length > 0 && currentUrlIndex < allUrls.length - 1) {
-              setCurrentUrlIndex(i => i + 1);
-              setError(null);
-              return;
-            }
-            setError('播放失败，请重试');
+            if (!switchToNextAvailable()) setError('播放失败，请重试');
           }}
         />
       </div>

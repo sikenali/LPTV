@@ -4,12 +4,21 @@ on:
   schedule:
     - cron: '0 */4 * * *'
   workflow_dispatch:
+    inputs:
+      ffprobe:
+        description: '对每个频道前 2 条线路执行 FFprobe 解码验证'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
 
 env:
   TZ: Asia/Shanghai
+  # 手动触发时可开启 FFprobe；运行时播放器不依赖 FFmpeg。
+  LPTV_FFPROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.ffprobe == false && '0' || '1' }}
+  LPTV_FFPROBE_MAX: "2"
 
 jobs:
   scrape-and-update:
@@ -25,6 +34,10 @@ jobs:
 
       - name: Install dependencies
         run: pip install aiohttp
+
+      - name: Install FFprobe
+        if: ${{ env.LPTV_FFPROBE == '1' }}
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Run scraping script
         run: python .github/workflows/lptv/lptv.py

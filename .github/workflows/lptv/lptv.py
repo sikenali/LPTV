@@ -6,6 +6,10 @@ import json
 import urllib.parse
 import gzip
 import xml.etree.ElementTree as ET
+import socket
+import ipaddress
+import shutil
+import subprocess
 from collections import Counter, defaultdict
 import re
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Any
@@ -46,6 +50,16 @@ CONFIG = {
     "epg_cache_ttl_hours": 12,
     "max_resolution": "1080p",  # 高于此分辨率的源降低权重
     "min_bandwidth_kbps": 50,  # 最低码率阈值(Kbps)
+    # 每个频道最多保留的线路数。默认三网源单频道最多 6 条，留出 2 条
+    # 经过测速的远程线路，避免合并时把默认线路全部截掉。
+    "max_streams_per_channel": 8,
+    # 真实 GET 探测最多读取的字节数；避免把直播流完整下载到内存。
+    "probe_bytes": 256 * 1024,
+    # 默认关闭 FFprobe，设置 LPTV_FFPROBE=1 后仅检查每频道前 N 条线路。
+    "ffprobe_enabled": os.environ.get("LPTV_FFPROBE", "0") == "1",
+    "ffprobe_max_per_channel": int(os.environ.get("LPTV_FFPROBE_MAX", "2")),
+    "ffprobe_timeout": float(os.environ.get("LPTV_FFPROBE_TIMEOUT", "8")),
+    "block_private_hosts": os.environ.get("LPTV_ALLOW_PRIVATE", "0") != "1",
 }
 
 # 浏览器无法播放的协议，直接从源中过滤掉
@@ -852,6 +866,77 @@ def select_multi_streams(valid_entries: Iterable[Dict[str, Any]], max_per_channe
     return result
 
 
+def _ffprobe_stream(url: str) -> Optional[Dict[str, Any]]:
+    """同步执行一次 ffprobe；返回 None 表示未安装或进程异常。"""
+    binary = shutil.which("ffprobe")
+    if not binary:
+        return None
+    started = time.time()
+    command = [
+        binary, "-v", "error", "-rw_timeout", str(int(CONFIG["ffprobe_timeout"] * 1_000_000)),
+        "-analyzeduration", "2M", "-probesize", "2M", "-show_streams", "-of", "json", url,
+    ]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True,
+                                   timeout=CONFIG["ffprobe_timeout"] + 2)
+        if completed.returncode != 0:
+            return {"ok": False, "startup_ms": round((time.time() - started) * 1000), "error": "ffprobe_exit"}
+        payload = json.loads(completed.stdout or "{}")
+        streams = payload.get("streams") or []
+        video = next((stream for stream in streams if stream.get("codec_type") == "video"), None)
+        if not video:
+            return {"ok": False, "startup_ms": round((time.time() - started) * 1000), "error": "no_video"}
+        width, height = video.get("width"), video.get("height")
+        resolution = None
+        if isinstance(width, int) and isinstance(height, int):
+            max_dim = max(width, height)
+            resolution = "4K" if max_dim >= 3840 else "1080p" if max_dim >= 1920 else "720p" if max_dim >= 1280 else "480p" if max_dim >= 720 else "SD"
+        return {
+            "ok": True,
+            "startup_ms": round((time.time() - started) * 1000),
+            "codec": video.get("codec_name"),
+            "width": width,
+            "height": height,
+            "resolution": resolution,
+        }
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        return {"ok": False, "startup_ms": round((time.time() - started) * 1000), "error": "ffprobe_error"}
+
+
+async def validate_top_streams_with_ffprobe(multi_entries: Dict[str, List[Dict[str, Any]]]) -> None:
+    """只验证每个频道排名靠前的少量线路，避免 CI 对所有源启动 FFmpeg。"""
+    if not CONFIG["ffprobe_enabled"]:
+        return
+    if not shutil.which("ffprobe"):
+        print("[ffprobe] LPTV_FFPROBE=1 但系统未安装 ffprobe，跳过解码验证")
+        return
+    jobs = []
+    limit = max(1, CONFIG["ffprobe_max_per_channel"])
+    for entries in multi_entries.values():
+        for entry in entries[:limit]:
+            jobs.append(entry)
+    probe_sem = asyncio.Semaphore(8)
+
+    async def probe(entry: Dict[str, Any]) -> None:
+        async with probe_sem:
+            result = await asyncio.to_thread(_ffprobe_stream, entry["url"])
+        if result is None:
+            return
+        entry["ffprobe_ok"] = result.get("ok")
+        entry["ffprobe_startup_ms"] = result.get("startup_ms")
+        entry["video_codec"] = result.get("codec")
+        entry["ffprobe_resolution"] = result.get("resolution")
+        if result.get("ok"):
+            entry["quality_score"] = min(1.0, round(entry.get("quality_score", 0.0) + 0.08, 2))
+        else:
+            entry["quality_score"] = round(entry.get("quality_score", 0.0) * 0.65, 2)
+
+    await asyncio.gather(*(probe(entry) for entry in jobs))
+    for entries in multi_entries.values():
+        entries.sort(key=lambda e: (-e.get("quality_score", 0.0), e.get("latency") or 999.0))
+    print(f"[ffprobe] 已验证 {len(jobs)} 条候选线路")
+
+
 def extract_urls_from_txt(content):
     """增强 TXT 解析：支持逗号、竖线、制表符分隔，跳过注释行"""
     urls: List[Dict[str, Any]] = []
@@ -935,54 +1020,91 @@ def is_valid_channel_name(channel: str) -> bool:
     return True
 
 
+def _is_private_ip(value: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(value)
+        return bool(ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified)
+    except ValueError:
+        return False
+
+
+def _host_resolves_to_private(url: str) -> bool:
+    """阻止源地址解析到内网、回环、链路本地或组播地址，降低 SSRF 风险。"""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.hostname
+        if not host:
+            return True
+        if _is_private_ip(host):
+            return True
+        addresses = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        return any(_is_private_ip(addr[4][0]) for addr in addresses)
+    except (OSError, ValueError):
+        return True
+
+
+def _looks_like_error_page(body: bytes, content_type: str) -> bool:
+    sample = body[:512].lstrip().lower()
+    if b"<html" in sample or b"<!doctype" in sample:
+        return True
+    if "text/html" in content_type and b"#extm3u" not in sample:
+        return True
+    return False
+
+
+def _is_valid_probe_content(body: bytes, content_type: str) -> bool:
+    if not body or _looks_like_error_page(body, content_type):
+        return False
+    return not content_type or any(ct in content_type for ct in VALID_CONTENT_TYPES)
+
+
 async def test_stream(session: aiohttp.ClientSession, semaphore: asyncio.Semaphore, url: str):
-    """测速并验证流内容质量（增强版：GET 部分探测 + 质量评分）"""
+    """使用 HEAD + 有限字节 GET 验证源，并记录首字节延迟和下载速度。"""
     async with semaphore:
+        if CONFIG["block_private_hosts"] and await asyncio.to_thread(_host_resolves_to_private, url):
+            return False, None
         for attempt in range(CONFIG["max_retries"]):
             start_time = time.time()
-            quality_info = {"latency": None, "content_length": 0, "content_type": "", "redirect_count": 0, "score": 0.0}
+            quality_info = {"latency": None, "content_length": 0, "content_type": "", "redirect_count": 0,
+                            "head_latency": None, "download_speed_kbps": 0.0, "score": 0.0}
             try:
-                # HEAD 快速探测
+                # HEAD 只用于快速获取状态和重定向信息；部分源会拒绝 HEAD，必须继续走 GET。
                 async with session.head(url, timeout=aiohttp.ClientTimeout(total=CONFIG["stream_test_timeout"]),
                                         allow_redirects=True) as response:
-                    elapsed_time = time.time() - start_time
                     quality_info["redirect_count"] = response.history.__len__()
+                    quality_info["head_latency"] = time.time() - start_time
                     content_type = response.headers.get('Content-Type', '').lower()
                     quality_info["content_type"] = content_type
-                    # 允许有效的视频类型或为空（m3u8 playlist 通常无 content-type）
-                    is_valid_content = not content_type or any(
-                        ct in content_type for ct in VALID_CONTENT_TYPES
-                    )
-                    if response.status == 200 and is_valid_content:
-                        quality_info["latency"] = elapsed_time
-                        # HEAD 无法获取 Content-Length，尝试短 GET 探测
-                        cl = await _get_partial_content_length(session, url, elapsed_time)
-                        quality_info["content_length"] = cl
+                    head_ok = response.status == 200 and (not content_type or any(ct in content_type for ct in VALID_CONTENT_TYPES))
+
+                if not CONFIG["stream_content_verify"]:
+                    if head_ok:
+                        quality_info["latency"] = time.time() - start_time
                         quality_info["score"] = _compute_quality_score(quality_info)
                         return True, quality_info
-                    elif response.status != 200:
-                        if attempt == CONFIG["max_retries"] - 1:
-                            return False, None
-                        await asyncio.sleep(0.3 * (attempt + 1))
-                        continue
-                # HEAD 被拒绝时回退到短 GET 探测（前 4KB）
-                if CONFIG["stream_content_verify"]:
-                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=CONFIG["stream_test_timeout"]),
-                                            allow_redirects=True) as response:
-                        elapsed_time = time.time() - start_time
-                        content_type = response.headers.get('Content-Type', '').lower()
-                        quality_info["redirect_count"] = len(response.history)
-                        quality_info["content_type"] = content_type
-                        body = await response.read(4096)
-                        quality_info["content_length"] = len(body)
-                        is_valid_content = not content_type or any(
-                            ct in content_type for ct in VALID_CONTENT_TYPES
-                        )
-                        if response.status == 200 and is_valid_content:
-                            quality_info["latency"] = elapsed_time
-                            quality_info["score"] = _compute_quality_score(quality_info)
-                            return True, quality_info
-                        return False, None
+                    raise RuntimeError("HEAD probe failed")
+
+                # 所有成功候选都做有限 GET，确认不是空响应/错误页，并计算吞吐。
+                get_start = time.time()
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=CONFIG["stream_test_timeout"]),
+                                        allow_redirects=True, headers={"Range": f"bytes=0-{CONFIG['probe_bytes'] - 1}"}) as response:
+                    first_byte_time = time.time() - get_start
+                    content_type = response.headers.get('Content-Type', '').lower()
+                    quality_info["redirect_count"] = len(response.history)
+                    quality_info["content_type"] = content_type
+                    body = bytearray()
+                    async for chunk in response.content.iter_chunked(64 * 1024):
+                        body.extend(chunk)
+                        if len(body) >= CONFIG["probe_bytes"]:
+                            break
+                    elapsed = max(time.time() - get_start, 0.001)
+                    quality_info["content_length"] = len(body)
+                    quality_info["latency"] = first_byte_time
+                    quality_info["download_speed_kbps"] = round(len(body) / elapsed / 1024, 1)
+                    if response.status in (200, 206) and _is_valid_probe_content(bytes(body), content_type):
+                        quality_info["score"] = _compute_quality_score(quality_info)
+                        return True, quality_info
+                    raise RuntimeError("GET probe failed")
             except asyncio.TimeoutError:
                 if attempt == CONFIG["max_retries"] - 1:
                     return False, None
@@ -1004,7 +1126,7 @@ async def _get_partial_content_length(session: aiohttp.ClientSession, url: str, 
 
 
 def _compute_quality_score(info: Dict[str, Any]) -> float:
-    """综合质量评分：延迟低 + 内容长度合理 + 有效视频类型 = 高分"""
+    """综合质量评分：延迟、有效内容、类型和实际下载速度。"""
     latency = info.get("latency") or 999.0
     cl = info.get("content_length", 0)
     ct = info.get("content_type", "")
@@ -1030,7 +1152,10 @@ def _compute_quality_score(info: Dict[str, Any]) -> float:
         cl_score = 0.3  # HEAD 探测无法获取 CL，给中等分数
     # 类型分：m3u8 playlist 或视频流给高分
     ct_score = 0.9 if any(t in ct for t in ('mpegurl', 'mp2t', 'mp4', 'video', 'audio')) else 0.5
-    return round(latency_score * 0.5 + cl_score * 0.2 + ct_score * 0.3, 2)
+    speed = info.get("download_speed_kbps") or 0
+    # 256KB 探测足以区分卡死/极慢源；超过 2MB/s 不再额外加分。
+    speed_score = min(1.0, speed / 2048.0) if speed else 0.0
+    return round(latency_score * 0.35 + cl_score * 0.15 + ct_score * 0.25 + speed_score * 0.25, 2)
 
 
 # ─── HLS 分辨率 & 码率解析 ────────────────────────────────────────
@@ -1132,11 +1257,20 @@ async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.
     result: Dict[str, Any] = {"url": file_path, "total": 0, "valid": 0, "filtered_protocol": 0, "failed": 0,
                                "avg_score": 0.0, "avg_latency": 0.0, "resolutions": {}, "bandwidths": []}
     try:
-        async with session.get(file_path, timeout=aiohttp.ClientTimeout(total=CONFIG["timeout"])) as response:
-            if response.status != 200:
-                print(f"  [warn] {file_path}: HTTP {response.status}")
+        # 默认源是随仓库发布的本地 M3U，和远程源共用后续测速、去重及排序流程。
+        if file_path.startswith(("http://", "https://")):
+            async with session.get(file_path, timeout=aiohttp.ClientTimeout(total=CONFIG["timeout"])) as response:
+                if response.status != 200:
+                    print(f"  [warn] {file_path}: HTTP {response.status}")
+                    return [], result
+                content = await response.text(errors="ignore")
+        else:
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as source_file:
+                    content = source_file.read()
+            except OSError as exc:
+                print(f"  [warn] {file_path}: 本地文件读取失败 ({exc})")
                 return [], result
-            content = await response.text(errors="ignore")
         if not content or len(content) < 10:
             print(f"  [warn] {file_path}: 内容为空或过短 ({len(content)} bytes)")
             return [], result
@@ -1172,9 +1306,11 @@ async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.
                     "url": url,
                     "source_group_title": entry.get("source_group_title"),
                     "latency": quality.get("latency"),
+                    "head_latency": quality.get("head_latency"),
                     "quality_score": quality.get("score", 0.0),
                     "content_length": quality.get("content_length", 0),
                     "content_type": quality.get("content_type", ""),
+                    "download_speed_kbps": quality.get("download_speed_kbps", 0.0),
                     "resolution": None,
                     "bandwidth_kbps": None,
                 }
@@ -1250,6 +1386,10 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
             "latency": entry.get("latency"),
             "resolution": entry.get("resolution"),
             "bandwidth_kbps": entry.get("bandwidth_kbps"),
+            "download_speed_kbps": entry.get("download_speed_kbps", 0.0),
+            "ffprobe_ok": entry.get("ffprobe_ok"),
+            "video_codec": entry.get("video_codec"),
+            "ffprobe_resolution": entry.get("ffprobe_resolution"),
         }
         if is_cctv_channel(channel, normalized_channel, normalized_cctv_channels) or upstream_group == "央视频道":
             item["group_title"] = "央视频道"
@@ -1293,14 +1433,6 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
     generated_at = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
     unique_count = len(channel_groups)
 
-    # ── IPv4/IPv6 分离导出（对齐 iptv-checker 4.4.0）───────────────────
-    ipv4_items, ipv6_items = [], []
-    for item in all_channels:
-        if item["url"].startswith("https://"):
-            ipv6_items.append(item)
-        else:
-            ipv4_items.append(item)
-
     def _write_m3u(f, channels, gen_time, count):
         f.write("#EXTM3U\n")
         f.write(f"# Generated-Time: {gen_time}\n")
@@ -1321,12 +1453,20 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
                     extra_parts.append(f'tvg-quality="{q:.2f}"')
                 if lat > 0:
                     extra_parts.append(f'tvg-latency="{lat:.3f}"')
+                speed = item.get("download_speed_kbps") or 0
+                if speed > 0:
+                    extra_parts.append(f'tvg-speed="{speed:.1f}kbps"')
                 if bw:
                     extra_parts.append(f'tvg-bandwidth="{bw}"')
+                if item.get("ffprobe_ok") is not None:
+                    extra_parts.append(f'tvg-ffprobe="{"ok" if item["ffprobe_ok"] else "fail"}"')
+                if item.get("video_codec"):
+                    extra_parts.append(f'tvg-codec="{item["video_codec"]}"')
                 extra = f' {" ".join(extra_parts)}' if extra_parts else ""
                 display_name = channel_name
-                if resolution_tag:
-                    display_name = f"{channel_name} [{resolution_tag}]"
+                display_resolution = item.get("ffprobe_resolution") or resolution_tag
+                if display_resolution:
+                    display_name = f"{channel_name} [{display_resolution}]"
                 f.write(f"#EXTINF:-1 tvg-name=\"{channel_name}\" tvg-logo=\"{logo}\" group-title=\"{group_title}\"{extra},{display_name}\n")
                 f.write(f"{item['url']}\n")
 
@@ -1334,18 +1474,6 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
         _write_m3u(f, all_channels, generated_at, unique_count)
     with open(m3u8_filename, 'w', encoding='utf-8') as f:
         _write_m3u(f, all_channels, generated_at, unique_count)
-
-    # IPv4 / IPv6 分别导出
-    if ipv4_items:
-        ipv4_file = filename.replace('.m3u', '.ipv4.m3u')
-        with open(ipv4_file, 'w', encoding='utf-8') as f:
-            _write_m3u(f, ipv4_items, generated_at, len(ipv4_items))
-        print(f"  [export] IPv4: {len(ipv4_items)} 条 → {ipv4_file}")
-    if ipv6_items:
-        ipv6_file = filename.replace('.m3u', '.ipv6.m3u')
-        with open(ipv6_file, 'w', encoding='utf-8') as f:
-            _write_m3u(f, ipv6_items, generated_at, len(ipv6_items))
-        print(f"  [export] IPv6: {len(ipv6_items)} 条 → {ipv6_file}")
 
     return all_channels
 
@@ -1443,7 +1571,11 @@ async def main(file_urls, cctv_channel_file, province_channel_files):
                 all_valid_entries.extend(valid_entries)
     save_source_quality_cache(quality_cache)
     deduplicated_entries = deduplicate_candidate_entries(all_valid_entries)
-    multi_entries = select_multi_streams(deduplicated_entries)
+    multi_entries = select_multi_streams(
+        deduplicated_entries,
+        max_per_channel=CONFIG["max_streams_per_channel"],
+    )
+    await validate_top_streams_with_ffprobe(multi_entries)
     total_unique = len(multi_entries)
     total_streams = sum(len(v) for v in multi_entries.values())
     # 收集所有延迟用于分位数统计
@@ -1472,6 +1604,8 @@ async def main(file_urls, cctv_channel_file, province_channel_files):
 
 if __name__ == "__main__":
     file_urls = [
+        # WanXiang 三网聚合源：参与测速、质量评分和多线路合并流程
+        "https://gh-proxy.org/https://raw.githubusercontent.com/AudiHub/WanXiang-Release/main/IPTV.m3u",
         # 高质量：频道最多
         "https://raw.githubusercontent.com/suxuang/myIPTV/refs/heads/main/ipv4.m3u",
         # IPv6 补充（853条）

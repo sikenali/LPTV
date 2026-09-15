@@ -1,5 +1,7 @@
 const express = require('express')
 const cors = require('cors')
+const dns = require('dns').promises
+const net = require('net')
 const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
@@ -12,8 +14,6 @@ const LOGO_DIR = path.join(__dirname, '..', 'logos')
 const maxConcurrentStreams = 10
 let activeStreams = 0
 const pendingStreamRequests = []
-
-const PRIV_HOSTS = ['localhost','127.','10.','172.16.','172.17.','172.18.','172.19.','172.20.','172.21.','172.22.','172.23.','172.24.','172.25.','172.26.','172.27.','172.28.','172.29.','172.30.','172.31.','192.168.','169.254.']
 
 if (!fs.existsSync(LOGO_DIR)) fs.mkdirSync(LOGO_DIR, { recursive: true })
 
@@ -144,7 +144,7 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
     const parsed = new URL(streamUrl)
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return res.status(400).json({ error: 'Only http/https' })
     const hostname = parsed.hostname.toLowerCase()
-    if (PRIV_HOSTS.some(p => hostname.startsWith(p) || hostname === 'localhost')) return res.status(403).json({ error: 'Internal IP' })
+    if (await resolvesToPrivateHost(hostname)) return res.status(403).json({ error: 'Internal or unresolved host' })
   } catch { return res.status(400).json({ error: 'Invalid URL' }) }
 
   const referer = getSmartReferer(streamUrl)
@@ -214,10 +214,37 @@ app.get('/health', (req, res) => { res.json({ status: 'ok', timestamp: new Date(
 // ── 流状态检测 API ─────────────────────────────────────────────────────
 const streamStatusCache = new Map()
 const STREAM_STATUS_TTL = 5 * 60 * 1000 // 5 分钟缓存
+const STREAM_PROBE_BYTES = 256 * 1024
+
+function isPrivateAddress(address) {
+  if (!address) return true
+  if (net.isIPv4(address)) {
+    const parts = address.split('.').map(Number)
+    return parts[0] === 10 || parts[0] === 127 || parts[0] === 169 && parts[1] === 254 ||
+      parts[0] === 192 && parts[1] === 168 || parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31 ||
+      parts[0] === 0 || parts[0] >= 224
+  }
+  if (net.isIPv6(address)) {
+    const value = address.toLowerCase()
+    return value === '::1' || value === '::' || value.startsWith('fc') || value.startsWith('fd') || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb')
+  }
+  return true
+}
+
+async function resolvesToPrivateHost(hostname) {
+  if (net.isIP(hostname)) return isPrivateAddress(hostname)
+  try {
+    const addresses = await dns.lookup(hostname, { all: true })
+    return addresses.some(({ address }) => isPrivateAddress(address))
+  } catch {
+    return true
+  }
+}
 
 app.get('/api/stream/check', async (req, res) => {
-  const { url } = req.query
-  if (!url) return res.status(400).json({ error: 'Missing url' })
+  const rawUrl = req.query.url
+  if (!rawUrl || Array.isArray(rawUrl)) return res.status(400).json({ error: 'Missing url' })
+  const url = String(rawUrl).trim()
 
   const cacheKey = url
   const now = Date.now()
@@ -226,49 +253,78 @@ app.get('/api/stream/check', async (req, res) => {
   if (streamStatusCache.has(cacheKey)) {
     const cached = streamStatusCache.get(cacheKey)
     if (now - cached.time < STREAM_STATUS_TTL) {
-      return res.json({ url, status: cached.status })
+      return res.json(cached.result)
     }
     streamStatusCache.delete(cacheKey)
   }
 
   try {
     const parsedUrl = new URL(url)
-    // 阻止内网地址
-    if (PRIV_HOSTS.some(p => parsedUrl.hostname.startsWith(p) || parsedUrl.hostname === 'localhost')) {
-      return res.json({ url, status: 'error' })
+    if (!['http:', 'https:'].includes(parsedUrl.protocol) || await resolvesToPrivateHost(parsedUrl.hostname)) {
+      const result = { url, status: 'error', latency: null, downloadSpeedKbps: 0, contentType: '', redirects: 0, checkedAt: new Date().toISOString(), reason: 'private_or_invalid_host' }
+      streamStatusCache.set(cacheKey, { status: 'error', time: now, result })
+      return res.json(result)
     }
 
+    const started = Date.now()
+    const headers = { 'User-Agent': COMMON_UA, Range: `bytes=0-${STREAM_PROBE_BYTES - 1}` }
+    let resp
+    let headResp
+    try {
+      const headController = new AbortController()
+      const headTimeout = setTimeout(() => headController.abort(), 5000)
+      headResp = await fetch(url, { method: 'HEAD', signal: headController.signal, headers: { 'User-Agent': COMMON_UA } })
+      clearTimeout(headTimeout)
+    } catch {}
+
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5000)
-
-    const resp = await fetch(url, {
-      method: 'HEAD',
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      },
-    })
-    clearTimeout(timeout)
-
-    const status = resp.ok ? 'ok' : 'error'
-    streamStatusCache.set(cacheKey, { status, time: now })
-    res.json({ url, status })
+    const timeout = setTimeout(() => controller.abort(), 8000)
+    try {
+      resp = await fetch(url, { signal: controller.signal, headers })
+      const firstByteAt = Date.now()
+      let bytes = 0
+      let sample = Buffer.alloc(0)
+      const reader = resp.body?.getReader()
+      if (reader) {
+        while (bytes < STREAM_PROBE_BYTES) {
+          const chunk = await reader.read()
+          if (chunk.done) break
+          if (sample.length < 512) sample = Buffer.concat([sample, Buffer.from(chunk.value).subarray(0, 512 - sample.length)])
+          bytes += chunk.value?.byteLength || 0
+        }
+        await reader.cancel().catch(() => {})
+      }
+      clearTimeout(timeout)
+      const elapsed = Math.max((Date.now() - started) / 1000, 0.001)
+      const contentType = resp.headers.get('content-type') || headResp?.headers.get('content-type') || ''
+      const looksHtml = /text\/html/i.test(contentType) || /^\s*<(?:!doctype|html)/i.test(sample.toString('utf8'))
+      const result = {
+        url,
+        status: (resp.status === 200 || resp.status === 206) && bytes > 0 && !looksHtml ? 'ok' : 'error',
+        latency: Number(((firstByteAt - started) / 1000).toFixed(3)),
+        downloadSpeedKbps: Number((bytes / elapsed / 1024).toFixed(1)),
+        contentType,
+        redirects: resp.url && resp.url !== url ? 1 : 0,
+        checkedAt: new Date().toISOString(),
+        bytes,
+      }
+      streamStatusCache.set(cacheKey, { status: result.status, time: now, result })
+      res.json(result)
+    } finally {
+      clearTimeout(timeout)
+    }
   } catch (err) {
-    streamStatusCache.set(cacheKey, { status: 'error', time: now })
-    res.json({ url, status: 'error' })
+    const result = { url, status: 'error', latency: null, downloadSpeedKbps: 0, contentType: '', redirects: 0, checkedAt: new Date().toISOString() }
+    streamStatusCache.set(cacheKey, { status: 'error', time: now, result })
+    res.json(result)
   }
 })
 
 // ── 频道列表 API ─────────────────────────────────────────────────────────
 const M3U_PATH = path.join(__dirname, '..', 'channels', 'lptv.m3u8')
-// 三网 1~5 fallback 链（优先级从高到低）
+// 统一清单的本地 fallback（不再依赖 default*.m3u）
 const DEFAULT_M3U_CHAIN = [
-  path.join(__dirname, '..', 'channels', 'default.m3u'),
-  path.join(__dirname, '..', 'channels', 'default-1.m3u'),
-  path.join(__dirname, '..', 'channels', 'default-2.m3u'),
-  path.join(__dirname, '..', 'channels', 'default-3.m3u'),
-  path.join(__dirname, '..', 'channels', 'default-4.m3u'),
-  path.join(__dirname, '..', 'channels', 'default-5.m3u'),
+  path.join(__dirname, '..', 'channels', 'lptv.m3u'),
 ]
 const M3U_REMOTE_URLS = [
   `https://raw.githubusercontent.com/${process.env.GITHUB_REPO || 'sikenali/LPTV'}/main/channels/lptv.m3u8`,
@@ -408,4 +464,3 @@ app.listen(PORT, () => {
   console.log(`LPTV proxy server running on port ${PORT}`)
   console.log(`[startup] CORS allowed: ${ALLOWED_ORIGINS.join(', ')}`)
 })
-
