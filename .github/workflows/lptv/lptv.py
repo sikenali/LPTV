@@ -1494,6 +1494,10 @@ if __name__ == "__main__":
         "https://raw.githubusercontent.com/Kimentanm/aptv/master/m3u/iptv.m3u",
         "https://raw.githubusercontent.com/BurningC4/Chinese-IPTV/master/TV-IPV4.m3u",
         "https://raw.githubusercontent.com/zwc456baby/iptv_alive/refs/heads/master/live.m3u",
+        # 额外聚合源
+        "https://iptvip.95mm.dpdns.org/u/f8FEwpS2XTw1QAVDpIBbjQds/m3u",
+        "https://live.fanmingming.com/tv/m3u/ipv6.m3u",
+        "https://cdn.jsdelivr.net/gh/Guovin/iptv-api@gd/output/result.m3u",
     ]
     cctv_channel_file = ".github/workflows/lptv/LPTV/CCTV.txt"
     province_channel_files = [
