@@ -1180,13 +1180,23 @@ def parse_hls_resolution_from_url(stream_url: str) -> Optional[Tuple[str, int]]:
 
 
 async def fetch_hls_manifest_info(session: aiohttp.ClientSession, url: str) -> Dict[str, Any]:
-    """拉取 HLS manifest，解析最高分辨率和码率（单线程，避免过多请求）"""
-    info = {"resolution": None, "bandwidth_kbps": None, "variant_count": 0}
+    """拉取 HLS manifest，解析最高分辨率、码率及直播/点播特征（用于过滤 VOD 源）"""
+    info = {"resolution": None, "bandwidth_kbps": None, "variant_count": 0, "is_vod": False}
     try:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=5), allow_redirects=True) as resp:
             if resp.status != 200:
                 return info
             text = await resp.text(errors="ignore")
+        # ── VOD 检测：直播流与点播流的特征差异 ──
+        # 1. EXT-X-ENDLIST 存在 → 点播（直播流没有此标签）
+        # 2. EXT-X-MEDIA-SEQUENCE == 0 且分段数 > 50 → 高概率是 VOD 归档
+        has_endlist = 'EXT-X-ENDLIST' in text
+        seq_match = re.search(r'EXT-X-MEDIA-SEQUENCE:(\d+)', text)
+        seq_num = int(seq_match.group(1)) if seq_match else -1
+        segment_count = len([l for l in text.splitlines() if l.strip().startswith('http')])
+        if has_endlist or (seq_num == 0 and segment_count > 50):
+            info["is_vod"] = True
+            print(f"  [vod] 过滤 VOD 源: {url[:80]} (endlist={has_endlist}, seq={seq_num}, segs={segment_count})")
         # 解析所有变体流的 RESOLUTION 和 BANDWIDTH
         resolutions = re.findall(r'RESOLUTION=(\d+x\d+)', text)
         bandwidths = re.findall(r'BANDWIDTH=(\d+)', text)
@@ -1311,9 +1321,10 @@ async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.
                     "content_length": quality.get("content_length", 0),
                     "content_type": quality.get("content_type", ""),
                     "download_speed_kbps": quality.get("download_speed_kbps", 0.0),
-                    "resolution": None,
-                    "bandwidth_kbps": None,
-                }
+                     "resolution": None,
+                     "bandwidth_kbps": None,
+                     "is_vod": False,
+                 }
                 # 标记 m3u8 URL 需要后续解析分辨率
                 if '.m3u8' in url.lower() or 'm3u8' in url:
                     hls_urls_to_parse.append(url)
@@ -1346,6 +1357,7 @@ async def read_and_test_file(session: aiohttp.ClientSession, semaphore: asyncio.
             bw = res_info.get("bandwidth_kbps")
             entry["resolution"] = res
             entry["bandwidth_kbps"] = bw
+            entry["is_vod"] = res_info.get("is_vod", False)
             if res or bw:
                 entry["quality_score"] = hls_resolution_boost(entry["quality_score"], res, bw)
         if quality_cache is not None:
@@ -1368,7 +1380,10 @@ def generate_sorted_m3u(valid_entries, cctv_channels, province_channels, filenam
 
     for entry in valid_entries:
         channel = strip_quality_suffix(str(entry.get("channel", "")).strip())
-        url = str(entry.get("url", "")).strip()
+        url = str(entry.get("url", "").strip())
+        # 过滤 VOD 源：点播流分段过期后会导致播放器反复 404 → 黑屏闪烁
+        if entry.get("is_vod"):
+            continue
         source_group_title = entry.get("source_group_title")
         if not channel or not url:
             continue

@@ -139,6 +139,35 @@ function rewriteManifest(text, masterUrl) {
   return result.join('\n')
 }
 
+// 视频分段 404 时，尝试相邻分段（偏移 ±1~±5），返回第一个可用的 buffer
+async function trySegmentFallback(url, signal) {
+  try {
+    const u = new URL(url)
+    const basename = u.pathname.split('/').pop()
+    const dir = u.pathname.replace(/\/[^/]+$/, '/')
+    const prefix = basename.replace(/\.[^.]+$/, '')
+    const ext = basename.slice(prefix.length)
+    const numMatch = prefix.match(/(\d+)$/)
+    if (!numMatch) return null
+    const baseNum = parseInt(numMatch[1], 10)
+    const padLen = numMatch[1].length
+    const offsets = [1,-1,2,-2,3,-3,4,-4,5,-5]
+    for (const off of offsets) {
+      if (signal?.aborted) break
+      const newNum = baseNum + off
+      if (newNum < 0) continue
+      const padded = String(newNum).padStart(padLen, '0')
+      const candidate = `${u.origin}${dir}${prefix.replace(/\d+$/, padded)}${ext}`
+      const r = await fetch(candidate, { signal, headers: { 'User-Agent': COMMON_UA, 'Referer': `https://${u.hostname}/` } })
+      if (r.ok) {
+        console.log(`[proxy/stream] fallback ${url.slice(-60)} → ${candidate.slice(-50)}`)
+        return Buffer.from(await r.arrayBuffer())
+      }
+    }
+  } catch(e) { console.log('[fallback] error:', e.message) }
+  return null
+}
+
 app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
   let streamUrl = req.query.url
   if (!streamUrl) return res.status(400).json({ error: 'Missing url' })
@@ -174,7 +203,11 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
         const tid = setTimeout(() => ctrl.abort(), STREAM_TIMEOUT)
         fetch(streamUrl, { headers: { 'User-Agent': COMMON_UA, 'Referer': referer, 'Origin': referer }, signal: ctrl.signal, redirect: 'follow' })
           .then(async resp => {
-            clearTimeout(tid); if (!resp.ok) { done(); return resolve(res.status(resp.status).json({ error: 'fetch failed', status: resp.status })) }
+            clearTimeout(tid)
+            // 视频分段 404 不走早期返回，留给下方 fallback 逻辑处理
+            if (!resp.ok && !streamUrl.endsWith('.ts')) {
+              done(); return resolve(res.status(resp.status).json({ error: 'fetch failed', status: resp.status }))
+            }
             const ct = resp.headers.get('content-type') || ''
             // 使用重定向后的最终 URL 作为 base，确保相对路径正确解析
             const finalUrl = resp.url || streamUrl
@@ -191,7 +224,14 @@ app.get(['/api/proxy/stream', '/proxy/stream'], async (req, res) => {
               }
               res.set('Content-Type', 'application/vnd.apple.mpegurl'); done(); return resolve(res.send(rewritten))
             } else {
-              setCors(); const ab = await resp.arrayBuffer(); res.end(Buffer.from(ab)); done()
+              // 视频分段 404 时自动尝试相邻分段，避免 HLS.js 反复重试坏 segment 导致黑屏闪烁
+              if (!resp.ok && streamUrl.endsWith('.ts')) {
+                let fb = await trySegmentFallback(streamUrl, ctrl.signal)
+                if (fb) { setCors(); res.end(Buffer.from(fb)); done() }
+                else { done(); return resolve(res.status(resp.status).json({ error: 'fetch failed', status: resp.status })) }
+              } else {
+                setCors(); const ab = await resp.arrayBuffer(); res.end(Buffer.from(ab)); done()
+              }
             }
           }).catch(err => { clearTimeout(tid); done();
             // 客户端断开或 abort 不视为错误（HLS.js 切换分段时正常行为）

@@ -6,6 +6,7 @@ interface HlsPlayerProps {
   onError?: (err?: Error) => void
   onPlay?: () => void
   onReady?: () => void
+  onRouteChange?: () => void
 }
 
 export interface HlsPlayerRef {
@@ -23,7 +24,7 @@ function proxyUrl(url: string) {
 
 const PLAY_TIMEOUT_MS = 12000
 
-const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPlay, onReady }, ref) => {
+const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPlay, onReady, onRouteChange }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -131,8 +132,11 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
           setError('网络连接失败'); onError?.(new Error('manifest_load_error')); hls.destroy(); break
         case Hls.ErrorDetails.LEVEL_LOAD_ERROR:
         case Hls.ErrorDetails.LEVEL_PARSING_ERROR:
-          if (hlsRef.current) hlsRef.current.recoverMediaError()
-          else { setError('频道源不可用'); hls.destroy() }
+          // 不立即 recoverMediaError（会造成闪黑屏），让 HLS.js 自行重试
+          // 仅当连续失败超过 5 次才触发上游切线
+          if ((hls as any)._levelErrors = ((hls as any)._levelErrors || 0) + 1, (hls as any)._levelErrors >= 5) {
+            setError('频道源不稳定'); onError?.(new Error('level_repeated_error')); hls.destroy()
+          }
           break
         default:
           setError('播放失败'); onError?.(new Error(data.details)); hls.destroy(); break
@@ -145,9 +149,10 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
   useEffect(() => {
     mountedRef.current = true
     if (!url) return
+    onRouteChange?.()
     initHls(url)
     return () => { mountedRef.current = false; destroyHls() }
-  }, [url, initHls, destroyHls])
+  }, [url, initHls, destroyHls, onRouteChange])
 
   const handleRetry = useCallback(() => {
     setError(null)

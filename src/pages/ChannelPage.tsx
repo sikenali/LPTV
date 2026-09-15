@@ -9,6 +9,7 @@ import {
 import { IptvChannel, cctvChannels, wsChannels } from '../data/iptvChannels';
 import { getChannelLogoUrl } from '../utils/logoMap';
 import { Channel } from '../types';
+import { matchM3uUrls } from '../utils/m3uMatch';
 
 type GroupKey = 'cctv' | 'ws';
 
@@ -220,9 +221,12 @@ export default function ChannelPage() {
                           {channels.map(ch => {
                             const isSelected = selectedChannel?.id === ch.id && selectedChannel?.tid === ch.tid;
                             const isFav = favorites.includes(`${ch.tid}-${ch.id}`);
-                            // 从 M3U 数据中找到对应的频道
-                            const m3uCh = m3uChannels.find(m => m.name === ch.name) || ch;
-                            const status = channelStatus[m3uCh.id] || 'unknown';
+                            // 用 matchM3uUrls 找到匹配的 M3U 频道（与播放器逻辑一致）
+                            const matched = m3uChannels.length > 0 ? matchM3uUrls(ch, m3uChannels) : [];
+                            const primaryUrl = matched[0] || '';
+                            // 取匹配到的第一条线路的 id 作为状态 key
+                            const statusCh = m3uChannels.find(m => primaryUrl && (m.url === primaryUrl || (m.urls ?? []).includes(primaryUrl))) || ch;
+                            const status = channelStatus[statusCh.id] || 'unknown';
                             return (
                               <motion.button
                                 key={`${ch.tid}-${ch.id}`}

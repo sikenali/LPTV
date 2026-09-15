@@ -55,6 +55,8 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
   const [m3uLoaded, setM3uLoaded] = useState(false);
   const [allUrls, setAllUrls] = useState<string[]>([]);
   const [isChecking, setIsChecking] = useState(false);
+  // 每条线路的探测结果（key = url）
+  const [urlStatuses, setUrlStatuses] = useState<Record<string, StreamCheckResult>>({});
   // 标记是否已经播放过（用于控制 splash 只显示一次）
   const [hasPlayed, setHasPlayed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,6 +80,7 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     setError(null);
     setM3uLoaded(false);
     setAllUrls([]);
+    setUrlStatuses({});
     setIsChecking(false);
     setIsPaused(false);
     setIsMuted(true);
@@ -107,6 +110,10 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     const uniqueUrls = [...new Set(urls.filter(Boolean))];
     const recentUrl = localStorage.getItem(channelStorageKey(channelForStorage));
     const checks = await Promise.all(uniqueUrls.map(async (url) => ({ url, result: await checkUrl(url, signal) })));
+    // 保存每条线路的探测结果
+    const statuses: Record<string, StreamCheckResult> = {};
+    checks.forEach(({ url, result }) => { statuses[url] = result; });
+    setUrlStatuses(statuses);
     const healthy = checks
       .filter(({ result }) => result.status === 'ok')
       .sort((a, b) => {
@@ -119,7 +126,6 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
       })
       .map(({ url }) => url);
     const remainder = uniqueUrls.filter(url => !healthy.includes(url));
-    // 检测服务暂时不可达时不阻塞播放，退回 CI 生成的线路顺序。
     const fallback = recentUrl && uniqueUrls.includes(recentUrl)
       ? [recentUrl, ...uniqueUrls.filter(url => url !== recentUrl)]
       : uniqueUrls;
@@ -156,6 +162,9 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
 
   const activeUrl = m3uLoaded ? (allUrls[currentUrlIndex] ?? '') : '';
 
+  // 当前线路在全部线路中的序号（1-based）
+  const routeTotal = allUrls.length;
+
   useEffect(() => {
     currentUrlRef.current = activeUrl;
   }, [activeUrl]);
@@ -177,27 +186,28 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
     return false;
   }, [allUrls, currentUrlIndex]);
 
-  useEffect(() => {
-    if (!m3uLoaded || !activeUrl) return;
-    let disposed = false;
-    const checkCurrent = async () => {
-      const url = currentUrlRef.current;
-      if (!url || disposed) return;
-      const result = await checkUrl(url);
-      if (disposed) return;
-      if (result.status === 'ok') {
-        failureCountRef.current[url] = 0;
-        circuitOpenUntilRef.current[url] = 0;
-        localStorage.setItem(channelStorageKey(currentChannel), url);
-      } else if ((failureCountRef.current[url] ?? 0) + 1 >= FAILURE_THRESHOLD && !switchToNextAvailable()) {
-        setError('当前频道线路均不可用，请重试');
-      } else {
-        failureCountRef.current[url] = (failureCountRef.current[url] ?? 0) + 1;
-      }
-    };
-    const timer = window.setInterval(checkCurrent, CHECK_INTERVAL_MS);
-    return () => { disposed = true; window.clearInterval(timer); };
-  }, [activeUrl, checkUrl, currentChannel, m3uLoaded, switchToNextAvailable]);
+   useEffect(() => {
+     if (!m3uLoaded || !activeUrl) return;
+     let disposed = false;
+     const checkCurrent = async () => {
+       const url = currentUrlRef.current;
+       if (!url || disposed) return;
+       const result = await checkUrl(url);
+       if (disposed) return;
+       setUrlStatuses(prev => ({ ...prev, [url]: result }));
+       if (result.status === 'ok') {
+         failureCountRef.current[url] = 0;
+         circuitOpenUntilRef.current[url] = 0;
+         localStorage.setItem(channelStorageKey(currentChannel), url);
+       } else if ((failureCountRef.current[url] ?? 0) + 1 >= FAILURE_THRESHOLD && !switchToNextAvailable()) {
+         setError('当前频道线路均不可用，请重试');
+       } else {
+         failureCountRef.current[url] = (failureCountRef.current[url] ?? 0) + 1;
+       }
+     };
+     const timer = window.setInterval(checkCurrent, CHECK_INTERVAL_MS);
+     return () => { disposed = true; window.clearInterval(timer); };
+   }, [activeUrl, checkUrl, currentChannel, m3uLoaded, switchToNextAvailable]);
 
   const scheduleHide = useCallback(() => {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
@@ -283,17 +293,25 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
       {(!m3uLoaded || isChecking) && !hasPlayed && <LptvSplash />}
 
       {/* 视频区域：绝对定位占满容器 */}
-      <div className="absolute inset-0">
-        <HlsPlayer
-          key={`${currentChannel.tid}-${currentChannel.id}-m3u-${currentUrlIndex}`}
-          ref={hlsPlayerRef}
-          url={activeUrl}
-          onReady={handleVideoReady}
-          onError={() => {
-            if (!switchToNextAvailable()) setError('播放失败，请重试');
-          }}
-        />
-      </div>
+       <div className="absolute inset-0">
+         <HlsPlayer
+           key={`${currentChannel.tid}-${currentChannel.id}-m3u-${currentUrlIndex}`}
+           ref={hlsPlayerRef}
+           url={activeUrl}
+           onReady={handleVideoReady}
+           onError={() => {
+             if (!switchToNextAvailable()) setError('播放失败，请重试');
+           }}
+           onRouteChange={() => {
+             // 线路切换后重新探测当前线路状态
+             if (activeUrl) {
+               checkUrl(activeUrl).then(result => {
+                 setUrlStatuses(prev => ({ ...prev, [activeUrl]: result }));
+               });
+             }
+           }}
+         />
+       </div>
 
       {/* 控制栏：点击显示，3秒后自动隐藏 */}
       <div
@@ -322,6 +340,26 @@ const IptvWebPlayer: React.FC<IptvWebPlayerProps> = ({ channel }) => {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-white/70 text-sm truncate max-w-[200px]">{currentChannel.name}</span>
+          {routeTotal > 1 && (
+            <div className="flex items-center gap-1" title={`共 ${routeTotal} 条线路`}>
+              {allUrls.map((u, i) => {
+                const st = urlStatuses[u]?.status;
+                const isActive = i === currentUrlIndex;
+                const dotColor = st === 'ok' ? '#22c55e' : st === 'error' ? '#ef4444' : 'rgba(255,255,255,0.3)';
+                return (
+                  <div key={u} className="flex items-center gap-0.5">
+                    <div
+                      className="w-1.5 h-1.5 rounded-full transition-all duration-300"
+                      style={{ background: dotColor, boxShadow: isActive ? `0 0 4px ${dotColor}` : 'none', opacity: isActive ? 1 : 0.5 }}
+                    />
+                    {i === currentUrlIndex && (
+                      <span className="text-white/60 text-xs font-mono">#{i + 1}/{routeTotal}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <button
             onClick={() => hlsPlayerRef.current?.toggleFullscreen()}
             className="p-2 rounded-full hover:bg-white/10 transition-colors"
