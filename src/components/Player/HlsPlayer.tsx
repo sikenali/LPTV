@@ -179,7 +179,6 @@ const HlsPlayer = forwardRef<HlsPlayerRef, HlsPlayerProps>(({ url, onError, onPl
         className="w-full h-full object-contain"
         playsInline
         muted
-        autoPlay
         style={{ height: '100%', width: '100%', display: 'block' }}
         onClick={() => {
           const v = videoRef.current
