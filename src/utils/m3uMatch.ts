@@ -50,7 +50,7 @@ export function matchM3uUrls(
   if (keywords.length === 0) return []
 
   const allMatches = m3uChannels.filter(c =>
-    keywords.every(kw => c.name.toLowerCase().includes(kw.toLowerCase()))
+    keywords.some(kw => c.name.toLowerCase().includes(kw.toLowerCase()))
   )
   if (allMatches.length > 0) return allMatches.flatMap(c => [c.url, ...(c.urls ?? [])])
 
