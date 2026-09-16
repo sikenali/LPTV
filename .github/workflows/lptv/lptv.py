@@ -1630,6 +1630,48 @@ async def main(file_urls, cctv_channel_file, province_channel_files):
     logo_connector = aiohttp.TCPConnector(limit=CONFIG["max_parallel"] * 2)
     async with aiohttp.ClientSession(cookie_jar=None, timeout=aiohttp.ClientTimeout(total=10), connector=logo_connector) as logo_session:
         await download_logos(all_channels, logo_semaphore, logo_session)
+    write_run_stats(
+        valid=len(all_valid_entries),
+        deduplicated=len(deduplicated_entries),
+        channels=total_unique,
+        total_urls=total_streams,
+        resolutions=dict(res_dist),
+        latencies=all_latencies,
+    )
+
+
+def write_run_stats(valid, deduplicated, channels, total_urls, resolutions, latencies):
+    """写入 run_stats.json，供 GitHub Actions 生成 Step Summary 和历史对比用"""
+    stats = {
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "valid_streams": valid,
+        "deduplicated": deduplicated,
+        "channels": channels,
+        "total_urls": total_urls,
+        "resolutions": resolutions,
+    }
+    if latencies and len(latencies) >= 3:
+        sorted_lat = sorted(latencies)
+        n = len(sorted_lat)
+        stats["latency_p50"] = round(sorted_lat[int(n * 0.5)], 3)
+        stats["latency_p90"] = round(sorted_lat[min(int(n * 0.9), n - 1)], 3)
+        stats["latency_p99"] = round(sorted_lat[min(int(n * 0.99), n - 1)], 3)
+    out_path = "run_stats.json"
+    # 合并历史快照
+    history = []
+    if os.path.exists(out_path):
+        try:
+            existing = json.load(open(out_path, encoding="utf-8"))
+            if isinstance(existing, dict) and "history" in existing:
+                history = existing["history"]
+        except Exception:
+            pass
+    history.append(stats)
+    history = history[-30:]
+    result = {"history": history, "latest": stats}
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    print(f"[stats] 已写入 {out_path}")
 
 
 if __name__ == "__main__":
