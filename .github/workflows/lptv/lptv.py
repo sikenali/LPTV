@@ -72,9 +72,9 @@ VOD_FILE_PATTERNS = re.compile(
     r'\.(mp4|mkv|avi|mov|wmv|flv|webm)(\?|$)',  # 直接视频文件
     re.IGNORECASE
 )
-# 腾讯视频/阿里云 CDN 的点播存储路径
+# 腾讯视频/阿里云 CDN 的点播存储路径（域名或路径中含 vod/txmov/alimov/upic/video-hls）
 VOD_CDN_PATTERNS = re.compile(
-    r'(txmov|alimov|vod|upic|video-hls)/',  # 点播 CDN 路径特征
+    r'(?:^|[\./])(?:txmov|alimov|vod[^/]|upic|video-hls)[/\.]',  # 匹配域名或路径中的特征
     re.IGNORECASE
 )
 
