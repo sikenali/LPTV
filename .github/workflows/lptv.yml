@@ -21,7 +21,10 @@ permissions:
 
 env:
   TZ: Asia/Shanghai
-  LPTV_FFPROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.ffprobe == false && '0' || '1' }}
+  # 默认关闭 FFprobe（定时任务每4小时运行，约需5-7分钟）
+  # 手动触发时可勾选 "FFprobe: false" 来跳过验证进一步加速
+  # 或手动指定 LPTV_FFPROBE=1 开启（约需20+分钟）
+  LPTV_FFPROBE: ${{ github.event_name == 'workflow_dispatch' && inputs.ffprobe != 'false' && '1' || '0' }}
 
 jobs:
   scrape-and-update:
