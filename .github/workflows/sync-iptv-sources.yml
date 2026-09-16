@@ -1,0 +1,52 @@
+name: Sync IPTV Sources
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-sources:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch vbskycn/iptv IPTV4 source files
+        run: |
+          mkdir -p sources
+          echo "Fetching iptv4.txt ..."
+          curl -sSL -o sources/vbskycn-iptv4.txt \
+            "https://raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.txt"
+          echo "Fetching iptv4.m3u ..."
+          curl -sSL -o sources/vbskycn-iptv4.m3u \
+            "https://raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u"
+          echo "---"
+          wc -l sources/vbskycn-iptv4.*
+
+      - name: Check for changes
+        id: check
+        run: |
+          git diff --quiet sources/ && echo "no_changes=true" >> $GITHUB_OUTPUT || echo "no_changes=false" >> $GITHUB_OUTPUT
+
+      - name: Commit updated sources
+        if: steps.check.outputs.no_changes == 'false'
+        env:
+          REPO_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git remote set-url origin $REPO_URL
+          git pull --rebase origin ${{ github.ref_name }} || true
+          git add sources/
+          git commit -m "sync: 更新 vbskycn/iptv 直播源数据"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: No changes notification
+        if: steps.check.outputs.no_changes == 'true'
+        run: echo "Sources already up to date, nothing to sync."

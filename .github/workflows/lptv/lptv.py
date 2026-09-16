@@ -1640,9 +1640,9 @@ if __name__ == "__main__":
         "https://raw.githubusercontent.com/suxuang/myIPTV/refs/heads/main/ipv4.m3u",
         # IPv6 补充（853条）
         "https://raw.githubusercontent.com/suxuang/myIPTV/refs/heads/main/ipv6.m3u",
-        # 高质量：频道多，稳定；同时补充 txt 版本获取额外 284 条独立流
-        "https://raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u",
-        "https://raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.txt",
+        # 高质量：频道多，稳定；同时补充 txt 版本获取额外 284 条独立流（本地同步副本）
+        "sources/vbskycn-iptv4.m3u",
+        "sources/vbskycn-iptv4.txt",
         # 国家广电官方源，⭐28k stars
         "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/itv.m3u",
         "https://raw.githubusercontent.com/fanmingming/live/main/tv/m3u/ipv6.m3u",
