@@ -549,16 +549,18 @@ def is_source_deprecated(cache: Dict[str, Any], url: str) -> bool:
 
 def print_source_quality_summary(cache: Dict[str, Any], source_stats: List[Dict[str, Any]], all_latencies: List[float] = None) -> None:
     print("\n===== 源质量报告 =====")
-    for s in sorted(source_stats, key=lambda x: -x["valid"]):
-        key = _source_key(s["url"])
+    for s in sorted(source_stats, key=lambda x: -(x.get("valid") or 0)):
+        key = _source_key(s.get("url", ""))
         info = cache.get(key, {})
         consec = info.get("consecutive_zero", 0)
         avg_score = s.get("avg_score", 0.0)
         avg_lat = s.get("avg_latency", 0.0)
-        status = "✅" if s["valid"] > 0 else ("⚠️ 连续失效" if consec > 0 else "❌")
-        extra = f" 均分{avg_score:.2f} 均延迟{avg_lat:.2f}s" if s["valid"] > 0 else ""
-        print(f"  {status} {s['url']}: 解析{s['total']}条 → 有效{s['valid']}条 (连续零有效: {consec}){extra}")
-    total_valid = sum(s['valid'] for s in source_stats)
+        valid = s.get("valid", 0)
+        total = s.get("total", 0)
+        status = "✅" if valid > 0 else ("⚠️ 连续失效" if consec > 0 else "❌")
+        extra = f" 均分{avg_score:.2f} 均延迟{avg_lat:.2f}s" if valid > 0 else ""
+        print(f"  {status} {s.get('url', '?')}: 解析{total}条 → 有效{valid}条 (连续零有效: {consec}){extra}")
+    total_valid = sum(s.get("valid", 0) for s in source_stats)
     print(f"  合计: 有效流 {total_valid} 条")
     # 全局延迟分位数统计
     if all_latencies and len(all_latencies) >= 3:
