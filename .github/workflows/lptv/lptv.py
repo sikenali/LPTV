@@ -67,6 +67,17 @@ INVALID_PROTOCOL_PATTERNS = re.compile(
     r'^(rtp|rtsp|udp|mcast|file|data):', re.IGNORECASE
 )
 
+# 直接指向点播视频文件（非 HLS 直播流）的 URL，过滤掉避免播放器黑屏
+VOD_FILE_PATTERNS = re.compile(
+    r'\.(mp4|mkv|avi|mov|wmv|flv|webm)(\?|$)',  # 直接视频文件
+    re.IGNORECASE
+)
+# 腾讯视频/阿里云 CDN 的点播存储路径
+VOD_CDN_PATTERNS = re.compile(
+    r'(txmov|alimov|vod|upic|video-hls)/',  # 点播 CDN 路径特征
+    re.IGNORECASE
+)
+
 # 危险协议（某些场景可能有用，但默认过滤）
 DANGEROUS_PROTOCOL_PATTERNS = re.compile(
     r'^(javascript|vbscript):', re.IGNORECASE
@@ -1002,10 +1013,12 @@ def extract_urls_from_m3u(content):
 
 
 def filter_invalid_protocols(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """过滤掉浏览器无法播放的协议（RTP/RTSP/UDP 组播等）和危险协议"""
-    return [e for e in entries 
+    """过滤掉浏览器无法播放的协议（RTP/RTSP/UDP 组播等）和危险协议及点播视频文件"""
+    return [e for e in entries
             if not INVALID_PROTOCOL_PATTERNS.match(str(e.get("url", "")))
-            and not DANGEROUS_PROTOCOL_PATTERNS.match(str(e.get("url", "")))]
+            and not DANGEROUS_PROTOCOL_PATTERNS.match(str(e.get("url", "")))
+            and not VOD_FILE_PATTERNS.search(str(e.get("url", "")))
+            and not VOD_CDN_PATTERNS.search(str(e.get("url", "")))]
 
 
 def is_valid_channel_name(channel: str) -> bool:
