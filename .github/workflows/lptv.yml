@@ -1,6 +1,8 @@
 name: IPTV Daily Update
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: '0 */4 * * *'
   workflow_dispatch:
