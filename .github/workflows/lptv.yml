@@ -52,10 +52,12 @@ jobs:
             "https://raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u"
           echo "---"
           wc -l sources/vbskycn-iptv4.*
-          git pull --rebase origin ${{ github.ref_name }} || true
+          # 先 fetch 再 hard reset 到远端，避免 rebase 因未提交改动而失败
+          git fetch origin ${{ github.ref_name }}
+          git reset --hard origin/${{ github.ref_name }}
           git add sources/
           git diff --quiet && git diff --staged --quiet || git commit -m "sync: 更新 vbskycn/iptv 直播源数据"
-          git push origin HEAD:${{ github.ref_name }}
+          git push --force-with-lease origin HEAD:${{ github.ref_name }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -157,7 +159,9 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git remote set-url origin $REPO_URL
-          git pull --rebase origin ${{ github.ref_name }} || true
+          # 先 fetch 再 hard reset 到远端，确保基于最新代码工作，避免 rebase 冲突
+          git fetch origin ${{ github.ref_name }}
+          git reset --hard origin/${{ github.ref_name }}
           git add README.md run_stats.json sources/ channels/lptv.m3u channels/lptv.m3u8 logos/
           git diff --quiet && git diff --staged --quiet || git commit -m "自动更新: ${GET_TIME}"
-          git push origin HEAD:${{ github.ref_name }}
+          git push --force-with-lease origin HEAD:${{ github.ref_name }}
