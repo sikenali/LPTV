@@ -152,16 +152,17 @@ jobs:
               > README.md
           fi
 
-      - name: Commit changes
-        env:
-          REPO_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git remote set-url origin $REPO_URL
-          # 先 fetch 再 hard reset 到远端，确保基于最新代码工作，避免 rebase 冲突
-          git fetch origin ${{ github.ref_name }}
-          git reset --hard origin/${{ github.ref_name }}
-          git add README.md run_stats.json sources/ channels/lptv.m3u channels/lptv.m3u8 logos/
-          git diff --quiet && git diff --staged --quiet || git commit -m "自动更新: ${GET_TIME}"
-          git push --force-with-lease origin HEAD:${{ github.ref_name }}
+       - name: Commit changes
+         env:
+           REPO_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+         run: |
+           git config --global user.name "GitHub Actions"
+           git config --global user.email "actions@github.com"
+           git remote set-url origin $REPO_URL
+           # 仅 fetch 远端更新（不 reset），保留脚本生成的 M3U 等更改
+           git fetch origin ${{ github.ref_name }}
+           # 如果有远端新 commit，尝试 merge（处理并发 workflow 冲突）
+           git diff --quiet HEAD origin/${{ github.ref_name }} && true || git merge --no-edit origin/${{ github.ref_name }}
+           git add README.md run_stats.json sources/ channels/lptv.m3u channels/lptv.m3u8 logos/
+           git diff --quiet && git diff --staged --quiet || git commit -m "自动更新: ${GET_TIME}"
+           git push --force-with-lease origin HEAD:${{ github.ref_name }}
