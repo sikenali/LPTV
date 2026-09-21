@@ -431,22 +431,38 @@
       "latency_p50": 0.173,
       "latency_p90": 0.643,
       "latency_p99": 1.641
+    },
+    {
+      "time": "2026-09-21T17:48:35Z",
+      "valid_streams": 1917,
+      "deduplicated": 1469,
+      "channels": 902,
+      "total_urls": 1433,
+      "resolutions": {
+        "1080p": 158,
+        "720p": 120,
+        "SD": 12,
+        "480p": 28
+      },
+      "latency_p50": 0.152,
+      "latency_p90": 0.518,
+      "latency_p99": 1.658
     }
   ],
   "latest": {
-    "time": "2026-09-21T09:41:31Z",
-    "valid_streams": 2108,
-    "deduplicated": 1600,
-    "channels": 969,
-    "total_urls": 1548,
+    "time": "2026-09-21T17:48:35Z",
+    "valid_streams": 1917,
+    "deduplicated": 1469,
+    "channels": 902,
+    "total_urls": 1433,
     "resolutions": {
       "1080p": 158,
-      "720p": 126,
+      "720p": 120,
       "SD": 12,
       "480p": 28
     },
-    "latency_p50": 0.173,
-    "latency_p90": 0.643,
-    "latency_p99": 1.641
+    "latency_p50": 0.152,
+    "latency_p90": 0.518,
+    "latency_p99": 1.658
   }
 }
