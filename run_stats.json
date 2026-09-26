@@ -1,22 +1,6 @@
 {
   "history": [
     {
-      "time": "2026-09-19T22:13:06Z",
-      "valid_streams": 2101,
-      "deduplicated": 1596,
-      "channels": 967,
-      "total_urls": 1545,
-      "resolutions": {
-        "1080p": 148,
-        "720p": 127,
-        "SD": 12,
-        "480p": 31
-      },
-      "latency_p50": 0.22,
-      "latency_p90": 0.699,
-      "latency_p99": 1.498
-    },
-    {
       "time": "2026-09-20T02:49:06Z",
       "valid_streams": 2116,
       "deduplicated": 1613,
@@ -486,22 +470,38 @@
       "latency_p50": 0.158,
       "latency_p90": 0.775,
       "latency_p99": 1.977
+    },
+    {
+      "time": "2026-09-26T15:42:22Z",
+      "valid_streams": 2038,
+      "deduplicated": 1585,
+      "channels": 961,
+      "total_urls": 1549,
+      "resolutions": {
+        "1080p": 155,
+        "720p": 121,
+        "SD": 12,
+        "480p": 26
+      },
+      "latency_p50": 0.161,
+      "latency_p90": 0.939,
+      "latency_p99": 2.398
     }
   ],
   "latest": {
-    "time": "2026-09-26T09:12:59Z",
-    "valid_streams": 2039,
-    "deduplicated": 1583,
-    "channels": 953,
-    "total_urls": 1546,
+    "time": "2026-09-26T15:42:22Z",
+    "valid_streams": 2038,
+    "deduplicated": 1585,
+    "channels": 961,
+    "total_urls": 1549,
     "resolutions": {
       "1080p": 155,
       "720p": 121,
       "SD": 12,
       "480p": 26
     },
-    "latency_p50": 0.158,
-    "latency_p90": 0.775,
-    "latency_p99": 1.977
+    "latency_p50": 0.161,
+    "latency_p90": 0.939,
+    "latency_p99": 2.398
   }
 }
