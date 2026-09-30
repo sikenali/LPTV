@@ -414,8 +414,32 @@ def build_app() -> web.Application:
     app.router.add_post("/api/shot", api_shot_save)
     app.router.add_get("/api/channels", api_get_channels)
 
-    # 静态文件
-    app.router.add_static("/", STATIC_DIR, name="static")
+    # 静态文件 + 兜底代理：本地存在则直出，否则转发给官方
+    async def handle_static(req: web.Request) -> web.Response:
+        session: aiohttp.ClientSession = req.app["session"]
+        file_path = STATIC_DIR / req.path.lstrip("/")
+        if file_path.exists() and file_path.is_file():
+            return web.FileResponse(file_path)
+        # 优先从 www.yangshipin.cn（TV主站）获取，fallback 到 m.yangshipin.cn
+        for base in ("https://www.yangshipin.cn", "https://m.yangshipin.cn"):
+            target_url = base + req.path
+            try:
+                async with session.get(target_url, headers=_HEADERS, ssl=False,
+                                        timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    body = await resp.read()
+                    if resp.status != 404:
+                        ct = resp.content_type or "application/octet-stream"
+                        return web.Response(
+                            body=body,
+                            content_type=ct,
+                            headers={**_CORS_HEADERS, "Cache-Control": "public, max-age=3600"},
+                        )
+            except Exception:
+                pass
+        log.warning("static not found: %s", req.path)
+        return web.Response(text="Not found", status=404)
+
+    app.router.add_get("/{path:.*}", handle_static)
 
     # 生命周期
     app.on_startup.append(on_startup)

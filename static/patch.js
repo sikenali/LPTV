@@ -69,17 +69,17 @@
     const pid = pidFromUrl(url);
     if (pid) {
       // 防过期响应: 切台后6s内旧响应不得回写
-      if (Lptv._pidBefore && pid === Lptv._pidBefore &&
-          Date.now() - (Lptv._switchAt || 0) < 6000) {
+      if (window.__lptvCctvWeb._pidBefore && pid === window.__lptvCctvWeb._pidBefore &&
+          Date.now() - (window.__lptvCctvWeb._switchAt || 0) < 6000) {
         dbg("stale pu ignored: " + pid);
         return;
       }
       // 合成 pid(x...) 替换为真实 pid
-      if (Lptv.currentPid && String(Lptv.currentPid).charAt(0) === "x") {
-        const ch = Lptv.channels.find(function (c) { return c.pid === Lptv.currentPid; });
+      if (window.__lptvCctvWeb.currentPid && String(window.__lptvCctvWeb.currentPid).charAt(0) === "x") {
+        const ch = window.__lptvCctvWeb.channels.find(function (c) { return c.pid === window.__lptvCctvWeb.currentPid; });
         if (ch) ch.pid = pid;
       }
-      Lptv.currentPid = pid;
+      window.__lptvCctvWeb.currentPid = pid;
     }
     if (pid && /^\d+$/.test(String(pid))) {
       cfg.lastPid = pid;
@@ -88,11 +88,11 @@
     }
     markActive();
     epgSync();
-    if (url === Lptv.playUrl) return;
-    Lptv.playUrl = url;
-    Lptv._loadedPid = pid || Lptv._loadedPid;
+    if (url === window.__lptvCctvWeb.playUrl) return;
+    window.__lptvCctvWeb.playUrl = url;
+    window.__lptvCctvWeb._loadedPid = pid || window.__lptvCctvWeb._loadedPid;
     dbg("pu:" + url.slice(0, 30));
-    showOSD(chNumLabel(), "正在直播 · " + chNameOf(Lptv.currentPid));
+    showOSD(chNumLabel(), "正在直播 · " + chNameOf(window.__lptvCctvWeb.currentPid));
   }
 
   /* ── 官方视频元素获取 ───────────────────────────────────────────── */
@@ -106,16 +106,16 @@
       if (v.videoWidth && (!cand.videoWidth || v.videoWidth > cand.videoWidth)) cand = v;
     }
     if (!cand) return;
-    if (cand !== Lptv.video) {
-      dbg("ov=" + (cand === Lptv.video ? "same" : "acquire"));
-      Lptv.video = cand;
-      if (!Lptv._ovBound) { bindVideoEvents(); Lptv._ovBound = true; }
+    if (cand !== window.__lptvCctvWeb.video) {
+      dbg("ov=" + (cand === window.__lptvCctvWeb.video ? "same" : "acquire"));
+      window.__lptvCctvWeb.video = cand;
+      if (!window.__lptvCctvWeb._ovBound) { bindVideoEvents(); window.__lptvCctvWeb._ovBound = true; }
       styleOfficial();
     }
   }
 
   function styleOfficial() {
-    const v = Lptv.video;
+    const v = window.__lptvCctvWeb.video;
     if (!v) return;
     v.style.setProperty("position", "fixed", "important");
     v.style.setProperty("left", "0px", "important");
@@ -131,28 +131,28 @@
   }
 
   function bindVideoEvents() {
-    const v = Lptv.video;
+    const v = window.__lptvCctvWeb.video;
     v.addEventListener("loadeddata", function () { showSpin(false); });
     v.addEventListener("waiting", function () { showSpin(true); dbg("vwaiting t=" + Math.floor(v.currentTime)); });
     v.addEventListener("stalled", function () { showSpin(true); dbg("vstalled"); });
     v.addEventListener("volumechange", function () {
-      if (Lptv._volLock || !cfg || cfg.muted) return;
+      if (window.__lptvCctvWeb._volLock || !cfg || cfg.muted) return;
       const want = cfg.volume != null ? cfg.volume : 1;
       if (Math.abs(v.volume - want) > 0.02) {
-        Lptv._volLock = true;
+        window.__lptvCctvWeb._volLock = true;
         v.volume = want;
-        setTimeout(function () { Lptv._volLock = false; }, 50);
+        setTimeout(function () { window.__lptvCctvWeb._volLock = false; }, 50);
         dbg("volock " + Math.round(v.volume * 100) + "->" + Math.round(want * 100));
       }
     });
     v.addEventListener("playing", function () {
-      Lptv._resumes = 0;
+      window.__lptvCctvWeb._resumes = 0;
       showSpin(false);
       dbg("vplaying t=" + Math.floor(v.currentTime));
       if (!cfg.muted && v.volume !== (cfg.volume != null ? cfg.volume : 1)) {
         v.volume = cfg.volume != null ? cfg.volume : 1;
       }
-      showOSD(chNumLabel(), "正在直播 · " + chNameOf(Lptv.currentPid));
+      showOSD(chNumLabel(), "正在直播 · " + chNameOf(window.__lptvCctvWeb.currentPid));
       hideHint();
     });
     v.addEventListener("pause", function () { dbg("vpause t=" + Math.floor(v.currentTime)); handleExternalPause(); });
@@ -161,22 +161,22 @@
 
   let _resumeT = null;
   function handleExternalPause() {
-    const v = Lptv.video;
-    if (!Lptv._autoplayPending || !v) return;
+    const v = window.__lptvCctvWeb.video;
+    if (!window.__lptvCctvWeb._autoplayPending || !v) return;
     if (!(v.readyState >= 2 && v.videoWidth)) return;
-    if (Lptv._resumes > 12) return;
+    if (window.__lptvCctvWeb._resumes > 12) return;
     clearTimeout(_resumeT);
     _resumeT = setTimeout(function () {
-      if (Lptv._autoplayPending && v.paused && v.readyState >= 2 && v.videoWidth) {
-        Lptv._resumes = (Lptv._resumes || 0) + 1;
-        dbg("vresume #" + Lptv._resumes);
+      if (window.__lptvCctvWeb._autoplayPending && v.paused && v.readyState >= 2 && v.videoWidth) {
+        window.__lptvCctvWeb._resumes = (window.__lptvCctvWeb._resumes || 0) + 1;
+        dbg("vresume #" + window.__lptvCctvWeb._resumes);
         tryPlay();
       }
     }, 400);
   }
 
   function tryPlay() {
-    const v = Lptv.video;
+    const v = window.__lptvCctvWeb.video;
     if (!v) return;
     v.volume = cfg.volume;
     v.muted = cfg.muted;
@@ -202,7 +202,7 @@
     window.Hls.__lptvBoosted = true;
     const origLoad = window.Hls.prototype.loadSource;
     window.Hls.prototype.loadSource = function (url) {
-      Lptv.currentHls = this;
+      window.__lptvCctvWeb.currentHls = this;
       dbg("hls: source " + String(url).slice(0, 26));
       if (cfg.maxQuality) applyMaxQuality(this);
       return origLoad.apply(this, arguments);
@@ -233,7 +233,7 @@
   }
 
   function setQuality() {
-    const inst = Lptv.currentHls;
+    const inst = window.__lptvCctvWeb.currentHls;
     if (!inst) return;
     if (cfg.maxQuality) applyMaxQuality(inst);
     else {
@@ -250,10 +250,10 @@
   setInterval(function () {
     acquireOfficial();
     styleOfficial();
-    const v = Lptv.video;
+    const v = window.__lptvCctvWeb.video;
     if (!v) return;
-    if (v.paused && Lptv._autoplayPending && v.readyState >= 2 && v.videoWidth &&
-        (Lptv._resumes || 0) < 12) {
+    if (v.paused && window.__lptvCctvWeb._autoplayPending && v.readyState >= 2 && v.videoWidth &&
+        (window.__lptvCctvWeb._resumes || 0) < 12) {
       dbg("wkr " + Math.floor(v.currentTime));
       tryPlay();
     }
@@ -282,7 +282,7 @@
     const sb = els.map(function (e) { return (e.textContent || "").trim().replace(/\s+/g, " "); })
       .filter(function (t) { return !isPayChannel(t); });
     // 校正已知频道 official 为官网按钮文字
-    Lptv.channels.forEach(function (c) {
+    window.__lptvCctvWeb.channels.forEach(function (c) {
       let hit = null;
       sb.forEach(function (t) {
         if (t.indexOf(c.official) > -1 && (!hit || Math.abs(t.length - c.official.length) < Math.abs(hit.length - c.official.length))) hit = t;
@@ -291,12 +291,12 @@
     });
     // 追加官网有、我们缺的频道
     const seen = {};
-    Lptv.channels.forEach(function (c) { seen[c.official] = true; });
+    window.__lptvCctvWeb.channels.forEach(function (c) { seen[c.official] = true; });
     let added = 0;
     sb.forEach(function (t) {
       if (seen[t]) return;
       seen[t] = true;
-      Lptv.channels.push({
+      window.__lptvCctvWeb.channels.push({
         name: t, pid: "x" + (10000 + added), cnlid: "", official: t, category: inferCategory(t)
       });
       added++;
@@ -310,11 +310,11 @@
 
   function switchChannelDom(pid) {
     if (!pid) return;
-    if (pid !== Lptv.currentPid) {
-      Lptv._pidBefore = Lptv.currentPid;
-      Lptv._switchAt = Date.now();
+    if (pid !== window.__lptvCctvWeb.currentPid) {
+      window.__lptvCctvWeb._pidBefore = window.__lptvCctvWeb.currentPid;
+      window.__lptvCctvWeb._switchAt = Date.now();
     }
-    Lptv.currentPid = pid;
+    window.__lptvCctvWeb.currentPid = pid;
     if (/^\d+$/.test(String(pid))) {
       cfg.lastPid = pid;
       saveCfg();
@@ -342,8 +342,8 @@
 
     // 4s 兜底重试
     setTimeout(function () {
-      if (Lptv.playUrl) return;
-      const eff = Lptv.currentPid || pid;
+      if (window.__lptvCctvWeb.playUrl) return;
+      const eff = window.__lptvCctvWeb.currentPid || pid;
       const b2 = findOfficialButton(officialNameOf(eff));
       if (b2) b2.click();
     }, 4000);
@@ -351,7 +351,7 @@
 
   // 替换全局 switchChannel
   window.switchChannel = switchChannelDom;
-  Lptv.switchChannel = switchChannelDom;
+  window.__lptvCctvWeb.switchChannel = switchChannelDom;
 
   /* ── 拖拽守卫 ──────────────────────────────────────────────────── */
 
@@ -383,7 +383,7 @@
         setTimeout(function() { if (m.parentNode) m.parentNode.removeChild(m); }, 700);
       }
     }, 15000);
-    if (Lptv.video && !Lptv.video.paused) showOSD("00", "正在接入直播…", true);
+    if (window.__lptvCctvWeb.video && !window.__lptvCctvWeb.video.paused) showOSD("00", "正在接入直播…", true);
   }
 
   // 替换全局 boot
@@ -391,12 +391,12 @@
 
   /* ── 导出公共 API ──────────────────────────────────────────────── */
 
-  Lptv.acquireOfficial = acquireOfficial;
-  Lptv.styleOfficial = styleOfficial;
-  Lptv.bindVideoEvents = bindVideoEvents;
-  Lptv.installHlsHooks = installHlsHooks;
-  Lptv.harvestOfficial = harvestOfficial;
-  Lptv.findOfficialButton = findOfficialButton;
-  Lptv.onPlayUrl = onPlayUrl;
-  Lptv.tryPlay = tryPlay;
+  window.__lptvCctvWeb.acquireOfficial = acquireOfficial;
+  window.__lptvCctvWeb.styleOfficial = styleOfficial;
+  window.__lptvCctvWeb.bindVideoEvents = bindVideoEvents;
+  window.__lptvCctvWeb.installHlsHooks = installHlsHooks;
+  window.__lptvCctvWeb.harvestOfficial = harvestOfficial;
+  window.__lptvCctvWeb.findOfficialButton = findOfficialButton;
+  window.__lptvCctvWeb.onPlayUrl = onPlayUrl;
+  window.__lptvCctvWeb.tryPlay = tryPlay;
 })();
