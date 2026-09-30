@@ -427,6 +427,9 @@ async def handle_proxy_capi(req: web.Request) -> web.Response:
             path = path[5:]  # Remove /capi prefix
         if not path.startswith("/"):
             path = "/" + path
+    # 确保路径以 /api 开头
+    if not path.startswith("/api"):
+        path = "/api" + path
     session: aiohttp.ClientSession = req.app["session"]
     return await proxy_capi(session, path)
 

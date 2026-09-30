@@ -1298,7 +1298,7 @@
     if (window.__LptvIframe) return; // iframe mode: parent handles events
     const root = Lptv.ui.root;
 
-    root.addEventListener("mousemove", (e) => {
+    document.addEventListener("mousemove", (e) => {
       wake();
       panelPointer(e);
       epgPointer(e);
@@ -1312,11 +1312,11 @@
         scheduleHideControls();
       }
     });
-    root.addEventListener("mousedown", wake);
+    document.addEventListener("mousedown", wake, true);
 
     // 长名称气泡
     const NAME_POP_SEL = ".lptv-epg-n,.lptv-res-name";
-    root.addEventListener("mouseover", (e) => {
+    document.addEventListener("mouseover", (e) => {
       const t = e.target.closest && e.target.closest(NAME_POP_SEL);
       const pop = document.getElementById("lptv-name-pop");
       if (!pop) return;
@@ -1331,7 +1331,7 @@
         pop.style.top = Math.max(4, top) + "px";
       } else { pop.classList.remove("show"); }
     });
-    root.addEventListener("mouseout", (e) => {
+    document.addEventListener("mouseout", (e) => {
       const t = e.target.closest && e.target.closest(NAME_POP_SEL);
       if (t) {
         const pop = document.getElementById("lptv-name-pop");
@@ -1339,7 +1339,7 @@
       }
     });
 
-    root.addEventListener("wheel", (e) => {
+    document.addEventListener("wheel", (e) => {
       const t = e.target;
       if (t && t.closest && t.closest("#lptv-panel,#lptv-settings,#lptv-epg")) {
         document.getElementById("lptv-name-pop")?.classList.remove("show");
@@ -1430,7 +1430,7 @@
     });
 
     // 全屏
-    root.addEventListener("click", (e) => {
+    document.addEventListener("click", (e) => {
       if (e.target.closest && e.target.closest("#lptv-controls,#lptv-nextch,#lptv-panel,#lptv-epg,#lptv-settings,#lptv-toast,#lptv-hint,#lptv-osd,#lptv-vol,#lptv-digit,#lptv-topbar,#lptv-rec-badge")) return;
       const now = Date.now();
       if (now - (Lptv._lastTap || 0) < 350) {
