@@ -510,3 +510,22 @@ video[official-live] {
   max-height: none;
   margin: 0;
 }
+
+/* ── 隐藏官方央视频 UI ─────────────────────────────────────────── */
+.tv-main-con-r-list-left,
+.tv-main-con-r,
+.ysp-channel-list,
+.tv-home-list,
+.tv-right-panel,
+[data-id="channel-list"],
+#app > div:last-child:not(#lptv-root) {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+/* 隐藏官方页底部控制栏 */
+.tv-player-control,
+.ysp-player-bottom,
+.player-bottom-bar {
+  display: none !important;
+}

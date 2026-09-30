@@ -9,3 +9,5 @@ __pycache__/
 *.pyc
 web/dist/
 web/node_modules/
+lzc/cloud.lazycat.app.lptv-1.0.0.lpk
+lzc/Dockerfile
