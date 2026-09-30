@@ -161,12 +161,19 @@ async def proxy_video(session: aiohttp.ClientSession, url: str) -> web.Response:
 
 # ── CAPI 透传 ──────────────────────────────────────────────────────
 
+# Mock protobuf response for config API (requires authentication)
+_CONFIG_MOCK = bytes.fromhex('08c80112140a05312e302e301201311a06e68890e58a9f')
+
 async def proxy_capi(session: aiohttp.ClientSession, path: str) -> web.Response:
     target = CAPI_BASE + path
     try:
         async with session.get(target, headers=_HEADERS, ssl=False) as resp:
             body = await resp.read()
             ct = resp.content_type or "application/octet-stream"
+            # Mock config response if API returns minimal data
+            if path.endswith("/config") and len(body) <= 20:
+                body = _CONFIG_MOCK
+                ct = "application/octet-stream"
             if "json" in ct:
                 try:
                     data = json.loads(body)
