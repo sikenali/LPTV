@@ -501,8 +501,7 @@ onUnmounted(() => {
     </transition>
 
     <!-- ── 控制栏 ─────────────────────────────────────────────────── -->
-    <transition name="ctrl-slide">
-      <div v-if="showControlBar && currentChannel && !devHidden" class="control-bar" @mouseenter="onCtrlMouseEnter" @mouseleave="onCtrlMouseLeave">
+    <div v-if="showControlBar && currentChannel && !devHidden" class="control-bar" @mouseenter="onCtrlMouseEnter" @mouseleave="onCtrlMouseLeave">
       <div class="glass control-strip">
         <div class="highlight-line"></div>
         <div class="ctrl-row ctrl-row--1">
@@ -547,7 +546,6 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    </transition>
 
     <!-- ── 频道列表侧栏 ─────────────────────────────────────────── -->
     <transition name="slide">

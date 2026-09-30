@@ -410,10 +410,10 @@ async def handle_proxy_video(req: web.Request) -> web.Response:
 
 async def handle_proxy_capi(req: web.Request) -> web.Response:
     # /capi/{rest_of_path}
-    path = "/" + "/".join(req.match_info["path"].split("/")[1:]) if "path" in req.match_info else req.path
-    # 兼容两种路径格式
     if "path" in req.match_info:
-        path = "/" + req.match_info["path"]
+        path = "/api/" + req.match_info["path"]
+    else:
+        path = req.path.replace("/capi", "/api", 1)
     session: aiohttp.ClientSession = req.app["session"]
     return await proxy_capi(session, path)
 
