@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#06080d" />
+  <title>懒猫微视</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@4.6.0/fonts/remixicon.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #06080d; font-family: "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif; }
+    #app { width: 100%; height: 100%; }
+
+    /* 加载遮罩 */
+    #lptv-loader {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: #06080d; flex-direction: column; gap: 16px;
+    }
+    #lptv-loader .spinner {
+      width: 46px; height: 46px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,.15);
+      border-top-color: #4f7cff;
+      animation: lptvmaskspin .8s linear infinite;
+    }
+    #lptv-loader .label { color: #6b7fae; font-size: 13px; letter-spacing: 1px; }
+    @keyframes lptvmaskspin { to { transform: rotate(360deg); } }
+    #lptv-loader.done { opacity: 0; transition: opacity .6s; pointer-events: none; }
+
+    /* 错误页 */
+    #lptv-error {
+      position: fixed; inset: 0; z-index: 9998;
+      display: none; align-items: center; justify-content: center;
+      background: #06080d; flex-direction: column; gap: 12px; color: #c7d3ed;
+    }
+    #lptv-error.show { display: flex; }
+    #lptv-error h2 { color: #ff4d5e; font-size: 18px; }
+    #lptv-error p { font-size: 13px; color: #6b7fae; max-width: 400px; text-align: center; line-height: 1.7; }
+    #lptv-error button {
+      margin-top: 8px; padding: 8px 20px; border-radius: 8px;
+      background: rgba(79,124,255,.3); border: 1px solid rgba(79,124,255,.5);
+      color: #fff; cursor: pointer; font-size: 13px;
+    }
+
+    /* 通用玻璃态 */
+    .glass {
+      background: rgba(16, 21, 33, 0.78);
+      backdrop-filter: blur(26px) saturate(1.5);
+      -webkit-backdrop-filter: blur(26px) saturate(1.5);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+    .glass-card {
+      background: rgba(14, 19, 30, 0.85);
+      backdrop-filter: blur(24px) saturate(1.5);
+      -webkit-backdrop-filter: blur(24px) saturate(1.5);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 20px 55px rgba(0, 0, 0, 0.6);
+    }
+    /* 滚动条 */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+    /* 过渡动画 */
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.25s ease; }
+    .fade-enter-from, .fade-leave-to { opacity: 0; }
+    .slide-enter-active, .slide-leave-active { transition: transform 0.3s ease, opacity 0.25s ease; }
+    .slide-enter-from, .slide-leave-to { transform: translateX(20px); opacity: 0; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- 代理地址配置 -->
+  <script>
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const customProxy = params.get("proxy");
+      window.__LptvProxyBase = customProxy ? customProxy.endsWith("//") ? customProxy.slice(0, -2) : customProxy : "http://localhost:9100";
+    })();
+  </script>
+
+  <!-- 依赖 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,512 @@
+/* LPTV Web — UI 样式 (从 inject.js CSS 常量提取, 路线 A 适配) */
+
+#lptv-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483002;
+  background: transparent;
+  font-family: system-ui, "Microsoft YaHei", sans-serif;
+  color: #e8eefc;
+  overflow: hidden;
+  user-select: none;
+}
+#lptv-root.dev-hidden { display: none; }
+
+#lptv-bootmask {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 2147483003;
+}
+#lptv-bootmask .lptv-bmask-spin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin: -29px 0 0 -29px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.15);
+  border-top-color: #4f7cff;
+  animation: lptvmaskspin .8s linear infinite;
+}
+@keyframes lptvmaskspin { to { transform: rotate(360deg); } }
+
+#lptv-spin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  z-index: 3;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 3px solid rgba(255,255,255,.15);
+  border-top-color: #4f7cff;
+  animation: lptvspin .8s linear infinite;
+  pointer-events: none;
+}
+@keyframes lptvspin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+
+#lptv-osd {
+  position: absolute;
+  left: 38px;
+  top: 34px;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 10;
+  transition: opacity .35s;
+  max-width: 70vw;
+  background: linear-gradient(90deg, rgba(10,16,32,.55), rgba(10,16,32,.18) 55%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(120,160,255,.16);
+  border-radius: 14px;
+  padding: 14px 22px 16px;
+}
+#lptv-osd.show { opacity: 1; }
+.lptv-osd-num { font-size: 52px; font-weight: 800; line-height: 1; text-shadow: 0 2px 18px rgba(0,0,0,.85); }
+.lptv-osd-num b { color: #4f7cff; }
+.lptv-osd-name { font-size: 26px; font-weight: 600; margin-top: 6px; text-shadow: 0 2px 12px rgba(0,0,0,.85); }
+.lptv-osd-sub { font-size: 14px; color: #9db4e8; margin-top: 6px; letter-spacing: 1px; }
+
+#lptv-digit {
+  position: absolute;
+  right: 38px;
+  top: 34px;
+  font-size: 40px;
+  font-weight: 800;
+  z-index: 10;
+  display: none;
+  pointer-events: none;
+  text-shadow: 0 2px 14px rgba(0,0,0,.9);
+}
+#lptv-digit.show { display: block; }
+
+#lptv-vol {
+  position: absolute;
+  right: 38px;
+  top: 110px;
+  width: 220px;
+  opacity: 0;
+  z-index: 10;
+  pointer-events: none;
+  transition: opacity .3s;
+}
+#lptv-vol.show { opacity: 1; pointer-events: auto; }
+#lptv-vol .lptv-vol-label { font-size: 13px; color: #9db4e8; margin-bottom: 6px; letter-spacing: 1px; }
+
+#lptv-controls {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  background: rgba(12,17,30,.62);
+  backdrop-filter: blur(26px) saturate(1.5);
+  -webkit-backdrop-filter: blur(26px) saturate(1.5);
+  border: 1px solid rgba(120,160,255,.22);
+  box-shadow: 0 10px 40px rgba(0,0,0,.55);
+  opacity: 0;
+  transition: opacity .25s;
+  pointer-events: none;
+  max-width: 94vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#lptv-controls.show { opacity: 1; pointer-events: auto; }
+.lptv-ctl-seg { display: flex; align-items: center; gap: 7px; }
+.lptv-ctl-nav { padding-right: 13px; border-right: 1px solid rgba(120,160,255,.16); }
+.lptv-ctl-vol { padding: 0 13px; border-right: 1px solid rgba(120,160,255,.16); }
+.lptv-ctl-now { min-width: 120px; max-width: 380px; overflow: hidden; }
+.lptv-now-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff4d5e; box-shadow: 0 0 8px #ff4d5e; flex-shrink: 0; animation: lptvnow 2s ease-in-out infinite; }
+@keyframes lptvnow { 0%,100%{opacity:1}50%{opacity:.35} }
+.lptv-now-sep { color: #5c719e; margin: 0 2px; }
+.lptv-now-prog { font-size: 12.5px; color: #c9d6f2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lptv-vol-txt { font-size: 11px; color: #7d9bff; width: 26px; text-align: right; font-family: Consolas, monospace; }
+.lptv-btn { border: none; background: rgba(40,55,95,.5); color: #c9d6f2; font-size: 13px; padding: 7px 13px; border-radius: 10px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.lptv-btn:hover { background: rgba(79,124,255,.35); color: #fff; }
+.lptv-btn-ico { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border-radius: 10px; }
+.lptv-btn-ico svg { width: 16px; height: 16px; fill: #c9d6f2; stroke: #c9d6f2; transition: all .15s; }
+.lptv-btn-ico:hover svg { fill: #fff; stroke: #fff; }
+.lptv-btn-main { width: 42px; height: 42px; border-radius: 12px; background: rgba(79,124,255,.32); border: 1px solid rgba(120,160,255,.4); }
+.lptv-btn-main svg { width: 18px; height: 18px; fill: #fff; stroke: #fff; }
+.lptv-btn-main:hover { background: rgba(79,124,255,.55); }
+.lptv-btn-txt { font-size: 12.5px; letter-spacing: 1px; padding: 8px 14px; }
+#lptv-b-mute .lptv-mute-x { display: none; }
+#lptv-b-mute.muted .lptv-waves { display: none; }
+#lptv-b-mute.muted .lptv-mute-x { display: block; }
+#lptv-c-vol { width: 96px; accent-color: #4f7cff; cursor: pointer; }
+.lptv-chlabel { font-size: 13.5px; font-weight: 600; color: #e8eefc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 上下台预览 */
+#lptv-nextch {
+  position: absolute;
+  left: 50%;
+  bottom: 104px;
+  transform: translate(-50%, 8px);
+  opacity: 0;
+  z-index: 9;
+  pointer-events: none;
+  transition: opacity .18s, transform .18s;
+  background: linear-gradient(180deg, rgba(16,23,42,.74), rgba(10,16,32,.8));
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid rgba(120,160,255,.18);
+  border-radius: 14px;
+  padding: 9px 18px;
+  min-width: 250px;
+  box-shadow: 0 12px 36px rgba(0,0,0,.55);
+}
+#lptv-nextch.show { opacity: 1; transform: translate(-50%, 0); }
+#lptv-nextch .lptv-nc-row { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: 13px; color: #b9c8ec; }
+#lptv-nextch .lptv-nc-row.hl .lptv-nc-arrow { background: rgba(79,124,255,.5); color: #fff; }
+#lptv-nextch .lptv-nc-arrow { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; background: rgba(79,124,255,.16); color: #7d9bff; flex-shrink: 0; font-family: Consolas, monospace; }
+#lptv-nextch .lptv-nc-num { width: 28px; color: #5c719e; font-size: 11px; font-family: Consolas, monospace; flex-shrink: 0; }
+#lptv-nextch .lptv-nc-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#lptv-nextch .lptv-nc-sep { height: 1px; background: rgba(120,160,255,.14); margin: 3px 0; }
+
+/* 录制角标 */
+#lptv-rec-badge {
+  position: absolute;
+  left: 38px;
+  bottom: 34px;
+  z-index: 11;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  background: rgba(20,28,48,.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,77,94,.4);
+  box-shadow: 0 4px 18px rgba(0,0,0,.45);
+}
+#lptv-rec-badge.show { display: flex; }
+#lptv-rec-badge .lptv-rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #ff4d5e; box-shadow: 0 0 8px #ff4d5e; animation: lptvrec 1.2s ease-in-out infinite; }
+@keyframes lptvrec { 0%,100%{opacity:1}50%{opacity:.25} }
+#lptv-rec-badge #lptv-rec-time { font-size: 12px; font-weight: 600; color: #ffb3bb; font-family: Consolas, monospace; letter-spacing: 1px; }
+#lptv-b-rec svg { color: #ff4d5e; }
+#lptv-b-rec.rec-on { background: rgba(255,77,94,.32); border: 1px solid rgba(255,77,94,.55); }
+#lptv-b-rec.rec-on svg { color: #ff4d5e; animation: lptvrec 1.2s ease-in-out infinite; }
+#lptv-b-rec.rec-on:hover { background: rgba(255,77,94,.45); }
+
+/* 截图白闪 */
+#lptv-shot-flash {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  z-index: 2147483005;
+  pointer-events: none;
+}
+#lptv-shot-flash.go { animation: lptvflash .35s ease-out; }
+@keyframes lptvflash { 0%{opacity:.85}100%{opacity:0} }
+
+/* 频道面板 */
+#lptv-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 320px;
+  z-index: 5;
+  background: rgba(16,23,42,.66);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  transform: translateX(320px);
+  transition: transform .28s ease;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(120,160,255,.14);
+  box-shadow: -10px 0 40px rgba(0,0,0,.5);
+}
+#lptv-panel.open { transform: translateX(0); }
+.lptv-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(120,160,255,.12); }
+.lptv-panel-title { font-size: 15px; font-weight: 700; letter-spacing: 2px; color: #e8eefc; }
+.lptv-panel-cur { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(120,160,255,.12); background: rgba(79,124,255,.08); }
+.lptv-panel-cur-num { font-size: 24px; font-weight: 800; color: #4f7cff; line-height: 1; font-family: Consolas, monospace; min-width: 34px; }
+.lptv-panel-cur-name { font-size: 15px; font-weight: 700; color: #fff; }
+.lptv-panel-cur-sub { font-size: 11px; color: #7d9bff; margin-top: 2px; }
+.lptv-panel-body { flex: 1; overflow-y: auto; padding: 6px 0 18px; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #28345a transparent; }
+.lptv-panel-body::-webkit-scrollbar { width: 6px; }
+.lptv-panel-body::-webkit-scrollbar-track { background: transparent; }
+.lptv-panel-body::-webkit-scrollbar-thumb { background: #2c3d6b; border-radius: 3px; }
+.lptv-cat { color: #5c719e; font-size: 11px; padding: 14px 20px 5px; letter-spacing: 2px; }
+.lptv-ch { display: flex; align-items: center; gap: 10px; padding: 8px 14px; margin: 1px 8px 2px; cursor: pointer; color: #c7d3ed; font-size: 14px; border-radius: 9px; transition: all .12s; }
+.lptv-ch:hover { background: rgba(79,124,255,.14); color: #fff; }
+.lptv-ch.active { background: linear-gradient(90deg, rgba(79,124,255,.26), rgba(79,124,255,.05)); color: #fff; font-weight: 600; }
+.lptv-ch.focus { outline: 1px solid rgba(79,124,255,.65); outline-offset: -1px; }
+.lptv-ch .lptv-ch-num { font-size: 11px; color: #6b7fae; width: 24px; flex-shrink: 0; font-family: Consolas, monospace; }
+.lptv-ch.active .lptv-ch-num { color: #9db4e8; }
+.lptv-ch .lptv-ch-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lptv-ch .live-dot { width: 5px; height: 5px; border-radius: 50%; background: #3d4c6e; flex-shrink: 0; }
+.lptv-ch.active .live-dot { background: #ff4d5e; box-shadow: 0 0 6px #ff4d5e; }
+.lptv-ch .lptv-ch-fav { flex-shrink: 0; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; color: #3d4c6e; cursor: pointer; border-radius: 6px; transition: all .12s; }
+.lptv-ch .lptv-ch-fav:hover { color: #ffd166; background: rgba(255,209,102,.14); }
+.lptv-ch .lptv-ch-fav.on { color: #ffd166; }
+.lptv-ch .lptv-ch-fav svg { width: 14px; height: 14px; }
+#lptv-panel-tabs { display: flex; gap: 6px; padding: 6px 14px 8px; border-bottom: 1px solid rgba(120,160,255,.12); }
+.lptv-ptab { padding: 3px 12px; border-radius: 999px; font-size: 12px; color: #8fa3cc; cursor: pointer; background: rgba(79,124,255,.08); border: 1px solid rgba(79,124,255,.14); transition: all .12s; }
+.lptv-ptab:hover { color: #fff; background: rgba(79,124,255,.2); }
+.lptv-ptab.on { color: #fff; background: rgba(79,124,255,.32); border-color: rgba(79,124,255,.5); }
+.lptv-ptab b { display: inline-block; min-width: 14px; height: 14px; line-height: 14px; margin-left: 4px; border-radius: 7px; background: #ffd166; color: #1b2540; font-size: 9px; font-weight: 700; padding: 0 3px; }
+.lptv-panel-empty { padding: 30px 20px; text-align: center; color: #6b7fae; font-size: 13px; line-height: 1.7; }
+
+/* 节目单 */
+#lptv-epg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 360px;
+  z-index: 5;
+  background: rgba(16,23,42,.66);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  transform: translateX(-360px);
+  transition: transform .28s ease;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(120,160,255,.14);
+  box-shadow: 10px 0 40px rgba(0,0,0,.5);
+}
+#lptv-epg.open { transform: translateX(0); }
+.lptv-epg-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid rgba(120,160,255,.12); }
+.lptv-epg-title { font-size: 15px; font-weight: 700; letter-spacing: 2px; color: #e8eefc; }
+.lptv-epg-sub { font-size: 11px; color: #7d9bff; margin-top: 3px; letter-spacing: 1px; }
+.lptv-epg-body { flex: 1; overflow-y: auto; padding: 8px 0 18px; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #28345a transparent; }
+.lptv-epg-body::-webkit-scrollbar { width: 6px; }
+.lptv-epg-body::-webkit-scrollbar-track { background: transparent; }
+.lptv-epg-body::-webkit-scrollbar-thumb { background: #2c3d6b; border-radius: 3px; }
+.lptv-epg-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; margin: 1px 8px 2px; color: #c7d3ed; font-size: 14px; border-radius: 9px; transition: background .12s; }
+.lptv-epg-row.past { color: #5c719e; }
+.lptv-epg-row.future { color: #9db4e8; }
+.lptv-epg-row.live { background: linear-gradient(90deg, rgba(255,77,94,.22), rgba(255,77,94,.05)); color: #fff; font-weight: 600; box-shadow: inset 2px 0 0 #ff4d5e; }
+.lptv-epg-t { font-size: 12px; color: #6b7fae; width: 100px; flex-shrink: 0; font-family: Consolas, monospace; }
+.lptv-epg-row.live .lptv-epg-t { color: #ff9aa8; }
+.lptv-epg-n { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#lptv-name-pop {
+  position: fixed;
+  z-index: 2147483010;
+  max-width: 420px;
+  padding: 8px 12px;
+  background: rgba(14,20,36,.92);
+  border: 1px solid rgba(120,160,255,.3);
+  border-radius: 8px;
+  font-size: 12px;
+  color: #e8eefc;
+  line-height: 1.6;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .12s;
+  box-shadow: 0 6px 24px rgba(0,0,0,.5);
+}
+#lptv-name-pop.show { opacity: 1; }
+.lptv-epg-empty { padding: 30px 20px; text-align: center; color: #6b7fae; font-size: 13px; }
+#lptv-epg-tabs { display: flex; gap: 6px; padding: 8px 14px 6px; border-bottom: 1px solid rgba(120,160,255,.12); }
+.lptv-epg-tab { flex: 1; text-align: center; padding: 6px 0; border-radius: 8px; font-size: 12px; color: #8fa3cc; cursor: pointer; transition: all .12s; white-space: nowrap; }
+.lptv-epg-tab i { display: block; font-style: normal; font-size: 10px; color: #5c719e; margin-top: 1px; }
+.lptv-epg-tab:hover { background: rgba(79,124,255,.14); color: #fff; }
+.lptv-epg-tab.on { background: rgba(79,124,255,.28); color: #fff; font-weight: 600; }
+.lptv-epg-tab.on i { color: #9db4e8; }
+.lptv-epg-res { flex-shrink: 0; padding: 3px 10px; border-radius: 7px; font-size: 11px; letter-spacing: 1px; background: rgba(79,124,255,.16); color: #7d9bff; cursor: pointer; transition: all .12s; border: 1px solid rgba(79,124,255,.25); }
+.lptv-epg-res:hover { background: rgba(79,124,255,.35); color: #fff; }
+.lptv-epg-res.on { background: rgba(255,170,80,.2); color: #ffb36b; border-color: rgba(255,170,80,.45); }
+.lptv-epg-tab-res b { display: inline-block; min-width: 14px; height: 14px; line-height: 14px; margin-left: 3px; border-radius: 7px; background: #ff4d5e; color: #fff; font-size: 9px; font-weight: 700; padding: 0 3px; }
+.lptv-res-row { display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin: 1px 8px 2px; border-radius: 9px; cursor: pointer; transition: background .12s; }
+.lptv-res-row:hover { background: rgba(79,124,255,.14); }
+.lptv-res-main { flex: 1; overflow: hidden; }
+.lptv-res-ch { display: inline-block; font-size: 11px; color: #7d9bff; background: rgba(79,124,255,.16); padding: 1px 7px; border-radius: 5px; margin-right: 7px; vertical-align: middle; }
+.lptv-res-name { font-size: 13px; color: #e8eefc; vertical-align: middle; }
+.lptv-res-when { display: block; font-size: 11px; color: #6b7fae; margin-top: 3px; font-family: Consolas, monospace; }
+.lptv-res-when em { font-style: normal; color: #ffb36b; }
+.lptv-res-x { flex-shrink: 0; width: 22px; height: 22px; line-height: 20px; text-align: center; border-radius: 6px; color: #6b7fae; font-size: 15px; cursor: pointer; transition: all .12s; }
+.lptv-res-x:hover { background: rgba(255,77,94,.25); color: #ff8f9a; }
+
+/* 设置 */
+#lptv-settings {
+  position: absolute;
+  right: 26px;
+  bottom: 86px;
+  width: 320px;
+  z-index: 6;
+  background: rgba(14,20,36,.65);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border-radius: 14px;
+  border: 1px solid rgba(120,160,255,.16);
+  padding: 16px;
+  display: none;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6);
+}
+#lptv-settings.open { display: block; }
+.lptv-set-title { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #9db4e8; margin-bottom: 12px; }
+.lptv-set-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; font-size: 13px; color: #c7d3ed; }
+.lptv-set-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.lptv-set-row input[type=checkbox] { accent-color: #4f7cff; width: 15px; height: 15px; cursor: pointer; }
+.lptv-set-row select { background: #141d33; color: #c7d3ed; border: 1px solid #28345a; border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.lptv-set-sep { height: 1px; background: rgba(80,120,255,.12); margin: 8px 0; }
+.lptv-set-url { font-size: 10px; color: #6b7fae; word-break: break-all; max-height: 44px; overflow: hidden; }
+.lptv-link { color: #7d9bff; cursor: pointer; font-size: 12px; }
+.lptv-link:hover { color: #a5bdff; text-decoration: underline; }
+.lptv-set-dir { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 8px 0; }
+.lptv-set-dir-l { flex: 1; min-width: 0; }
+.lptv-set-dir-l > span { font-size: 13px; color: #c7d3ed; }
+.lptv-set-dir-btns { display: flex; gap: 2px; flex-shrink: 0; }
+.lptv-set-dir-btns .lptv-link { padding: 4px 10px; border-radius: 6px; background: rgba(79,124,255,.1); border: 1px solid rgba(79,124,255,.18); font-size: 11px; white-space: nowrap; }
+.lptv-set-dir-btns .lptv-link:hover { background: rgba(79,124,255,.25); text-decoration: none; }
+
+/* 关于 */
+#lptv-about {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483005;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5,9,20,.5);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
+#lptv-about.open { display: flex; }
+.lptv-about-card {
+  position: relative;
+  width: 400px;
+  max-width: 92vw;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: rgba(14,20,36,.72);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border-radius: 16px;
+  border: 1px solid rgba(120,160,255,.16);
+  padding: 24px 26px 18px;
+  box-shadow: 0 24px 80px rgba(0,0,0,.65);
+  color: #c7d3ed;
+  animation: lptvaboutin .22s ease;
+}
+@keyframes lptvaboutin { from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none} }
+.lptv-about-x { position: absolute; top: 12px; right: 14px; width: 28px; height: 28px; line-height: 26px; text-align: center; border-radius: 8px; color: #8fa3cc; font-size: 15px; cursor: pointer; transition: all .12s; user-select: none; }
+.lptv-about-x:hover { background: rgba(255,77,94,.22); color: #ff8f9a; }
+.lptv-about-app { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+.lptv-about-logo { width: 52px; height: 52px; border-radius: 13px; flex-shrink: 0; object-fit: cover; box-shadow: 0 4px 16px rgba(79,124,255,.35); }
+.lptv-about-appname { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 2px; }
+.lptv-about-ver { font-size: 11px; color: #6b7fae; margin-top: 3px; font-family: Consolas, monospace; }
+.lptv-about-desc { font-size: 12px; color: #9db4e8; line-height: 1.8; margin: 0 0 16px; padding-bottom: 14px; border-bottom: 1px solid rgba(120,160,255,.1); }
+.lptv-about-brand { border: 1px solid rgba(120,160,255,.16); border-radius: 12px; padding: 15px 16px; background: rgba(79,124,255,.06); margin-bottom: 14px; }
+.lptv-about-brandname { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 2px; }
+.lptv-about-slogan { font-size: 11px; color: #7d9bff; letter-spacing: 1px; margin-top: 3px; }
+.lptv-about-quote { font-size: 12px; color: #c7d3ed; line-height: 1.8; margin-top: 9px; }
+.lptv-about-qr { text-align: center; padding: 4px 0; }
+.lptv-about-qr img { width: 132px; height: 132px; border-radius: 10px; display: block; margin: 0 auto 10px; border: 1px solid rgba(120,160,255,.2); }
+.lptv-about-qr-t { font-size: 12px; color: #e8eefc; font-weight: 600; }
+.lptv-about-qr-s { font-size: 11px; color: #6b7fae; margin-top: 4px; line-height: 1.6; }
+.lptv-about-foot { text-align: center; font-size: 11px; color: #5c719e; margin-top: 14px; letter-spacing: 1px; }
+
+/* Toast / Hint */
+#lptv-toast {
+  position: absolute;
+  left: 50%;
+  top: 72px;
+  transform: translateX(-50%);
+  z-index: 9;
+  background: rgba(20,28,48,.96);
+  color: #e8eefc;
+  padding: 10px 22px;
+  border-radius: 9px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity .25s;
+  pointer-events: none;
+  border: 1px solid rgba(80,120,255,.25);
+  max-width: 72vw;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#lptv-toast.show { opacity: 1; }
+#lptv-toast.show._res { pointer-events: auto; cursor: pointer; border-color: rgba(255,170,80,.5); }
+#lptv-toast.show._res::after { content: " · 点击跳转"; color: #ffb36b; font-size: 11px; }
+#lptv-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 9;
+  background: rgba(20,28,48,.92);
+  color: #c9d6f2;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity .3s;
+  pointer-events: none;
+}
+#lptv-hint.show { opacity: 1; }
+
+/* 顶部栏 */
+#lptv-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  background: linear-gradient(180deg, rgba(10,16,32,.74), rgba(10,16,32,.42) 60%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  opacity: 0;
+  transition: opacity .25s;
+  pointer-events: none;
+  color: #e8eefc;
+  user-select: none;
+}
+#lptv-topbar.show { opacity: 1; pointer-events: auto; }
+#lptv-topbar .lptv-tb-title { display: flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 12px; letter-spacing: 1px; color: #a8bce8; white-space: nowrap; overflow: hidden; }
+#lptv-topbar .lptv-tb-title b { color: #e8eefc; font-weight: 700; }
+#lptv-topbar .lptv-tb-meta { display: flex; align-items: center; gap: 6px; padding: 0 10px; font-size: 11px; color: #7d9bff; border-left: 1px solid rgba(120,160,255,.18); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#lptv-topbar .lptv-tb-meta .dot { width: 6px; height: 6px; border-radius: 50%; background: #ff4d5e; box-shadow: 0 0 6px #ff4d5e; flex-shrink: 0; }
+#lptv-tb-btns { display: flex; height: 100%; flex-shrink: 0; }
+.lptv-tb-btn { width: 46px; height: 100%; display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: #c9d6f2; cursor: default; transition: background .15s; font-family: "Segoe MDL2 Assets", Webdings, sans-serif; font-size: 13px; }
+.lptv-tb-btn:hover { background: rgba(120,160,255,.16); color: #fff; }
+.lptv-tb-btn.close:hover { background: #e81123; color: #fff; }
+.lptv-tb-btn.on { color: #4f7cff; }
+
+#lptv-root.idle { cursor: none; }
+#lptv-root.idle #lptv-osd, #lptv-root.idle #lptv-vol, #lptv-root.idle #lptv-topbar { opacity: 0; pointer-events: none; }
+#lptv-root.idle.ctrl-on { cursor: auto; }
+#lptv-root.idle.ctrl-on #lptv-controls { opacity: 1; pointer-events: auto; }
+
+/* 滚动条 */
+html, body { scrollbar-width: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+#lptv-root { scrollbar-width: thin; scrollbar-color: rgba(120,160,255,.3) transparent; }
+#lptv-root ::-webkit-scrollbar { width: 7px; height: 7px; }
+#lptv-root ::-webkit-scrollbar-thumb { background: rgba(120,160,255,.3); border-radius: 4px; border: 1px solid rgba(0,0,0,.25); }
+#lptv-root ::-webkit-scrollbar-thumb:hover { background: rgba(120,160,255,.5); }
+#lptv-root ::-webkit-scrollbar-track { background: rgba(255,255,255,.04); border-radius: 4px; }
+
+/* 官方 video 铺满 */
+video[official-live] {
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 2147483001 !important;
+  object-fit: contain;
+  background: #000;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+}

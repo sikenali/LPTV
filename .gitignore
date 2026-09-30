@@ -1,0 +1,11 @@
+_lpk_content/
+output.lpk
+pytv/
+records/
+shots/
+dist/
+node_modules/
+__pycache__/
+*.pyc
+web/dist/
+web/node_modules/
