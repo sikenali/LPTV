@@ -529,3 +529,12 @@ video[official-live] {
 .player-bottom-bar {
   display: none !important;
 }
+
+/* ── 强制置顶：确保 LPTV UI 覆盖官方页面 ───────────────────── */
+#lptv-root {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483002 !important;
+  background: transparent !important;
+  overflow: hidden !important;
+}

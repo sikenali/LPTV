@@ -357,6 +357,23 @@
     root.appendChild(namePop);
     root.appendChild(topbar);
     document.body.appendChild(root);
+    // 确保 lptv-root 始终是 body 的最后一个子节点（防止官方页重排后失去顶层）
+    function ensureRootOnTop() {
+      if (document.body.lastChild !== root) {
+        document.body.appendChild(root);
+      }
+    }
+    ensureRootOnTop();
+    // 监听 body 变化，官方页 SPA 重渲染时重新置顶
+    try {
+      new MutationObserver(function(mutations) {
+        for (var m of mutations) {
+          for (var node of m.addedNodes) {
+            if (node.nodeType === 1) { ensureRootOnTop(); return; }
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+    } catch(e) {}
 
     Lptv.ui = { root, osd, digit, vol, controls, nextch, panel, epg, settings, about,
               toast: toastEl, hint, topbar, volRange: range,
