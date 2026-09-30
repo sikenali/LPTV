@@ -79,13 +79,15 @@ async def fetch_official(session: aiohttp.ClientSession, pid: str = "") -> str:
 
 
 def inject_into_html(html: str, css_url: str, js_url: str) -> str:
-    """在 </head> 前注入 CSS, 在 </body> 前注入 JS"""
+    """在首段<script>前注入 CAPI 重写脚本, 在 </head> 前注入 CSS, 在 </body> 前注入业务 JS"""
     head_close = "</head>"
     body_close = "</body>"
+    first_script = html.find("<script")
 
     css_tag = f'\n<link rel="stylesheet" href="{css_url}">\n'
-    # 注入 CAPI 重写脚本：将 capi.yangshipin.cn 请求转发到本地代理
-    capi_patch = '\n<script>(function(){'
+
+    # CAPI 重写脚本：必须在任何官方脚本之前执行, 拦截所有 capi.yangshipin.cn 请求
+    capi_patch = '<script>(function(){'
     capi_patch += 'var _fetch=window.fetch;window.fetch=function(u,o){'
     capi_patch += 'if(typeof u==="string"&&u.indexOf("capi.yangshipin.cn")===0)'
     capi_patch += 'u="/capi"+u.replace("https://capi.yangshipin.cn","");'
@@ -96,10 +98,19 @@ def inject_into_html(html: str, css_url: str, js_url: str) -> str:
     capi_patch += '_XH.call(this,m,u,*r);};'
     capi_patch += '})();</script>\n'
 
-    # 注入顺序: capi重写 → layer.js 先加载(核心逻辑), patch.js 后加载(补充功能)
-    js_tag = (capi_patch +
-              f'\n<script src="{js_url}"></script>\n'
+    # 业务 JS：layer.js + patch.js
+    js_tag = (f'\n<script src="{js_url}"></script>\n'
               f'<script src="{js_url.replace("layer.js", "patch.js")}"></script>\n')
+
+    # CAPI 补丁注入到第一个 <script> 之前, 确保早于所有官方脚本执行
+    if first_script > 0:
+        html = html[:first_script] + capi_patch + html[first_script:]
+    else:
+        # 无 script 标签则注入到 </head> 前
+        if head_close in html:
+            html = html.replace(head_close, capi_patch + head_close, 1)
+        else:
+            html = capi_patch + html
 
     if head_close in html:
         html = html.replace(head_close, css_tag + head_close, 1)
