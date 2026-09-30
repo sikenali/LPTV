@@ -13,7 +13,8 @@ export function useScreenshot() {
   async function capture(
     videoEl: HTMLVideoElement | null,
     channel: string = '直播',
-    format: 'image/png' | 'image/jpeg' = 'image/png'
+    format: 'image/png' | 'image/jpeg' = 'image/png',
+    base: string = ''
   ): Promise<{ ok: boolean; name?: string; error?: string } | null> {
     if (!videoEl || !videoEl.videoWidth) {
       return { ok: false, error: '视频尚未就绪' }
@@ -30,7 +31,7 @@ export function useScreenshot() {
     const base64 = dataUrl.split(',')[1]
 
     try {
-      const res = await fetch('/api/shot', {
+      const res = await fetch(base + '/api/shot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel, data: base64 }),

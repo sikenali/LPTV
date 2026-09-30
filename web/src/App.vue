@@ -4,7 +4,9 @@ import { useRecorder } from './composables/useRecorder'
 import { useScreenshot } from './composables/useScreenshot'
 
 // ── 代理地址 ────────────────────────────────────────────────────────
-const PROXY_BASE = window.__LptvProxyBase || 'http://localhost:9100'
+// 同源部署 (LPK 正式包 / vite dev 都已把 /api /_page /capi 反代到后端),
+// 所以默认留空即可; 仅当后端在别处时才用 window.__LptvProxyBase 覆盖。
+const PROXY_BASE = window.__LptvProxyBase || ''
 
 const LptvApi = {
   async _post(path, body) {
@@ -18,7 +20,8 @@ const LptvApi = {
   recOpen: (ch) => LptvApi._post('/api/record/open', { channel: ch }),
   recClose: (id) => LptvApi._post('/api/record/close', { id }),
   shotSave: (ch, data) => LptvApi._post('/api/shot', { channel: ch, data }),
-  fetchEpg: (pid, ymd) => LptvApi._get(`/capi/yspepg/program/${pid}/${ymd}`),
+  // protobuf 由服务端解析, 这里直接拿 JSON
+  fetchEpg: (pid, ymd) => LptvApi._get(`/api/epg/${encodeURIComponent(pid)}/${ymd}`),
 }
 
 const LptvState = (() => {
@@ -62,11 +65,14 @@ const volume = ref(100)
 const isMuted = ref(false)
 const isPlaying = ref(true)
 const isRecording = ref(false)
+const recBusy = ref(false)
 const recTime = ref('00:00')
 const recBytes = ref(0)
 const epgDayOffset = ref(0)
 const epgPrograms = ref([])
 const epgLoading = ref(false)
+const epgError = ref('')
+const epgResTab = ref(false)
 const epgDateLabelVal = ref('')
 const mouseActive = ref(true)
 const devHidden = ref(false)
@@ -77,6 +83,8 @@ const settings = ref({ fit: 'contain', recDir: './records/', shotDir: './shots/'
 let _pidBefore = '', _switchAt = 0
 
 let digitTimer = null, recTickTimer = null, keyHandler = null, idleTimer = null, ctrlTimer = null
+let moveHandler = null, wheelHandler = null, visHandler = null
+let watchdogTimer = null, epgTimer = null
 let frameReady = false, recInst = null, darkCount = 0, ctrlHoverTimer = null
 const showControlBar = ref(false)
 
@@ -104,7 +112,7 @@ const epgDates = computed(() => {
     const sub = i > 0 ? (d.getMonth() + 1) + '/' + d.getDate() : ''
     result.push({ label, sub, active: i === 0, offset: i, isRes: false })
   }
-  const res = JSON.parse(localStorage.getItem('lptv.res.v1') || '[]')
+  const res = resVersion.value >= 0 ? resLoad() : []
   result.push({ label: '预约', sub: res.length || '', active: false, isRes: true })
   return result
 })
@@ -121,38 +129,11 @@ function ymdStr(dt) { return dt.getFullYear() + String(dt.getMonth() + 1).padSta
 function epgYmdOf(off) { const d = new Date(); d.setDate(d.getDate() + (off || 0)); return ymdStr(d) }
 function epgDateStr(dt) { const days = ['日','一','二','三','四','五','六']; return (dt.getMonth()+1) + '月' + dt.getDate() + '日 星期' + days[dt.getDay()] }
 
-// ── EPG protobuf 解析 ──────────────────────────────────────────────
-function utf8Bytes(bytes, a, n) {
-  try { if (window.TextDecoder) return new TextDecoder().decode(bytes.subarray(a, a + n)) } catch {}
-  try { let s = ''; for (let i = a; i < a + n; i++) s += String.fromCharCode(bytes[i]); return decodeURIComponent(escape(s)) } catch { return '' }
-}
-function parseEpgEntry(bytes, a, b) {
-  let i = a, p = {}
-  function vi() { let v = 0, s = 0, k = 0; while (i < b && k < 5) { const x = bytes[i++]; v += (x & 0x7f) * (1 << s); s += 7; k++; if (!(x & 0x80)) break }; return v }
-  try { while (i < b) { const tag = vi(); if (tag === 0) break; const f = tag >>> 3, wt = tag & 7
-    if (wt === 2) { const len = vi(); if (i + len > b) break; if (f === 1) p.id = utf8Bytes(bytes, i, len); else if (f === 2) p.name = utf8Bytes(bytes, i, len); else if (f === 5) p.start = utf8Bytes(bytes, i, len); else if (f === 6) p.end = utf8Bytes(bytes, i, len); i += len }
-    else if (wt === 0) { const v = vi(); if (f === 3) p.s0 = v; else if (f === 4) p.e0 = v; else if (f === 7) p.dur = v }
-    else { i += vi() }
-  } } catch {}
-  return p.name ? p : null
-}
-function parseEpg(buf) {
-  const programs = []
-  try {
-    const bytes = new Uint8Array(buf); let i = 0
-    function vi() { let v = 0, s = 0, k = 0; while (i < bytes.length && k < 5) { const b = bytes[i++]; v += (b & 0x7f) * (1 << s); s += 7; k++; if (!(b & 0x80)) break }; return v }
-    while (i < bytes.length) { const tag = vi(); if (tag === 0) break; const f = tag >>> 3, wt = tag & 7
-      if (wt === 2) { const len = vi(); const p = parseEpgEntry(bytes, i, i + len); if (p) programs.push(p); i += len }
-      else if (wt === 0) { vi() } else { i += vi() }
-      if (programs.length > 200) break
-    }
-  } catch {}
-  return programs
-}
-
 // ── 预约管理 ───────────────────────────────────────────────────────
 function resLoad() { try { return JSON.parse(localStorage.getItem('lptv.res.v1') || '[]') } catch { return [] } }
-function resSave(list) { try { localStorage.setItem('lptv.res.v1', JSON.stringify(list)) } catch {} LptvState.flush({ res: list }) }
+// resVersion: localStorage 不是响应式的, 改一次 +1 让依赖它的 computed 重算
+const resVersion = ref(0)
+function resSave(list) { try { localStorage.setItem('lptv.res.v1', JSON.stringify(list)) } catch {} resVersion.value++; LptvState.flush({ res: list }) }
 function resHas(pid, s0) { return resLoad().some(r => r.id === (pid + '_' + s0)) }
 function resToggle(pid, s0, e0, name) {
   const id = pid + '_' + s0, list = resLoad(), i = list.findIndex(r => r.id === id), had = i >= 0
@@ -179,7 +160,12 @@ async function loadChannels() {
       if (Array.isArray(st.favs) && st.favs.length) favs.value = st.favs.filter(pid => channels.value.some(c => c.pid === pid))
       if (typeof st.resumeLast === 'boolean') resumeLast.value = st.resumeLast
       if (st.lastPid) lastPid.value = st.lastPid
-      if (Array.isArray(st.res)) try { localStorage.setItem('lptv.res.v1', JSON.stringify(st.res)) } catch {}
+      if (typeof st.volume === 'number') volume.value = Math.round(Math.max(0, Math.min(1, st.volume)) * 100)
+      if (typeof st.muted === 'boolean') isMuted.value = st.muted
+      if (st.fit === 'cover' || st.fit === 'contain') settings.value.fit = st.fit
+      if (st.recDir) settings.value.recDir = st.recDir
+      if (st.shotDir) settings.value.shotDir = st.shotDir
+      if (Array.isArray(st.res)) try { localStorage.setItem('lptv.res.v1', JSON.stringify(st.res)); resVersion.value++ } catch {}
     }
   } catch {}
   const m = location.href.match(/[?&]pid=(\d+)/); let startPid = m ? m[1] : ''
@@ -197,6 +183,9 @@ function switchChannel(pid) {
   if (frameEl) frameEl.src = PROXY_BASE + '/_page?pid=' + pid
   const idx = channels.value.findIndex(c => c.pid === pid)
   showOsdTip(String(idx + 1).padStart(2, '0'), ch.name)
+  // 切台后节目单要跟着换频道, 否则显示的是上一个频道的单子
+  epgPrograms.value = []
+  if (showEpg.value) fetchEpg(pid, epgYmdOf(epgDayOffset.value))
 }
 
 function showOsdTip(num, name, sub) {
@@ -227,19 +216,36 @@ function stepChannel(delta) {
 }
 
 // ── 音量 ───────────────────────────────────────────────────────────
+// 真正的 <video> 在 iframe 里。与后端同源, 所以可以直接拿到元素改 volume/muted;
+// 只有在拿不到元素时才退回 postMessage (避免两处同时 toggle 造成状态打架)。
+function applyVideoVolume() {
+  const v = getVideoElement()
+  if (!v) return false
+  try { v.volume = volume.value / 100; v.muted = isMuted.value; return true }
+  catch (e) { return false }
+}
 function setVolume(v) {
   v = Math.max(0, Math.min(100, v)); volume.value = v; isMuted.value = v === 0
   LptvState.flush({ volume: v / 100, muted: isMuted.value })
+  if (!applyVideoVolume()) sendCmd('vol', { val: v / 100 })
   volTip.value = v; clearTimeout(volTip._t); volTip._t = setTimeout(() => { volTip.value = null }, 1400)
 }
 function toggleMute() {
   isMuted.value = !isMuted.value
   if (isMuted.value) LptvState.flush({ muted: true })
   else LptvState.flush({ muted: false, volume: volume.value / 100 })
+  if (!applyVideoVolume()) sendCmd('mute')
   volTip.value = isMuted.value ? 0 : volume.value
   clearTimeout(volTip._t); volTip._t = setTimeout(() => { volTip.value = null }, 1400)
 }
-function togglePlay() { isPlaying.value = !isPlaying.value }
+function togglePlay() {
+  const v = getVideoElement()
+  if (v) {
+    if (v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}) }
+    else v.pause()
+    isPlaying.value = !v.paused
+  } else { isPlaying.value = !isPlaying.value; sendCmd('play') }
+}
 
 // ── 收藏 ───────────────────────────────────────────────────────────
 function toggleFav(pid) {
@@ -248,35 +254,53 @@ function toggleFav(pid) {
   LptvState.flush({ favs: favs.value })
   showToast(i >= 0 ? '已取消收藏' : '已收藏')
 }
-function selectChannel(ch) { currentChannel.value = ch; showPanel.value = false }
+function selectChannel(ch) { switchChannel(ch.pid); showPanel.value = false }
 
 // ── 录制 ───────────────────────────────────────────────────────────
 async function recToggle() {
+  if (recBusy.value) return
   if (isRecording.value) {
-    if (recInst) { await recInst.stopRecording(); recInst = null }
-    isRecording.value = false; clearInterval(recTickTimer); recTime.value = '00:00'
-    showToast('录制已保存')
-  } else {
-    const videoEl = getVideoElement()
+    recBusy.value = true
     try {
-      recInst = recorder.use(videoEl, currentChannel.value?.name || '直播')
-      await recInst.open(); isRecording.value = true
-      recTickTimer = setInterval(() => {
-        if (recInst) {
-          const s = recInst.duration.value
-          recTime.value = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0')
-          recBytes.value = recInst.bytes.value
-        }
-      }, 1000)
-      showToast('开始录制')
-    } catch (e) { showToast('录制失败: ' + e.message) }
+      if (recInst) {
+        const r = await recInst.stopRecording()
+        if (r && r.ok === false) showToast('录制异常: ' + (r.error || '未知错误'))
+        else if (r && r.size_mb != null) showToast('录制已保存 · ' + r.size_mb + 'MB')
+        else showToast('录制已保存')
+      }
+    } catch (e) { showToast('录制收尾失败: ' + e.message) }
+    finally {
+      recInst = null; isRecording.value = false; recBusy.value = false
+      clearInterval(recTickTimer); recTickTimer = null
+      recTime.value = '00:00'; recBytes.value = 0
+    }
+    return
   }
+  const videoEl = getVideoElement()
+  if (!videoEl) { showToast('视频尚未就绪，无法录制'); return }
+  recBusy.value = true
+  try {
+    recInst = recorder.use(videoEl, currentChannel.value?.name || '直播', PROXY_BASE)
+    await recInst.open()
+    isRecording.value = true
+    recTickTimer = setInterval(() => {
+      if (recInst) {
+        const s = recInst.duration.value
+        recTime.value = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0')
+        recBytes.value = recInst.bytes.value
+      }
+    }, 1000)
+    showToast(recInst.hasAudio.value ? '开始录制（含音频）' : '开始录制（无音频）')
+  } catch (e) {
+    recInst = null; isRecording.value = false
+    showToast('录制失败: ' + (e && e.message ? e.message : e))
+  } finally { recBusy.value = false }
 }
 
 // ── 截图 ───────────────────────────────────────────────────────────
 async function shotTake() {
   const videoEl = getVideoElement()
-  const r = await screenshot.capture(videoEl, currentChannel.value?.name || '直播')
+  const r = await screenshot.capture(videoEl, currentChannel.value?.name || '直播', 'image/png', PROXY_BASE)
   if (r?.ok) {
     showToast('已截图 · ' + r.name)
     const fl = document.getElementById('lptv-shot-flash')
@@ -298,18 +322,55 @@ function getVideoElement() {
 async function fetchEpg(pid, ymd) {
   if (!pid || !/^\d+$/.test(String(pid))) return
   epgLoading.value = true
+  epgError.value = ''
   try {
     const r = await LptvApi.fetchEpg(pid, ymd)
-    if (r && r.data) epgPrograms.value = parseEpg(r.data).map(p => ({ ...p, reserved: resHas(pid, p.s0) }))
-  } catch (e) { console.warn('[LPTV] epgFetch err:', e) }
+    const progs = (r && r.data && (r.data.programs || r.data)) || []
+    epgPrograms.value = (Array.isArray(progs) ? progs : []).map(p => ({ ...p, reserved: resHas(pid, p.s0), current: nowPlaying(p) }))
+  } catch (e) { console.warn('[LPTV] epgFetch err:', e); epgError.value = '节目单加载失败' }
   finally { epgLoading.value = false }
+}
+// 高亮当前正在播出的节目 (用后端给的 start/end 或 epoch)
+function nowPlaying(p) {
+  if (!p) return false
+  const now = Math.floor(Date.now() / 1000)
+  if (p.s0 && p.e0) return now >= p.s0 && now < p.e0
+  if (p.s0 && p.dur) return now >= p.s0 && now < p.s0 + p.dur
+  return false
 }
 function selectEpgDate(d) {
   epgDates.value.forEach(x => x.active = false); d.active = true
+  epgResTab.value = !!d.isRes
   if (d.isRes) return
   epgDayOffset.value = d.offset || 0
   epgDateLabelVal.value = epgDateStr(new Date(Date.now() + (epgDayOffset.value || 0) * 86400000))
   if (currentPid.value) fetchEpg(currentPid.value, epgYmdOf(epgDayOffset.value))
+}
+// 预约列表 (跨频道), 供"预约"页签使用
+const resList = computed(() => {
+  void resVersion.value
+  const list = resLoad()
+  return list.map(r => ({
+    ...r,
+    chName: channels.value.find(c => c.pid === r.pid)?.name || r.ch || r.pid,
+  })).sort((a, b) => (a.s0 || 0) - (b.s0 || 0))
+})
+function resRemove(id) {
+  const list = resLoad().filter(r => r.id !== id)
+  resSave(list)
+  // 同步刷新当前列表上的"已约"标记
+  epgPrograms.value = epgPrograms.value.map(p => ({ ...p, reserved: resHas(currentPid.value, p.s0) }))
+  showToast('已取消预约')
+}
+function toggleEpg() {
+  showEpg.value = !showEpg.value
+  showPanel.value = false; showSettings.value = false
+  epgResTab.value = false
+  // 打开时立即拉一次, 避免停留在"暂无节目数据"直到 30s 轮询
+  if (showEpg.value && currentPid.value) {
+    epgDateLabelVal.value = epgDateStr(new Date(Date.now() + (epgDayOffset.value || 0) * 86400000))
+    fetchEpg(currentPid.value, epgYmdOf(epgDayOffset.value))
+  }
 }
 function toggleRes(p) {
   const pid = currentPid.value; if (!pid || !p.s0) return
@@ -322,13 +383,34 @@ function showToast(msg) {
   toastMsg.value = msg; toastShow.value = true
   clearTimeout(showToast._t); showToast._t = setTimeout(() => { toastShow.value = false }, 2600)
 }
-function openDir(dir) { showToast('目录: ' + dir) }
+function openDir(dir) { showToast('保存目录: ' + dir) }
+// "更改" 在浏览器里无法真选服务器目录, 退化为可编辑的路径输入
+function promptDir(key) {
+  const cur = settings.value[key] || ''
+  const next = window.prompt('输入保存目录路径 (留空使用后端默认目录)', cur)
+  if (next === null) return
+  settings.value[key] = next.trim() || cur
+  LptvState.flush({ [key]: settings.value[key] })
+  showToast('已更新: ' + settings.value[key])
+}
+// 浏览器无法直接打开服务器目录, 改为复制路径
+async function copyDir(dir) {
+  const text = PROXY_BASE + dir
+  try { await navigator.clipboard.writeText(text); showToast('已复制: ' + text) }
+  catch { showToast('路径: ' + text) }
+}
+// 画面模式落到 iframe 内的 <video> 上
+function applyFit(persist) {
+  const v = getVideoElement()
+  if (v) { try { v.style.objectFit = settings.value.fit === 'cover' ? 'cover' : 'contain' } catch (e) {} }
+  if (persist !== false) LptvState.flush({ fit: settings.value.fit })
+}
 
 // ── 黑帧看门狗 ─────────────────────────────────────────────────────
 const wcanvas = document.createElement('canvas')
 wcanvas.width = 48; wcanvas.height = 27
 const wctx = wcanvas.getContext('2d')
-setInterval(() => {
+watchdogTimer = setInterval(() => {
   if (devHidden.value) return
   const v = getVideoElement()
   if (!v || v.paused || v.readyState < 2 || !v.videoWidth) return
@@ -345,7 +427,39 @@ setInterval(() => {
   } catch {}
 }, 4000)
 
-// ── idle / 控制栏自动隐藏 ──────────────────────────────────────────
+// ── iframe 桥 (postMessage) ────────────────────────────────────────
+// 父页 → iframe: { type: 'lptv-cmd', cmd, ... }
+// iframe → 父页: { type: 'lptv-switch-channel', pid, name }
+function sendCmd(cmd, extra) {
+  const w = frameEl.value && frameEl.value.contentWindow
+  if (!w) return
+  try { w.postMessage({ type: 'lptv-cmd', cmd, ...(extra || {}) }, '*') } catch (e) { console.warn('[LPTV] postMessage failed:', e) }
+}
+function onFrameMessage(e) {
+  const d = e.data
+  if (!d || typeof d !== 'object') return
+  // 只接受自己 iframe 发来的消息
+  if (frameEl.value && e.source !== frameEl.value.contentWindow) return
+  if (d.type === 'lptv-switch-channel' && d.pid) {
+    // legacy 层自己切台时上报。这里必须挡住"父页刚切完又被 iframe 切回去"的乒乓:
+    // 父页请求过的 pid 在 6s 内不再接受 iframe 的反向请求。
+    if (d.pid === _pidBefore && Date.now() - _switchAt < 6000) return
+    switchChannel(String(d.pid))
+  } else if (d.type === 'lptv-osd' && d.text) {
+    showOsdTip(d.num || '', d.text, d.sub)
+  }
+}
+
+// ── 控制栏可达 ─────────────────────────────────────────────────────
+// 原实现里 showControlBar 只能由它自己 (v-if) 的 mouseenter 置 true —— 死锁,
+// 控制栏永远出不来。改为 mousemove 唤出 + 空闲自动隐藏。
+function showCtrlBar() {
+  if (devHidden.value) return
+  showControlBar.value = true
+  clearTimeout(ctrlHoverTimer)
+  ctrlHoverTimer = setTimeout(() => { showControlBar.value = false }, 3000)
+}
+// ── idle / 面板自动隐藏 ────────────────────────────────────────────
 function wake() {
   if (devHidden.value) return
   mouseActive.value = true
@@ -357,13 +471,8 @@ function scheduleHideControls() {
   ctrlTimer = setTimeout(() => { showSettings.value = false }, 900)
 }
 function cancelHideControls() { clearTimeout(ctrlTimer) }
-function onCtrlMouseEnter() {
-  showControlBar.value = true
-  clearTimeout(ctrlHoverTimer)
-}
-function onCtrlMouseLeave() {
-  ctrlHoverTimer = setTimeout(() => { showControlBar.value = false }, 200)
-}
+function onCtrlMouseEnter() { showCtrlBar() }
+function onCtrlMouseLeave() { /* 统一交给 idle 计时器隐藏, 避免与 mousemove 抢状态 */ }
 
 // ── 快捷键 ─────────────────────────────────────────────────────────
 function bindKeyEvents() {
@@ -383,34 +492,56 @@ function bindKeyEvents() {
     else if (k === ' ') { e.preventDefault(); togglePlay() }
     else if (k === 'm' || k === 'M') { if (!e.ctrlKey && !e.altKey) { e.preventDefault(); toggleMute() } }
     else if (k === 's' || k === 'S') { if (!e.ctrlKey && !e.altKey) { e.preventDefault(); showPanel.value = !showPanel.value; showEpg.value = false; showSettings.value = false } }
-    else if (k === 'e' || k === 'E') { if (!e.ctrlKey && !e.altKey) { e.preventDefault(); showEpg.value = !showEpg.value; showPanel.value = false; showSettings.value = false } }
+    else if (k === 'e' || k === 'E') { if (!e.ctrlKey && !e.altKey) { e.preventDefault(); showEpg.value = !showEpg.value; showPanel.value = false; showSettings.value = false; epgResTab.value = false; if (showEpg.value && currentPid.value) fetchEpg(currentPid.value, epgYmdOf(epgDayOffset.value)) } }
     else if (k === 'r' || k === 'R') { if (!e.ctrlKey && !e.altKey) { e.preventDefault(); recToggle() } }
     else if (k === 'x' || k === 'X') { if (!e.ctrlKey && !e.altKey) { e.preventDefault(); shotTake() } }
-    else if (k === 'F11') { e.preventDefault(); document.documentElement.requestFullscreen?.() }
+    else if (k === 'F11' || k === 'f' || k === 'F') { if (!e.ctrlKey && !e.altKey) { e.preventDefault(); toggleFullscreen() } }
     else if (k === 'Escape') { showPanel.value = false; showEpg.value = false; showSettings.value = false; showAbout.value = false }
     wake()
   }
   document.addEventListener('keydown', keyHandler)
 
-  // 鼠标滚轮音量
-  document.addEventListener('wheel', (e) => {
-    if (e.target.closest('#lptv-panel,#lptv-settings,#lptv-epg')) return
+  // 鼠标移动唤出控制栏
+  moveHandler = () => { showCtrlBar(); wake() }
+  document.addEventListener('mousemove', moveHandler)
+
+  // 滚轮音量
+  wheelHandler = (e) => {
+    if (e.target.closest && e.target.closest('#lptv-panel,#lptv-settings,#lptv-epg')) return
     e.preventDefault()
     setVolume(volume.value + (e.deltaY < 0 ? 5 : -5))
-  }, { passive: false })
+  }
+  document.addEventListener('wheel', wheelHandler, { passive: false })
+
+  // 来自 iframe 的消息
+  document.addEventListener('message', onFrameMessage)
 
   // 页面隐藏时停止录制
-  document.addEventListener('visibilitychange', () => {
+  visHandler = () => {
     if (isRecording.value && document.visibilityState === 'hidden') {
       showToast('页面已隐藏，录制自动停止')
       recToggle()
     }
-  })
+  }
+  document.addEventListener('visibilitychange', visHandler)
+}
+
+function toggleFullscreen() {
+  const el = document.documentElement
+  if (document.fullscreenElement) { document.exitFullscreen?.(); return }
+  (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el).catch?.(() => {})
 }
 
 // ── iframe ref ─────────────────────────────────────────────────────
 const frameEl = ref(null)
-function onFrameLoad() { frameReady = true; isLoading.value = false }
+function onFrameLoad() {
+  frameReady = true; isLoading.value = false
+  // 每次切台 iframe 都会整页重载, 把音量/静音/画面模式重新打回 video
+  applyVideoVolume()
+  applyFit(false)
+  const v = getVideoElement()
+  if (v) isPlaying.value = !v.paused
+}
 
 // ── 初始化 ─────────────────────────────────────────────────────────
 onMounted(async () => {
@@ -421,14 +552,27 @@ onMounted(async () => {
     if (!r.ok) throw new Error('HTTP ' + r.status)
   } catch { loadError.value = true; isLoading.value = false; return }
   await loadChannels()
-  setInterval(() => { if (showEpg.value && currentPid.value) fetchEpg(currentPid.value, epgYmdOf(epgDayOffset.value)) }, 30000)
+  // 恢复音量为起始音量 (只写 video, 不回弹提示条)
+  applyVideoVolume()
+  epgTimer = setInterval(() => { if (showEpg.value && !epgResTab.value && currentPid.value) fetchEpg(currentPid.value, epgYmdOf(epgDayOffset.value)) }, 30000)
 })
+
+function retryLoad() { location.reload() }
 
 onUnmounted(() => {
   if (keyHandler) document.removeEventListener('keydown', keyHandler)
+  if (moveHandler) document.removeEventListener('mousemove', moveHandler)
+  if (wheelHandler) document.removeEventListener('wheel', wheelHandler)
+  if (visHandler) document.removeEventListener('visibilitychange', visHandler)
+  document.removeEventListener('message', onFrameMessage)
   if (recTickTimer) clearInterval(recTickTimer)
+  if (watchdogTimer) clearInterval(watchdogTimer)
+  if (epgTimer) clearInterval(epgTimer)
   if (idleTimer) clearTimeout(idleTimer)
   if (ctrlTimer) clearTimeout(ctrlTimer)
+  if (ctrlHoverTimer) clearTimeout(ctrlHoverTimer)
+  if (digitTimer) clearTimeout(digitTimer)
+  if (recInst) { try { recInst.stopRecording() } catch {} recInst = null }
 })
 </script>
 
@@ -444,7 +588,7 @@ onUnmounted(() => {
       <p>无法连接到代理服务器。请确认代理已启动：<br>
         <code style="color:#7d9bff">python proxy/server.py</code><br>
         然后刷新本页面。</p>
-      <button @click="location.reload()">重试</button>
+      <button @click="retryLoad">重试</button>
     </div>
 
     <!-- 视频 iframe -->
@@ -540,7 +684,7 @@ onUnmounted(() => {
         </div>
         <div class="ctrl-divider"></div>
         <div class="ctrl-row ctrl-row--2">
-          <button class="btn btn--pill" :class="showEpg ? 'btn--active' : ''" @click="showEpg=!showEpg; showPanel=false; showSettings=false"><span>节目单</span></button>
+          <button class="btn btn--pill" :class="showEpg ? 'btn--active' : ''" @click="toggleEpg"><span>节目单</span></button>
           <button class="btn btn--pill" :class="showPanel ? 'btn--active' : ''" @click="showPanel=!showPanel; showEpg=false; showSettings=false"><span>频道</span></button>
           <button class="btn btn--circle" :class="showSettings ? 'btn--active-blue' : 'btn--ghost'" title="设置" @click="showSettings=!showSettings; showPanel=false; showEpg=false"><i class="ri-settings-3-line"></i></button>
         </div>
@@ -596,7 +740,17 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="epg-divider"></div>
-        <div v-if="epgLoading" class="epg-loading">加载中…</div>
+        <!-- 预约页签: 跨频道的预约清单 -->
+        <div v-if="epgResTab" class="program-list">
+          <div v-if="!resList.length" class="epg-empty">暂无预约<br><span style="font-size:11px">在节目单点"预约"即可添加</span></div>
+          <div v-for="r in resList" :key="r.id" class="program-item">
+            <span class="prog-time">{{ r.s0 ? new Date(r.s0 * 1000).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '--' }}</span>
+            <span class="prog-name">{{ r.chName }} · {{ r.name }}</span>
+            <button class="res-btn active" @click="resRemove(r.id)">取消</button>
+          </div>
+        </div>
+        <div v-else-if="epgLoading" class="epg-loading">加载中…</div>
+        <div v-else-if="epgError" class="epg-empty">{{ epgError }}</div>
         <div v-else-if="!epgPrograms.length" class="epg-empty">暂无节目数据</div>
         <div v-else class="program-list">
           <div v-for="(p,i) in epgPrograms" :key="i" class="program-item" :class="{ current: p.current }">
@@ -625,7 +779,7 @@ onUnmounted(() => {
           <div class="setting-row setting-row--select">
             <span>画面模式</span>
             <div class="select-wrap">
-              <select v-model="settings.fit" class="select-el">
+              <select v-model="settings.fit" class="select-el" @change="applyFit">
                 <option value="contain">完整画面（黑边）</option>
                 <option value="cover">铺满（裁剪）</option>
               </select>
@@ -637,8 +791,8 @@ onUnmounted(() => {
             <div class="setting-row setting-row--dir">
               <span>录制</span>
               <div class="dir-actions">
-                <button class="btn btn--pill btn--blue-sm" @click="openDir(settings.recDir)">更改</button>
-                <button class="btn btn--pill btn--ghost-sm" @click="openDir(settings.recDir)">打开</button>
+                <button class="btn btn--pill btn--blue-sm" @click="promptDir('recDir')">更改</button>
+                <button class="btn btn--pill btn--ghost-sm" @click="copyDir(settings.recDir)">复制路径</button>
               </div>
             </div>
             <div class="dir-path">{{ settings.recDir }}</div>
@@ -648,8 +802,8 @@ onUnmounted(() => {
             <div class="setting-row setting-row--dir">
               <span>截图</span>
               <div class="dir-actions">
-                <button class="btn btn--pill btn--blue-sm" @click="openDir(settings.shotDir)">更改</button>
-                <button class="btn btn--pill btn--ghost-sm" @click="openDir(settings.shotDir)">打开</button>
+                <button class="btn btn--pill btn--blue-sm" @click="promptDir('shotDir')">更改</button>
+                <button class="btn btn--pill btn--ghost-sm" @click="copyDir(settings.shotDir)">复制路径</button>
               </div>
             </div>
             <div class="dir-path">{{ settings.shotDir }}</div>

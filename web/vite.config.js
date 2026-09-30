@@ -9,7 +9,6 @@ export default defineConfig({
     '/capi': 'http://127.0.0.1:9100',
     '/proxy-video': 'http://127.0.0.1:9100',
     '/layer.js': 'http://127.0.0.1:9100',
-    '/patch.js': 'http://127.0.0.1:9100',
     '/ui.css': 'http://127.0.0.1:9100',
     '/api.js': 'http://127.0.0.1:9100',
     '/state.js': 'http://127.0.0.1:9100',

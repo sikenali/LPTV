@@ -1,107 +1,111 @@
 """
-LX TV Web — EPG protobuf 解析器
-从 pytv/frontend/inject.js 中拆出, 供代理侧使用 (缓存 EPG 数据)
+LPTV Web — EPG protobuf 解析器
+
+央视频 EPG 接口 (/api/yspepg/program/{pid}/{ymd}) 返回 protobuf。
+本模块是 static/layer.js 中 parseEpg() 的服务端等价实现，字段映射保持一致：
+
+    f1=id  f2=name  f3=s0(开始秒)  f4=e0(结束秒)
+    f5=start  f6=end  f7=dur  f9/f10=extra
 """
 
+MAX_PROGRAMS = 200
 
-def _utf8_bytes(bytes_arr, a, n):
-    try:
-        return bytes_arr[a:a + n].decode("utf-8")
-    except Exception:
+
+def _utf8_str(data: bytes, a: int, n: int) -> str:
+    if n <= 0:
         return ""
-
-
-def parse_epg(buf):
-    """解析央视频 EPG protobuf (arraybuffer) 返回节目列表"""
-    programs = []
     try:
-        bytes_arr = buf if isinstance(buf, bytes) else bytes(buf)
-        length = len(bytes_arr)
+        return data[a:a + n].decode("utf-8")
+    except Exception:
+        return data[a:a + n].decode("utf-8", errors="replace")
+
+
+def _read_varint(data: bytes, i: int, end: int) -> tuple:
+    v = 0
+    s = 0
+    k = 0
+    while i < end and k < 5:
+        b = data[i]
+        i += 1
+        v += (b & 0x7F) << s
+        s += 7
+        k += 1
+        if not (b & 0x80):
+            break
+    return v, i
+
+
+def _parse_entry(data: bytes, a: int, b: int) -> dict:
+    """解析单条节目记录 (字节区间 [a, b))"""
+    p: dict = {}
+    i = a
+    while i < b:
+        tag, i = _read_varint(data, i, b)
+        if tag == 0:
+            break
+        f = tag >> 3
+        wt = tag & 7
+        if wt == 2:
+            ln, i = _read_varint(data, i, b)
+            if i + ln > b:
+                break
+            if f == 1:
+                p["id"] = _utf8_str(data, i, ln)
+            elif f == 2:
+                p["name"] = _utf8_str(data, i, ln)
+            elif f == 5:
+                p["start"] = _utf8_str(data, i, ln)
+            elif f == 6:
+                p["end"] = _utf8_str(data, i, ln)
+            elif f in (9, 10):
+                p["extra"] = _utf8_str(data, i, ln)
+            i += ln
+        elif wt == 0:
+            v, i = _read_varint(data, i, b)
+            if f == 3:
+                p["s0"] = v
+            elif f == 4:
+                p["e0"] = v
+            elif f == 7:
+                p["dur"] = v
+        else:
+            _, i = _read_varint(data, i, b)
+    return p if p.get("name") else None
+
+
+def parse_epg(buf) -> list:
+    """解析 EPG protobuf 响应，返回节目列表 (list[dict])
+
+    解析失败时返回空列表，不抛异常 —— 上游返回 HTML 错误页时不应导致 500。
+    """
+    programs: list = []
+    try:
+        data = buf if isinstance(buf, (bytes, bytearray)) else bytes(buf)
+        n = len(data)
         i = 0
-
-        def varint():
-            nonlocal i
-            v = 0
-            s = 0
-            k = 0
-            while i < length and k < 5:
-                b = bytes_arr[i]
-                i += 1
-                v += (b & 0x7f) * (1 << s)
-                s += 7
-                k += 1
-                if not (b & 0x80):
-                    break
-            return v
-
-        while i < length:
-            tag = varint()
+        while i < n:
+            tag, i = _read_varint(data, i, n)
             if tag == 0:
                 break
-            f = tag >> 3
             wt = tag & 7
             if wt == 2:
-                len_ = varint()
-                entry_start = i
-                entry = {}
-                inner_i = i
-                inner_end = i + len_
-
-                def inner_varint():
-                    nonlocal inner_i
-                    v = 0
-                    s = 0
-                    k = 0
-                    while inner_i < inner_end and k < 5:
-                        b = bytes_arr[inner_i]
-                        inner_i += 1
-                        v += (b & 0x7f) * (1 << s)
-                        s += 7
-                        k += 1
-                        if not (b & 0x80):
-                            break
-                    return v
-
-                while inner_i < inner_end:
-                    itag = inner_varint()
-                    if itag == 0:
-                        break
-                    if = itag >> 3
-                    w = itag & 7
-                    if w == 2:
-                        elen = inner_varint()
-                        val = _utf8_bytes(bytes_arr, inner_i, elen)
-                        inner_i += elen
-                        if f == 1:
-                            entry["id"] = val
-                        elif f == 2:
-                            entry["name"] = val
-                        elif f == 5:
-                            entry["start"] = val
-                        elif f == 6:
-                            entry["end"] = val
-                        elif f in (9, 10):
-                            entry["extra"] = val
-                    elif w == 0:
-                        vv = inner_varint()
-                        if f == 3:
-                            entry["s0"] = vv
-                        elif f == 4:
-                            entry["e0"] = vv
-                        elif f == 7:
-                            entry["dur"] = vv
-                    else:
-                        inner_i += inner_varint()
-
-                if entry.get("name"):
+                ln, i = _read_varint(data, i, n)
+                if i + ln > n:
+                    break
+                entry = _parse_entry(data, i, i + ln)
+                if entry:
                     programs.append(entry)
-                i += len_
+                i += ln
             elif wt == 0:
-                varint()
+                _, i = _read_varint(data, i, n)
+            elif wt == 5:
+                i += 4
+            elif wt == 1:
+                i += 8
             else:
-                i += varint()
-            if len(programs) > 200:
                 break
-    except Exception as e:
-        pass
+            if len(programs) >= MAX_PROGRAMS:
+                break
+    except Exception:
+        return programs
     return programs

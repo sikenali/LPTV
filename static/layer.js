@@ -1,8 +1,8 @@
 /* LPTV Web — 主逻辑层 (路线 A, 同源代理)
  *
  * 与原生 inject.js 的主要差异:
- *   - window.pywebview.api → LxApi
- *   - pyStatePush → LxState.flush
+ *   - window.pywebview.api → LptvApi
+ *   - pyStatePush → LptvState.flush
  *   - 无 OS 窗口能力 (置顶/拖拽/最大化)
  *   - 视频源来自代理的 /proxy-video (同源, canvas 不污染)
  */
@@ -10,6 +10,10 @@
 ;(function () {
   if (window.__lptvCctvWeb) return;
   window.__lptvCctvWeb = true;
+
+  // 父页 (Vue) 用 postMessage 下发 lptv-cmd; 是否在 iframe 中由真实父窗口判断。
+  // 必须在最前面设好, 因为 buildUI/bindEvents 都要用它提前 return。
+  window.__LptvIframe = window.parent !== window;
 
   const LS_KEY = "lptv.cfg.v3";
   const RES_KEY = "lptv.res.v1";
@@ -77,7 +81,7 @@
     if (Lptv._dbg.length > 30) Lptv._dbg.shift();
   }
 
-  function pyStatePush(patch) { LxState.flush(patch); }
+  function pyStatePush(patch) { LptvState.flush(patch); }
 
   function favHas(pid) { return (cfg.favs || []).indexOf(pid) >= 0; }
   function favToggle(pid) {
@@ -91,88 +95,7 @@
     return i < 0;
   }
 
-  /* ── EPG protobuf 解析 ─────────────────────────────────────────── */
-
-  function utf8Bytes(bytes, a, n) {
-    try {
-      if (window.TextDecoder) return new TextDecoder().decode(bytes.subarray(a, a + n));
-    } catch {}
-    try {
-      let s = "";
-      for (let i = a; i < a + n; i++) s += String.fromCharCode(bytes[i]);
-      return decodeURIComponent(escape(s));
-    } catch { return ""; }
-  }
-
-  function parseEpgEntry(bytes, a, b) {
-    let i = a, p = {};
-    function vi() {
-      let v = 0, s = 0, k = 0;
-      while (i < b && k < 5) {
-        const x = bytes[i++];
-        v += (x & 0x7f) * (1 << s);
-        s += 7; k++;
-        if (!(x & 0x80)) break;
-      }
-      return v;
-    }
-    try {
-      while (i < b) {
-        const tag = vi();
-        if (tag === 0) break;
-        const f = tag >>> 3, wt = tag & 7;
-        if (wt === 2) {
-          const len = vi();
-          if (i + len > b) break;
-          if (f === 1) p.id = utf8Bytes(bytes, i, len);
-          else if (f === 2) p.name = utf8Bytes(bytes, i, len);
-          else if (f === 5) p.start = utf8Bytes(bytes, i, len);
-          else if (f === 6) p.end = utf8Bytes(bytes, i, len);
-          else if (f === 9 || f === 10) p.extra = utf8Bytes(bytes, i, len);
-          i += len;
-        } else if (wt === 0) {
-          const v = vi();
-          if (f === 3) p.s0 = v;
-          else if (f === 4) p.e0 = v;
-          else if (f === 7) p.dur = v;
-        } else { i += vi(); }
-      }
-    } catch {}
-    return p.name ? p : null;
-  }
-
-  function parseEpg(buf) {
-    const programs = [];
-    try {
-      const bytes = new Uint8Array(buf);
-      let i = 0;
-      function vi() {
-        let v = 0, s = 0, k = 0;
-        while (i < bytes.length && k < 5) {
-          const b = bytes[i++];
-          v += (b & 0x7f) * (1 << s);
-          s += 7; k++;
-          if (!(b & 0x80)) break;
-        }
-        return v;
-      }
-      while (i < bytes.length) {
-        const tag = vi();
-        if (tag === 0) break;
-        const f = tag >>> 3, wt = tag & 7;
-        if (wt === 2) {
-          const len = vi();
-          const p = parseEpgEntry(bytes, i, i + len);
-          if (p) programs.push(p);
-          i += len;
-        } else if (wt === 0) { vi(); }
-        else { i += vi(); }
-        if (programs.length > 200) break;
-      }
-    } catch {}
-    return programs;
-  }
-
+  /* ── EPG (protobuf 由服务端解析) ───────────────────────────────── */
   function ymdStr(dt) {
     return dt.getFullYear() +
       String(dt.getMonth() + 1).padStart(2, "0") +
@@ -504,6 +427,66 @@
     name.textContent = chNameOf(Lptv.currentPid) || "--";
   }
 
+  /* ── 官方 <video> 获取 ──────────────────────────────────────────── */
+  // 官方播放器的 video 是异步注入的, 且切台后会被替换成新元素,
+  // 所以需要轮询接管 —— 否则 Lptv.video 永远是 null, 音量/播放/录制全部失效。
+  function acquireVideo() {
+    let best = null;
+    const list = document.querySelectorAll("video");
+    for (let i = 0; i < list.length; i++) {
+      const v = list[i];
+      if (!best) best = v;
+      if (v.videoWidth && (!best.videoWidth || v.videoWidth > best.videoWidth)) best = v;
+    }
+    if (!best || best === Lptv.video) return Lptv.video;
+    Lptv.video = best;
+    Lptv._videoBound = null;
+    dbg("video acquired " + (best.videoWidth || "?") + "x" + (best.videoHeight || "?"));
+    applyVideoPrefs();
+    return best;
+  }
+
+  // 把 cfg 里的音量/静音/画面模式打到 video 上
+  function applyVideoPrefs() {
+    const v = Lptv.video;
+    if (!v) return;
+    try {
+      v.volume = clamp(cfg.volume != null ? cfg.volume : 1, 0, 1);
+      v.muted = !!cfg.muted;
+      v.style.setProperty("object-fit", cfg.fit === "cover" ? "cover" : "contain", "important");
+    } catch (e) {}
+  }
+
+  function bindVideoOnce() {
+    const v = Lptv.video;
+    if (!v || Lptv._videoBound === v) return;
+    Lptv._videoBound = v;
+    v.addEventListener("loadeddata", () => { showSpin(false); applyVideoPrefs(); });
+    v.addEventListener("waiting", () => showSpin(true));
+    v.addEventListener("stalled", () => showSpin(true));
+    v.addEventListener("playing", () => { showSpin(false); syncPlayBtn(); applyVideoPrefs(); });
+    v.addEventListener("pause", () => syncPlayBtn());
+    v.addEventListener("volumechange", () => {
+      // 官方页面自己也会改音量, 反向同步回 UI (但忽略自己造成的变更)
+      if (Lptv._volLock) return;
+      if (!v.muted && Math.abs(v.volume - (cfg.volume != null ? cfg.volume : 1)) > 0.02) {
+        cfg.volume = v.volume;
+        if (Lptv.ui.volRange) Lptv.ui.volRange.value = Math.round(v.volume * 100);
+        if (Lptv.ui.volRange2) Lptv.ui.volRange2.value = Math.round(v.volume * 100);
+        const vn = document.getElementById("lptv-vol-num");
+        if (vn) vn.textContent = Math.round(v.volume * 100);
+        saveCfg();
+      }
+      syncMuteBtn();
+    });
+    v.addEventListener("error", () => { dbg("video error " + (v.error && v.error.code)); });
+  }
+
+  function setVolLock(fn) {
+    Lptv._volLock = true;
+    try { fn(); } finally { setTimeout(() => { Lptv._volLock = false; }, 80); }
+  }
+
   /* ── 频道切换 ──────────────────────────────────────────────────── */
 
   async function switchChannel(pid) {
@@ -513,6 +496,9 @@
       Lptv._switchAt = Date.now();
     }
     Lptv.currentPid = pid;
+    // 切台后官方会换新的 video 元素, 丢掉旧引用等轮询重新接管
+    Lptv.video = null;
+    Lptv._videoBound = null;
     if (/^\d+$/.test(String(pid))) {
       cfg.lastPid = pid;
       saveCfg();
@@ -529,7 +515,7 @@
       const target = proxyBase + "/_page?pid=" + pid;
       // 在同源 iframe 中加载, 或直接导航
       // 这里采用直接导航到官方页 + 代理的方式
-      if (window.__LptvIframe) {
+   if (window.__LptvIframe) {
         window.parent.postMessage({ type: 'lptv-switch-channel', pid: pid, name: chNameOf(pid) }, '*');
       } else {
         window.location.href = (window.__LptvProxyBase || 'http://localhost:9100') + '/_page?pid=' + pid;
@@ -600,7 +586,8 @@
     v = clamp(v, 0, 1);
     cfg.volume = v;
     cfg.muted = false;
-    if (Lptv.video) { Lptv.video.volume = v; Lptv.video.muted = false; }
+    acquireVideo();
+    if (Lptv.video) setVolLock(() => { Lptv.video.volume = v; Lptv.video.muted = false; });
     if (Lptv.ui.volRange) Lptv.ui.volRange.value = Math.round(v * 100);
     if (Lptv.ui.volRange2) Lptv.ui.volRange2.value = Math.round(v * 100);
     syncMuteBtn();
@@ -616,11 +603,11 @@
 
   function toggleMute() {
     cfg.muted = !cfg.muted;
-    if (Lptv.video) Lptv.video.muted = cfg.muted;
+    acquireVideo();
+    if (Lptv.video) setVolLock(() => { Lptv.video.muted = cfg.muted; });
     if (!cfg.muted && cfg.volume === 0) setVolume(0.6);
     syncMuteBtn();
     saveCfg();
-    hideHint();
   }
   function syncMuteBtn() {
     const b = document.getElementById("lptv-b-mute");
@@ -633,8 +620,9 @@
   /* ── 播放控制 ──────────────────────────────────────────────────── */
 
   function togglePlay() {
+    acquireVideo();
     const v = Lptv.video;
-    if (!v) return;
+    if (!v) { toast("视频尚未就绪"); return; }
     if (v.paused) { const p = v.play(); if (p && p.catch) p.catch(() => {}); }
     else { v.pause(); Lptv._autoplayPending = false; }
     syncPlayBtn();
@@ -797,9 +785,10 @@
     if ((Lptv.epg.cache || {})[key] || Lptv.epg._fetching === key) return;
     Lptv.epg._fetching = key;
     try {
-      const r = await LxApi.fetchEpg(pid, ymd, { signal: AbortSignal.timeout(5000) });
+      const r = await LptvApi.fetchEpg(pid, ymd, { signal: AbortSignal.timeout(5000) });
       if (r && r.data) {
-        const progs = parseEpg(r.data);
+        // 服务端已解 protobuf, 直接拿 programs; 兼容旧的裸数组返回
+        const progs = Array.isArray(r.data) ? r.data : (r.data.programs || []);
         if (progs.length) epgStore(pid, progs, ymd);
       }
     } catch (e) {
@@ -1102,12 +1091,13 @@
   }
 
   async function recStart() {
-    const v = Lptv.video;
+    acquireVideo();
+        const v = Lptv.video;
     if (!v || !v.videoWidth) { toast("画面尚未就绪，稍后再录"); return; }
     if (!recSupported()) { toast("当前环境不支持录制"); return; }
     if (!document.hasFocus()) { toast("仅前台可录制 · 请先点击本页面"); return; }
     if (Rec.on) return;
-    const api = LxApi;
+    const api = LptvApi;
 
     let mime = "";
     const cands = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
@@ -1183,7 +1173,7 @@
 
   function recFlush() {
     if (Rec._flushing || !Rec.chunks.length || !Rec.rid) return;
-    const api = LxApi;
+    const api = LptvApi;
     if (!api) return;
     const blob = Rec.chunks.shift();
     Rec._flushing = true;
@@ -1211,7 +1201,7 @@
     clearInterval(Rec.timer);
     recSetUI(false);
     Rec.frames = 0;
-    const api = LxApi;
+    const api = LptvApi;
 
     function drain(i) {
       if (i > 60) return done();
@@ -1246,7 +1236,8 @@
   /* ── 截图 ──────────────────────────────────────────────────────── */
 
   async function shotTake() {
-    const v = Lptv.video;
+    acquireVideo();
+        const v = Lptv.video;
     if (!v || !v.videoWidth) { toast("画面尚未就绪"); return; }
     try {
       const c = document.createElement("canvas");
@@ -1255,7 +1246,7 @@
       const x = c.getContext("2d");
       x.drawImage(v, 0, 0, c.width, c.height);
       const data = c.toDataURL("image/png");
-      const api = LxApi;
+      const api = LptvApi;
       const r = await api.shotSave(chNameOf(Lptv.currentPid) || "直播", String(data).split(",")[1] || "");
       if (r && r.ok) toast("已截图 · " + r.name);
       else toast("截图失败: " + (r && r.error || ""));
@@ -1442,8 +1433,9 @@
       } else { Lptv._lastTap = now; }
     });
 
-    Lptv.ui.volRange?.addEventListener("input", () => { setVolume(this.value / 100); });
-    Lptv.ui.volRange2?.addEventListener("input", () => { setVolume(this.value / 100); });
+    // 注意: 必须用 function 而非箭头函数, 否则 this 指向外层 (window), value 为 undefined
+    Lptv.ui.volRange?.addEventListener("input", function () { setVolume(this.value / 100); });
+    Lptv.ui.volRange2?.addEventListener("input", function () { setVolume(this.value / 100); });
 
     Lptv.ui.controls?.addEventListener("click", (e) => {
       const t = e.target.closest("button");
@@ -1512,6 +1504,8 @@
 
     setInterval(() => updateNowProg(), 30000);
     setInterval(() => syncPlayBtn(), 2000);
+    // 官方 <video> 异步注入且切台后会被替换, 必须持续接管
+    setInterval(() => { acquireVideo(); bindVideoOnce(); }, 1000);
   }
 
   /* ── 频道数据 ──────────────────────────────────────────────────── */
@@ -1544,7 +1538,7 @@
   async function initChannels() {
     // 先从代理获取频道列表
     try {
-      const r = await LxApi.getChannels({ signal: AbortSignal.timeout(5000) });
+      const r = await LptvApi.getChannels({ signal: AbortSignal.timeout(5000) });
       if (r && r.data && Array.isArray(r.data.channelList)) {
         const chs = r.data.channelList.map(c => ({
           pid: String(c.channelId || c.pid || c.id),
@@ -1565,7 +1559,7 @@
 
     // 恢复状态
     try {
-      const st = await LxApi.getState({ signal: AbortSignal.timeout(5000) });
+      const st = await LptvApi.getState({ signal: AbortSignal.timeout(5000) });
       if (st && st.ok) {
         if (Array.isArray(st.favs) && st.favs.length) {
           cfg.favs = st.favs.filter(pid => Lptv.channels.some(c => c.pid === pid));

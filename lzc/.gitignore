@@ -1,2 +1,4 @@
 _lpk_content/
 output.lpk
+lzc-build-no-buildscript.yml
+*.lpk

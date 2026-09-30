@@ -50,6 +50,15 @@ cp -a "$PROJECT_ROOT/dist/." "$SCRIPT_DIR/_lpk_content/frontend/"
 # 复制 proxy-server.cjs 到前端目录 (作为静态文件供 Node 后端加载)
 cp "$PROJECT_ROOT/scripts/proxy-server.cjs" "$SCRIPT_DIR/_lpk_content/frontend/proxy-server.cjs"
 
+# legacy 资源必须一起进包: /_page 会注入 layer.js/api.js/state.js/ui.css,
+# 而 Node 后端在 LPK 下的 STATIC_PATH 就是 frontend/，缺了这些文件 iframe 会裸奔。
+cp "$PROJECT_ROOT/static/layer.js" "$SCRIPT_DIR/_lpk_content/frontend/layer.js"
+cp "$PROJECT_ROOT/static/api.js" "$SCRIPT_DIR/_lpk_content/frontend/api.js"
+cp "$PROJECT_ROOT/static/state.js" "$SCRIPT_DIR/_lpk_content/frontend/state.js"
+cp "$PROJECT_ROOT/static/ui.css" "$SCRIPT_DIR/_lpk_content/frontend/ui.css"
+cp "$PROJECT_ROOT/static/manifest.json" "$SCRIPT_DIR/_lpk_content/frontend/manifest.json"
+cp "$PROJECT_ROOT/static/icon.png" "$SCRIPT_DIR/_lpk_content/frontend/icon.png"
+
 # 创建后端启动脚本
 cat > "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh" << 'RUNNER'
 #!/bin/sh
@@ -62,37 +71,5 @@ export NODE_PATH="/lzcapp/pkg/content/node_modules"
 exec node /lzcapp/pkg/content/frontend/proxy-server.cjs
 RUNNER
 chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start-backend.sh"
-
-# 创建主启动脚本
-cat > "$SCRIPT_DIR/_lpk_content/scripts/start.sh" << 'STARTSCRIPT'
-#!/bin/sh
-set -e
-
-mkdir -p /app/data /app/logs
-chmod -R 777 /app/data || true
-
-# 启动后端代理
-/lzcapp/pkg/content/scripts/start-backend.sh >>/app/logs/backend.log 2>&1 &
-BACKEND_PID=$!
-
-# 等待健康检查
-for i in $(seq 1 30); do
-  sleep 1
-  if wget -qO- http://127.0.0.1:$BACKEND_PORT/health >/dev/null 2>&1; then
-    echo "backend healthy after ${i}s"
-    break
-  fi
-  if ! kill -0 $BACKEND_PID 2>/dev/null; then
-    echo "backend exited with code $?, logs:"
-    cat /app/logs/backend.log
-    exit 1
-  fi
-done
-
-# 保持容器运行
-wait $BACKEND_PID
-exit 0
-STARTSCRIPT
-chmod +x "$SCRIPT_DIR/_lpk_content/scripts/start.sh"
 
 echo "Build completed successfully"

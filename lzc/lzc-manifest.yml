@@ -6,13 +6,39 @@ application:
   routes:
     - /=file:///lzcapp/pkg/content/frontend
   upstreams:
+    # 前端是 Vue 页面 + 一个指向 /_page 的同源 iframe, 所以官方直播页、EPG、
+    # 录制/截图接口和 /capi 转发都必须由后端接管, 不能落到静态路由上。
     - location: /api/
       backend: http://127.0.0.1:8080/
       # 默认转发会去掉 location 前缀（/api/m3u -> /m3u），导致后端 404。
       # 保留前缀，使后端收到的仍是 /api/m3u（需 lzcos v1.3.9+）
       disable_trim_location: true
       backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
-      workdir: /lzcapp/pkg/content/scripts
+    - location: /_page
+      backend: http://127.0.0.1:8080/
+      disable_trim_location: true
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
+    - location: /capi
+      backend: http://127.0.0.1:8080/
+      disable_trim_location: true
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
+    - location: /proxy-video
+      backend: http://127.0.0.1:8080/
+      disable_trim_location: true
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
+    # /_page 注入的 layer.js / api.js / state.js / ui.css 由后端从 STATIC_PATH 提供
+    - location: /layer.js
+      backend: http://127.0.0.1:8080/
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
+    - location: /api.js
+      backend: http://127.0.0.1:8080/
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
+    - location: /state.js
+      backend: http://127.0.0.1:8080/
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
+    - location: /ui.css
+      backend: http://127.0.0.1:8080/
+      backend_launch_command: sh /lzcapp/pkg/content/scripts/start-backend.sh
   environment:
     BACKEND_PORT: "8080"
     FRONTEND_PORT: "5173"

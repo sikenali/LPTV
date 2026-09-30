@@ -17,8 +17,9 @@ if (fs.existsSync(ROOT_DIST)) {
 fs.cpSync(WEB_DIST, ROOT_DIST, { recursive: true });
 console.log('[post-build] web/dist → dist/ done');
 
-// 复制静态文件到 dist/
-const staticFiles = ['layer.js', 'patch.js', 'ui.css', 'api.js', 'state.js',
+// 复制静态文件到 dist/（/\_page 注入 layer.js/api.js/state.js/ui.css；
+// patch.js 已删除，不要再列进来）
+const staticFiles = ['layer.js', 'ui.css', 'api.js', 'state.js',
                      'manifest.json', 'icon.png'];
 staticFiles.forEach(f => {
   const src = path.join(STATIC_SRC, f);

@@ -72,12 +72,14 @@
 <body>
   <div id="app"></div>
 
-  <!-- 代理地址配置 -->
+  <!-- 代理地址配置：默认同源（LPK 由 manifest 把 /api /_page /capi 等反代到后端），
+       仅在开发时用 ?proxy=http://127.0.0.1:9100 覆盖 -->
   <script>
     (function () {
-      const params = new URLSearchParams(location.search);
-      const customProxy = params.get("proxy");
-      window.__LptvProxyBase = customProxy ? customProxy.endsWith("//") ? customProxy.slice(0, -2) : customProxy : "http://localhost:9100";
+      const customProxy = new URLSearchParams(location.search).get("proxy");
+      window.__LptvProxyBase = customProxy
+        ? (customProxy.endsWith("//") ? customProxy.slice(0, -2) : customProxy)
+        : "";
     })();
   </script>
 
