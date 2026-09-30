@@ -77,7 +77,8 @@ const settings = ref({ fit: 'contain', recDir: './records/', shotDir: './shots/'
 let _pidBefore = '', _switchAt = 0
 
 let digitTimer = null, recTickTimer = null, keyHandler = null, idleTimer = null, ctrlTimer = null
-let frameReady = false, recInst = null, darkCount = 0
+let frameReady = false, recInst = null, darkCount = 0, ctrlHoverTimer = null
+const showControlBar = ref(false)
 
 const recorder = useRecorder()
 const screenshot = useScreenshot()
@@ -356,6 +357,13 @@ function scheduleHideControls() {
   ctrlTimer = setTimeout(() => { showSettings.value = false }, 900)
 }
 function cancelHideControls() { clearTimeout(ctrlTimer) }
+function onCtrlMouseEnter() {
+  showControlBar.value = true
+  clearTimeout(ctrlHoverTimer)
+}
+function onCtrlMouseLeave() {
+  ctrlHoverTimer = setTimeout(() => { showControlBar.value = false }, 200)
+}
 
 // ── 快捷键 ─────────────────────────────────────────────────────────
 function bindKeyEvents() {
@@ -493,7 +501,8 @@ onUnmounted(() => {
     </transition>
 
     <!-- ── 控制栏 ─────────────────────────────────────────────────── -->
-    <div v-if="currentChannel && !devHidden" class="control-bar">
+    <transition name="ctrl-slide">
+      <div v-if="showControlBar && currentChannel && !devHidden" class="control-bar" @mouseenter="onCtrlMouseEnter" @mouseleave="onCtrlMouseLeave">
       <div class="glass control-strip">
         <div class="highlight-line"></div>
         <div class="ctrl-row ctrl-row--1">
@@ -538,6 +547,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    </transition>
 
     <!-- ── 频道列表侧栏 ─────────────────────────────────────────── -->
     <transition name="slide">
@@ -727,6 +737,8 @@ onUnmounted(() => {
 .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #ff4d5e; box-shadow: 0 0 8px #ff4d5e; animation: lptvrec 1.2s ease-in-out infinite; }
 @keyframes lptvrec { 0%,100%{opacity:1}50%{opacity:.25} }
 .rec-time { font-size: 12px; font-weight: 600; color: #ffb3bb; font-family: Consolas, monospace; letter-spacing: 1px; }
+.ctrl-slide-enter-active, .ctrl-slide-leave-active { transition: transform 0.3s ease, opacity 0.25s ease; }
+.ctrl-slide-enter-from, .ctrl-slide-leave-to { transform: translateX(-50%) translateY(100px); opacity: 0; }
 .control-bar { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 20; width: 900px; max-width: calc(100% - 80px); }
 .control-strip { border-radius: 30px; padding: 14px 26px 12px; box-shadow: 0 18px 50px rgba(0,0,0,0.55); position: relative; overflow: hidden; }
 .highlight-line { width: 201px; height: 1px; background: rgba(255,255,255,0.45); border-radius: 999px; margin: 0 auto; }
