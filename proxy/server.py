@@ -78,6 +78,23 @@ async def fetch_official(session: aiohttp.ClientSession, pid: str = "") -> str:
         return await resp.text(encoding="utf-8")
 
 
+def rewrite_api_domains(html: str) -> str:
+    """将所有官方 CAPI/CSAPI 域名替换为本地代理路径，确保 iframe 内同源请求"""
+    # 按域名长度降序替换，避免短域名匹配错误
+    replacements = [
+        ("https://touchsystest.yangshipin.cn", "/capi"),
+        ("https://appdevteamtest.yangshipin.cn", "/capi"),
+        ("https://precapi.yangshipin.cn", "/capi"),
+        ("https://precsapi.yangshipin.cn", "/capi"),
+        ("https://csapi.yangshipin.cn", "/capi"),
+        ("https://capi.yangshipin.cn", "/capi"),
+        ("https://preoms.video.cloud.cctv.com", "/capi"),
+    ]
+    for old, new in replacements:
+        html = html.replace(old, new)
+    return html
+
+
 def inject_into_html(html: str, css_url: str, js_url: str) -> str:
     """在首段<script>前注入 CAPI 重写脚本, 在 </head> 前注入 CSS, 在 </body> 前注入业务 JS"""
     head_close = "</head>"
@@ -88,13 +105,11 @@ def inject_into_html(html: str, css_url: str, js_url: str) -> str:
 
     # CAPI 重写脚本：必须在任何官方脚本之前执行, 拦截所有 capi.yangshipin.cn 请求
     capi_patch = '<script>(function(){'
+    capi_patch += 'console.log("[lptv] CAPI patch loaded");'
     capi_patch += 'var _fetch=window.fetch;window.fetch=function(u,o){'
-    capi_patch += 'if(typeof u==="string"&&u.indexOf("capi.yangshipin.cn")===0)'
-    capi_patch += 'u="/capi"+u.replace("https://capi.yangshipin.cn","");'
-    capi_patch += 'return _fetch(u,o);};'
+    capi_patch += 'if(typeof u==="string"&&u.indexOf("capi.yangshipin.cn")===0){console.log("[lptv] fetch patched: "+u);u="/capi"+u.replace("https://capi.yangshipin.cn","");}return _fetch(u,o);};'
     capi_patch += 'var _XH=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u,*r){'
-    capi_patch += 'if(typeof u==="string"&&u.indexOf("capi.yangshipin.cn")===0)'
-    capi_patch += 'u="/capi"+u.replace("https://capi.yangshipin.cn","");'
+    capi_patch += 'if(typeof u==="string"&&u.indexOf("capi.yangshipin.cn")===0){console.log("[lptv] XHR patched: "+u);u="/capi"+u.replace("https://capi.yangshipin.cn","");}'
     capi_patch += '_XH.call(this,m,u,*r);};'
     capi_patch += '})();</script>\n'
 
@@ -368,6 +383,7 @@ async def handle_page(req: web.Request) -> web.Response:
     session: aiohttp.ClientSession = req.app["session"]
     try:
         html = await fetch_official(session, pid)
+        html = rewrite_api_domains(html)
     except Exception as e:
         log.error("fetch_official failed: %s", e)
         return web.Response(
@@ -438,7 +454,7 @@ def build_app() -> web.Application:
     app.router.add_post("/api/shot", api_shot_save)
     app.router.add_get("/api/channels", api_get_channels)
 
-    # 静态文件 + 兜底代理：本地存在则直出，否则转发给官方
+    # 静态文件 + 兜底代理：本地存在则直出，否则转发给官方并改写域名
     async def handle_static(req: web.Request) -> web.Response:
         session: aiohttp.ClientSession = req.app["session"]
         file_path = STATIC_DIR / req.path.lstrip("/")
@@ -453,6 +469,10 @@ def build_app() -> web.Application:
                     body = await resp.read()
                     if resp.status != 404:
                         ct = resp.content_type or "application/octet-stream"
+                        # 改写 JS/HTML 中的官方 API 域名为本地代理路径
+                        text = body.decode("utf-8", errors="ignore")
+                        text = rewrite_api_domains(text)
+                        body = text.encode("utf-8")
                         return web.Response(
                             body=body,
                             content_type=ct,
