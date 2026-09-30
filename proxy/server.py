@@ -411,9 +411,15 @@ async def handle_proxy_video(req: web.Request) -> web.Response:
 async def handle_proxy_capi(req: web.Request) -> web.Response:
     # /capi/{rest_of_path}
     if "path" in req.match_info:
-        path = "/api/" + req.match_info["path"]
+        path = req.match_info["path"]
+        if not path.startswith("/"):
+            path = "/" + path
     else:
-        path = req.path.replace("/capi", "/api", 1)
+        path = req.path
+        if path.startswith("/capi"):
+            path = path[5:]  # Remove /capi prefix
+        if not path.startswith("/"):
+            path = "/" + path
     session: aiohttp.ClientSession = req.app["session"]
     return await proxy_capi(session, path)
 
