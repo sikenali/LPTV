@@ -84,8 +84,21 @@ def inject_into_html(html: str, css_url: str, js_url: str) -> str:
     body_close = "</body>"
 
     css_tag = f'\n<link rel="stylesheet" href="{css_url}">\n'
-    # 注入顺序: layer.js 先加载(核心逻辑), patch.js 后加载(补充功能)
-    js_tag = (f'\n<script src="{js_url}"></script>\n'
+    # 注入 CAPI 重写脚本：将 capi.yangshipin.cn 请求转发到本地代理
+    capi_patch = '\n<script>(function(){'
+    capi_patch += 'var _fetch=window.fetch;window.fetch=function(u,o){'
+    capi_patch += 'if(typeof u==="string"&&u.indexOf("capi.yangshipin.cn")===0)'
+    capi_patch += 'u="/capi"+u.replace("https://capi.yangshipin.cn","");'
+    capi_patch += 'return _fetch(u,o);};'
+    capi_patch += 'var _XH=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u,*r){'
+    capi_patch += 'if(typeof u==="string"&&u.indexOf("capi.yangshipin.cn")===0)'
+    capi_patch += 'u="/capi"+u.replace("https://capi.yangshipin.cn","");'
+    capi_patch += '_XH.call(this,m,u,*r);};'
+    capi_patch += '})();</script>\n'
+
+    # 注入顺序: capi重写 → layer.js 先加载(核心逻辑), patch.js 后加载(补充功能)
+    js_tag = (capi_patch +
+              f'\n<script src="{js_url}"></script>\n'
               f'<script src="{js_url.replace("layer.js", "patch.js")}"></script>\n')
 
     if head_close in html:
